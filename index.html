@@ -34,7 +34,6 @@ p{margin:0;color:#667085;line-height:1.45}
 .top{display:flex;justify-content:space-between;gap:8px}
 .pill{display:inline-flex;align-items:center;border-radius:999px;background:#edf2f7;color:#334155;font-size:12px;padding:5px 8px;white-space:nowrap}
 .price{font-size:25px;font-weight:900;margin:12px 0 3px}
-.up{color:#b42318}.down{color:#0f766e} /* 한국 기준 색상 선호 반영 가능하나 기존 클래스명 유지 (up:붉은색계열 변경원할시 유지, 여기선 가시성 위해 기존스타일 유지하되 국내 관습법 전역 적용 위해 색상 코드 유지) */
 .up{color:#0f766e}.down{color:#b42318}
 .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0}
 .mini div,.product-grid div{border:1px solid #d8ded4;background:#fafafa;border-radius:7px;padding:8px}
@@ -49,6 +48,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .wide{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}
 .feed,.portfolio,.info-list{display:grid;gap:10px}
 .news.locked{background:#fffaf0;border-color:#e7c066}
+.product.locked{opacity:.62;background:#f6f7f9}
 .news.good{border-color:#0f766e;background:#f0fdf4}
 .news-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .row{display:grid;grid-template-columns:1fr repeat(4,auto);gap:10px;align-items:center}
@@ -125,14 +125,37 @@ let stocks = stockDefinitions.map(x=>{
   return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0};
 });
 
+// 가입 금액(amount)과 별개로, 가입 당시 확정된 연이율(rate)을 함께 보관합니다.
+// rate가 0이면 미가입 상태이며, 가입하는 순간의 등급 이율이 그 값으로 고정됩니다.
 let products=[
-{id:"deposit",name:"안심 정기예금",type:"예금",rate:.042,min:100000,risk:"낮음",amount:0},
-{id:"saving",name:"성장 적금",type:"적금",rate:.058,min:50000,risk:"낮음",amount:0},
-{id:"parking",name:"단기 파킹 통장",type:"파킹",rate:.028,min:10000,risk:"낮음",amount:0},
-{id:"bond",name:"우량 회사채 펀드",type:"채권",rate:.065,min:100000,risk:"보통",amount:0},
-{id:"etf",name:"글로벌 인덱스 ETF",type:"펀드",rate:.085,min:100000,risk:"보통",amount:0},
-{id:"pension",name:"연금 모의 계좌",type:"연금",rate:.070,min:100000,risk:"보통",amount:0}
+{id:"deposit",name:"안심 정기예금",type:"예금",min:100000,risk:"낮음",amount:0,rate:0},
+{id:"saving",name:"성장 적금",type:"적금",min:50000,risk:"낮음",amount:0,rate:0},
+{id:"parking",name:"단기 파킹 통장",type:"파킹",min:10000,risk:"낮음",amount:0,rate:0},
+{id:"bond",name:"우량 회사채 펀드",type:"채권",min:100000,risk:"보통",amount:0,rate:0},
+{id:"etf",name:"글로벌 인덱스 ETF",type:"펀드",min:100000,risk:"보통",amount:0,rate:0},
+{id:"pension",name:"연금 모의 계좌",type:"연금",min:100000,risk:"보통",amount:0,rate:0}
 ];
+
+// ── 자산 등급 시스템 ───────────────────────────────────────────
+// 등급은 총자산(현금 + 달러 환산액 + 주식 평가액 + 금융상품)으로 결정됩니다.
+const GRADES=["브론즈","실버","골드","플래티넘"];
+const GRADE_FLOORS={브론즈:0, 실버:30000000, 골드:100000000, 플래티넘:200000000};
+// 등급별 상품 이율(연). 상위 등급일수록 같은 상품의 이율이 높습니다.
+const GRADE_RATES={
+  브론즈:{deposit:.012, saving:.020},
+  실버:{deposit:.020, saving:.030, parking:.018},
+  골드:{deposit:.030, saving:.045, parking:.024, bond:.040},
+  플래티넘:{deposit:.042, saving:.058, parking:.028, bond:.065, etf:.085, pension:.070}
+};
+// 상품별 해금 등급: 브론즈는 예금·적금만, 실버는 파킹, 골드는 채권, 플래티넘이 ETF·연금
+const PRODUCT_UNLOCK={deposit:"브론즈", saving:"브론즈", parking:"실버", bond:"골드", etf:"플래티넘", pension:"플래티넘"};
+const FOREIGN_GROUPS=["foreign","mega","special"];
+const isForeignStock=s=>FOREIGN_GROUPS.includes(s.group);
+const gradeIndex=g=>GRADES.indexOf(g);
+const unlockLabel=id=>`${PRODUCT_UNLOCK[id]} 등급부터 가입 가능`;
+const gradeRateFor=(id,g)=>(GRADE_RATES[g]&&GRADE_RATES[g][id])||0;
+const offeredRate=id=>gradeRateFor(id, currentGrade());
+const canJoin=id=>gradeIndex(currentGrade())>=gradeIndex(PRODUCT_UNLOCK[id]);
 
 const state={
   cash:START_CASH,
@@ -146,11 +169,34 @@ const state={
   eventTimer: 0
 };
 
-const fx={usd:START_FX};
+// anchor는 아주 천천히 움직이는 환율 추세선입니다(완만한 추세용).
+const fx={usd:START_FX, anchor:START_FX};
 const $=id=>document.getElementById(id);
 const won=n=>Math.round(n).toLocaleString("ko-KR")+"원";
 const usdStr=n=>n.toFixed(2)+" USD";
 const pct=n=>(n>=0?"+":"")+(n*100).toFixed(2)+"%";
+
+// ── 자산 계산(모든 화면 공통) ──────────────────────────────────
+function stockValueKRW(){
+  return stocks.reduce((sum,s)=>sum + (isForeignStock(s) ? s.price*s.own*fx.usd : s.price*s.own), 0);
+}
+function productValueKRW(){ return products.reduce((a,p)=>a+p.amount, 0); }
+// 총자산 = 현금 + 달러 환산액 + 주식 평가액 + 금융상품 평가액
+function totalAssetsKRW(){ return state.cash + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW(); }
+function gradeForAssets(total){
+  if(total >= GRADE_FLOORS["플래티넘"]) return "플래티넘";
+  if(total >= GRADE_FLOORS["골드"]) return "골드";
+  if(total >= GRADE_FLOORS["실버"]) return "실버";
+  return "브론즈";
+}
+function currentGrade(){ return gradeForAssets(totalAssetsKRW()); }
+function nextGradeInfo(){
+  const i=gradeIndex(currentGrade());
+  if(i>=GRADES.length-1) return null;
+  const next=GRADES[i+1];
+  return {grade:next, remain:Math.max(0, GRADE_FLOORS[next]-totalAssetsKRW())};
+}
+let lastBankingGrade=null; // 등급이 바뀔 때만 금융상품 화면을 다시 그리기 위한 캐시
 
 function init(){
   nav();
@@ -188,7 +234,7 @@ function saveGame() {
     state: state,
     fx: fx,
     stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove})),
-    products: products.map(p => ({id:p.id, amount:p.amount}))
+    products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate}))
   };
   localStorage.setItem("money_playground_save", JSON.stringify(saveData));
 }
@@ -215,9 +261,13 @@ function loadGame() {
     if(data.products) {
       data.products.forEach(lp => {
         let p = products.find(x => x.id === lp.id);
-        if(p) p.amount = lp.amount || 0;
+        if(!p) return;
+        p.amount = lp.amount || 0;
+        // 구버전 저장 데이터에는 rate가 없으므로, 가입 중이면 현재 등급 이율로 확정해 줍니다.
+        p.rate = (Number.isFinite(lp.rate) && lp.rate > 0) ? lp.rate : (p.amount > 0 ? gradeRateFor(p.id, currentGrade()) : 0);
       });
     }
+    if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
   } catch(e) {
     console.error("저장 데이터 로드 실패", e);
   }
@@ -236,6 +286,7 @@ function clearGame() {
   state.currentEvent = null;
   state.eventTimer = 0;
   fx.usd = START_FX;
+  fx.anchor = START_FX;
   stocks.forEach(s=>{
     s.price = s.start;
     s.own = 0;
@@ -243,9 +294,10 @@ function clearGame() {
     s.avgBuy = 0;
     s.realizedProfit = 0;
   });
-  products.forEach(p => p.amount = 0);
+  products.forEach(p => { p.amount = 0; p.rate = 0; });
   addLog("게임 초기화가 수행되었습니다.");
   news();
+  banking();
   portfolio();
   update();
 }
@@ -291,7 +343,36 @@ function card(s){
 }
 
 function banking(){
-  $("banking").innerHTML=`<div class="head"><div><h1>예금·적금</h1><p>현금을 안정적으로 굴리는 금융상품입니다. 15초마다 이자가 반영됩니다.</p></div></div><div class="notice">⚠️ 효율 저하 시스템: 각 상품별 원금 가입액이 3,000만 원을 초과하면 초과분에 대해 이율이 50%로 감소합니다.</div><div class="products">${products.map(p=>`<article class="product"><h2>${p.name}</h2><p>${p.type} · 연 ${(p.rate*100).toFixed(1)}%</p><div class="product-grid"><div><small>가입액</small><b data-prod="${p.id}">${won(p.amount)}</b></div><div><small>최소 금액</small><b>${won(p.min)}</b></div></div><div class="trade"><input id="prod-${p.id}" type="number" value="${p.min}" step="10000"><button class="buy" onclick="join('${p.id}')">가입</button><button class="sell" onclick="leave('${p.id}')">해지</button></div></article>`).join("")}</div>`;
+  lastBankingGrade=currentGrade();
+  $("banking").innerHTML=`<div class="head"><div><h1>예금·적금</h1><p>현금을 안정적으로 굴리는 금융상품입니다. 15초마다 이자가 반영됩니다.</p></div><span class="pill">현재 등급: ${currentGrade()}</span></div><div class="notice" id="gradeBanner" style="background:#e0f2fe; border-color:#7dd3fc; color:#0369a1;">${gradeBannerHTML()}</div><div class="notice">⚠️ 효율 저하 시스템: 각 상품별 원금 가입액이 3,000만 원을 초과하면 초과분에 대해 이율이 50%로 감소합니다.</div><div class="products">${products.map(productCard).join("")}</div>`;
+}
+
+// 등급 안내 배너: 현재 등급, 총자산, 다음 등급까지 남은 금액
+function gradeBannerHTML(){
+  const next=nextGradeInfo();
+  return `🏅 현재 등급: <b>${currentGrade()}</b> · 총자산 ${won(totalAssetsKRW())}` +
+    (next ? ` · 다음 등급 <b>${next.grade}</b>까지 ${won(next.remain)}` : " · 최고 등급입니다") +
+    `<br><span style="font-size:12px;">등급이 높을수록 같은 상품의 이율이 높습니다. 가입 시점의 이율은 이후 등급이 바뀌어도 유지됩니다.</span>`;
+}
+
+// 상품 카드: 현재 등급 이율과 가입 당시 확정 이율을 함께 보여줍니다.
+function productCard(p){
+  const unlocked=canJoin(p.id);
+  return `<article class="product${unlocked?"":" locked"}">
+    <h2>${p.name}</h2>
+    <p>${p.type} · ${unlocked ? `현재 등급 연 ${(offeredRate(p.id)*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}`}</p>
+    <div class="product-grid">
+      <div><small>가입액</small><b data-prod="${p.id}">${won(p.amount)}</b></div>
+      <div><small>최소 금액</small><b>${won(p.min)}</b></div>
+      <div><small>확정 이율</small><b data-locked="${p.id}">${p.rate>0?`연 ${(p.rate*100).toFixed(1)}%`:"-"}</b></div>
+      <div><small>위험도</small><b>${p.risk}</b></div>
+    </div>
+    <div class="trade">
+      <input id="prod-${p.id}" type="number" value="${p.min}" step="10000" ${unlocked?"":"disabled"}>
+      <button class="buy" onclick="join('${p.id}')" ${unlocked?"":"disabled"}>가입</button>
+      <button class="sell" onclick="leave('${p.id}')">해지</button>
+    </div>
+  </article>`;
 }
 
 function news(){
@@ -357,10 +438,16 @@ function fxPage(){
 }
 
 function updateFX(){
-  let baseVol = 0.012;
-  if(state.currentEvent === "FX_SURGE") baseVol = 0.04; // 환율 급등 이벤트 발동 시
+  let baseVol = 0.0035;
+  if(state.currentEvent === "FX_SURGE") baseVol = 0.010; // 환율 급등 이벤트 발동 시 변동성 확대
   
-  let changeRate = (Math.random() - 0.48) * baseVol; // 약간의 우상향 기조 유지
+  // 완만한 추세선(anchor)이 아주 느리게 움직이고, 실제 환율은 그 추세선을 따라갑니다.
+  // 추세는 시작 환율 ±12% 안으로 제한하고 복원력도 두어, 폭주 없이 방향성만 남깁니다.
+  fx.anchor = fx.anchor + (Math.random() - 0.5) * 0.004 * fx.anchor + (START_FX - fx.anchor) * 0.0003;
+  fx.anchor = Math.max(START_FX * 0.88, Math.min(START_FX * 1.12, fx.anchor));
+
+  let revert = ((fx.anchor - fx.usd) / fx.anchor) * 0.05;
+  let changeRate = (Math.random() - 0.5) * baseVol + revert;
   fx.usd = Math.max(1000, Math.round(fx.usd * (1 + changeRate)));
   
   let e=document.getElementById("fxPrice");
@@ -506,11 +593,13 @@ function fullSell(id){
 }
 
 function join(id){
+  if(!canJoin(id)) return alert(`${unlockLabel(id)}입니다. (현재 등급: ${currentGrade()})`);
   let p=product(id),v=Math.max(p.min,Math.floor((+$("prod-"+id).value||p.min)/10000)*10000);
   if(v>state.cash)return alert("현금이 부족합니다.");
   state.cash-=v;
+  if(p.amount===0) p.rate=gradeRateFor(id, currentGrade()); // 가입 시점 이율 확정
   p.amount+=v;
-  addLog(`${p.name} 가입: ${won(v)}`);
+  addLog(`${p.name} 가입: ${won(v)} (확정 연 ${(p.rate*100).toFixed(1)}%)`);
   saveGame();
   update();
 }
@@ -521,6 +610,7 @@ function leave(id){
   state.cash+=p.amount;
   addLog(`${p.name} 해지: ${won(p.amount)} 원금 회수`);
   p.amount=0;
+  p.rate=0; // 해지하면 확정 이율도 초기화(다시 가입할 때 그 시점 등급 이율로 확정)
   saveGame();
   update();
 }
@@ -667,15 +757,16 @@ function interest(){
         effectiveAmount = 30000000 + (excess * 0.5);
       }
       
-      // 15초 단기 반영을 위해 요율 스케일링 보정 조정
-      let calculatedInterest = effectiveAmount * (p.rate * 0.12); 
+      // 15초 단위 반영 스케일: 연이율 × 0.015 (예금 4.2% → 15초당 0.063%, 시간당 약 +16%)
+      let calculatedInterest = effectiveAmount * (p.rate * 0.015); 
       p.amount += calculatedInterest;
     }
   });
   
-  // 파킹 통장 미가입 현금 방치자 소량 구제 메커니즘 (현금 보유액의 0.05% 파킹 보너스 지급)
+  // 파킹 통장 미가입 현금 방치자 소량 구제 메커니즘 (현금 보유액의 0.002% 파킹 보너스 지급)
+  // 예금 상품보다 확실히 낮은 수익률로, 현금을 방치하는 것이 최선의 선택이 되지 않도록 조정
   if(state.cash > 500000) {
-    let parkingBonus = state.cash * 0.0005;
+    let parkingBonus = state.cash * 0.00002;
     state.cash += parkingBonus;
   }
   
@@ -683,19 +774,15 @@ function interest(){
 }
 
 function update(){
-  let svWon=0;
-  stocks.forEach(s=>{
-    const isForeign = ["foreign","mega","special"].includes(s.group);
-    if(isForeign) svWon += (s.price*s.own)*fx.usd;
-    else svWon += s.price*s.own;
-  });
-  let pv=products.reduce((a,p)=>a+p.amount,0);
+  // 모든 화면이 같은 총자산 계산을 쓰도록 한 곳으로 통일했습니다.
+  let svWon=stockValueKRW();
+  let pv=productValueKRW();
 
   $("cash").textContent=won(state.cash);
   let u=$("usdCash");if(u)u.textContent=usdStr(state.usd||0);
   $("stockValue").textContent=won(svWon);
   $("productValue").textContent=won(pv);
-  $("totalValue").textContent=won(state.cash+svWon+pv+state.usd*fx.usd);
+  $("totalValue").textContent=won(totalAssetsKRW());
 
   stocks.forEach(s=>{
     let c=(s.price-s.start)/s.start;
@@ -741,130 +828,20 @@ function update(){
   products.forEach(p=>{
     let e=document.querySelector(`[data-prod="${p.id}"]`);
     if(e)e.textContent=won(p.amount);
+    let le=document.querySelector(`[data-locked="${p.id}"]`);
+    if(le)le.textContent=p.rate>0 ? `연 ${(p.rate*100).toFixed(1)}%` : "-";
   });
+
+  // 등급이 바뀌면 해금 상태가 달라지므로, 등급 변화 시에만 금융상품 화면을 다시 그립니다.
+  if(activePage()==="banking"){
+    if(lastBankingGrade!==currentGrade()) banking();
+    else { let gb=$("gradeBanner"); if(gb) gb.innerHTML=gradeBannerHTML(); }
+  }
 
   if(activePage()=="portfolio") portfolio();
 }
 
 init();
 </script>
-
-
-
-<script>
-(function(){
-window.__uiFixApplied=true;
-
-const RATE={
- 브론즈:{deposit:[0.8,1.5],saving:[1,2]},
- 실버:{deposit:[1.5,2.5],saving:[2,4]},
- 골드:{deposit:[2.5,4],saving:[4,7]},
- 플래티넘:{deposit:[4,6],saving:[7,10]}
-};
-
-function grade(){
- return (window.state && window.state.currentGrade) || "브론즈";
-}
-
-function ensureBox(){
- let box=document.getElementById("financeGradeCard");
- if(box) return box;
-
- const target=
- document.getElementById("grade-fixed") ||
- document.getElementById("portfolio") ||
- document.body;
-
- box=document.createElement("div");
- box.id="financeGradeCard";
- box.style.cssText=[
- "margin:10px 0",
- "padding:12px 14px",
- "border-radius:14px",
- "background:rgba(255,255,255,.06)",
- "border:1px solid rgba(255,255,255,.12)",
- "font-size:14px",
- "line-height:1.6"
- ].join(";");
-
- if(target.prepend){
-   target.prepend(box);
- }else{
-   document.body.insertBefore(box, document.body.firstChild);
- }
- return box;
-}
-
-function updateCard(){
- const g=grade();
- const r=RATE[g];
- const box=ensureBox();
-
- box.innerHTML=
- "<div style='font-size:18px;font-weight:700'>🏦 금융 혜택</div>"+
- "<div>현재 등급: <b>"+g+"</b></div>"+
- "<div>예금 "+r.deposit[0]+"~"+r.deposit[1]+"%</div>"+
- "<div>적금 "+r.saving[0]+"~"+r.saving[1]+"%</div>"+
- "<div style='opacity:.75'>가입 당시 이율 유지</div>";
-}
-
-window.getFinanceRate=function(kind){
- const g=grade();
- const rr=RATE[g];
- const arr=kind==="적금"?rr.saving:rr.deposit;
- return (arr[0]+Math.random()*(arr[1]-arr[0]))/100;
-};
-
-window.financeProducts=window.financeProducts||[];
-
-window.registerFinance=function(kind,amount){
- amount=Math.max(0, Number(amount)||0);
-
- const item={
-  kind,
-  amount,
-  fixedRate:window.getFinanceRate(kind),
-  joinedGrade:grade(),
-  lastTick:Date.now()
- };
-
- financeProducts.push(item);
- return item.fixedRate;
-};
-
-setInterval(()=>{
- if(!Array.isArray(window.financeProducts)) return;
-
- for(const p of window.financeProducts){
-   if(!p || !isFinite(p.amount)) continue;
-
-   const now=Date.now();
-
-   if(!p.lastTick){
-     p.lastTick=now;
-     continue;
-   }
-
-   if(now-p.lastTick<15000) continue;
-
-   p.lastTick=now;
-
-   const gain=p.amount*Math.min(p.fixedRate,0.1)*0.0035;
-
-   if(isFinite(gain) && gain>0){
-     p.amount+=gain;
-   }
- }
-
- updateCard();
-},1000);
-
-window.addEventListener("load",()=>{
- setTimeout(updateCard,800);
-});
-
-})();
-</script>
-
 </body>
 </html>
