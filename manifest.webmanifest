@@ -1,0 +1,20 @@
+{
+  "name": "머니 플레이그라운드",
+  "short_name": "머니PG",
+  "description": "주식·금융 시뮬레이션 게임",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f3ee",
+  "theme_color": "#17202b",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

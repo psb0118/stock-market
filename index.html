@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>주식 금융 게임</title>
+<meta name="theme-color" content="#17202b" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<title>머니 플레이그라운드</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,"Noto Sans KR",sans-serif;background:#f5f3ee;color:#18212f}
@@ -78,6 +81,64 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .trend{height:118px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px}
 .trend svg{display:block;width:100%;height:100%}
 .trend-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:100%;color:#94a3b8;font-size:12px;text-align:center;line-height:1.4}
+/* 알림·토스트·모달 */
+.bell{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:34px;margin-top:10px;background:#22303f;font-size:13px}
+.badge{display:none;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#f7c948;color:#17202b;font-size:11px;font-weight:800}
+.toast-wrap{position:fixed;right:14px;bottom:18px;display:grid;gap:8px;z-index:60;max-width:320px}
+.toast{background:#111827;color:#fff;border-left:5px solid #f7c948;border-radius:8px;padding:10px 12px;box-shadow:0 10px 24px #0003;font-size:13px;animation:toastIn .18s ease-out}
+.toast b{color:#f7c948;display:block;margin-bottom:2px}
+@keyframes toastIn{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.modal{position:fixed;inset:0;background:#0b1220aa;display:none;align-items:center;justify-content:center;z-index:70;padding:16px}
+.modal.on{display:flex}
+.modal-box{background:#fffdf8;border-radius:12px;max-width:580px;width:100%;max-height:86vh;overflow:auto;padding:18px;box-shadow:0 24px 60px #0005}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.modal-head h2{margin:0;font-size:20px}
+.modal-close{background:#e7ebef;color:#18212f;min-height:34px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
+.kpi{border:1px solid #d8ded4;background:#fafafa;border-radius:8px;padding:10px}
+.kpi small{display:block;color:#667085;font-size:12px}
+.kpi b{display:block;margin-top:4px;font-size:16px;overflow-wrap:anywhere}
+/* 종목 도구막대 */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.toolbar input{flex:1 1 170px}
+.toolbar select{flex:0 0 auto}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 12px;border-radius:9px;background:#e7ebef;color:#18212f;font-size:13px}
+.chip.on{background:#17202b;color:#fff}
+.card .star{background:transparent;color:#cbd5e1;font-size:20px;min-height:auto;padding:0 4px;line-height:1}
+.card .star.on{color:#f7c948}
+/* 성과·미션·자동화 */
+.mission{display:grid;gap:6px;border-bottom:1px dashed #e2e8f0;padding:8px 0}
+.mission:last-child{border-bottom:0}
+.mission-top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.ach{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.ach div{border:1px solid #d8ded4;border-radius:8px;padding:8px 10px;font-size:12px;background:#fafafa}
+.ach div.done{border-color:#0f766e;background:#f0fdf4}
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#334155;margin:4px 12px 4px 0}
+.switch input{min-height:auto}
+.inline-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end}
+.inline-form label{display:grid;gap:4px;font-size:12px;color:#667085}
+.journal{display:grid;gap:6px;font-size:12px}
+.journal div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed #e2e8f0;padding:5px 0}
+.speed{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #2b3a4d}
+.speed button{min-height:30px;padding:0 9px;background:#22303f;font-size:12px}
+.speed button.on{background:#f7c948;color:#17202b;font-weight:800}
+.speed span{font-size:12px;color:#cbd5e1;margin-left:auto}
+#bottomBar{display:none}
+@media(max-width:850px){
+  main{padding-bottom:126px}
+  #bottomBar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:50;background:#17202bee;border-top:1px solid #2b3a4d;padding:6px 8px 8px;color:#e2e8f0}
+  .bb-net{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:0 6px 6px;border-bottom:1px solid #2b3a4d}
+  .bb-net b{font-size:15px;color:#f7c948}
+  .bb-net button{min-height:26px;padding:0 8px;background:#2b3a4d;font-size:12px;color:#e2e8f0}
+  .bb-tools{display:flex;gap:6px;align-items:center;margin-left:auto}
+  .bb-badge{display:none;margin-left:3px;font-size:11px;color:#f7c948;font-weight:800}
+  .side .speed,.side .bell{display:none}
+  .bb-nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px}
+  .bb-nav button{background:transparent;color:#cbd5e1;font-size:12px;min-height:34px}
+  .bb-nav button.on{background:#f7c948;color:#17202b;font-weight:800}
+  .toast-wrap{left:12px;right:12px;bottom:104px;max-width:none}
+}
+@media(max-width:540px){.kpis{grid-template-columns:1fr 1fr}.ach{grid-template-columns:1fr}.ach div{line-height:1.5}}
 .alloc-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#edf2f7}
 .alloc-bar span{display:block;height:100%}
 .alloc-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#475569}
@@ -101,6 +162,14 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
     <div class="logo">머니 플레이그라운드</div>
     <div class="sub">기본 자금 1,000만원으로 시작하는 주식·금융 시뮬레이션</div>
     <div class="nav" id="nav"></div>
+    <div class="speed" aria-label="게임 속도">
+      <button data-speed="1" onclick="setSpeed(1)">1x</button>
+      <button data-speed="3" onclick="setSpeed(3)">3x</button>
+      <button data-speed="10" onclick="setSpeed(10)">10x</button>
+      <button onclick="togglePause()" aria-label="일시정지">⏸</button>
+      <span id="speedState">1x</span>
+    </div>
+    <button class="bell" onclick="openNotifModal()" aria-label="알림">🔔 알림 <span class="badge" id="bellBadge">0</span></button>
   </aside>
   <main>
     <div id="breaking" class="breaking" role="status" aria-live="polite"></div>
@@ -121,11 +190,29 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
     <section id="foreign" class="page"></section>
     <section id="mega" class="page"></section>
     <section id="special" class="page"></section>
+    <section id="watch" class="page"></section>
     <section id="banking" class="page"></section>
     <section id="fx" class="page"></section>
     <section id="news" class="page"></section>
     <section id="portfolio" class="page"></section>
   </main>
+</div>
+
+<div id="toastWrap" class="toast-wrap" role="status" aria-live="polite"></div>
+<div id="modalRoot" class="modal" role="dialog" aria-modal="true" aria-hidden="true"></div>
+<div id="bottomBar">
+  <div class="bb-net"><span>순자산</span><b id="bottomNet">-</b><span class="bb-tools">
+    <button onclick="openNotifModal()" aria-label="알림">🔔<span id="bbBadge" class="bb-badge">0</span></button>
+    <button id="bbSpeed" onclick="cycleSpeed()">1x</button>
+    <button onclick="togglePause()" aria-label="일시정지">⏸</button>
+  </span></div>
+  <div class="bb-nav">
+    <button data-page="domestic" onclick="quickNav('domestic')">국내</button>
+    <button data-page="watch" onclick="quickNav('watch')">관심</button>
+    <button data-page="banking" onclick="quickNav('banking')">예금</button>
+    <button data-page="news" onclick="quickNav('news')">뉴스</button>
+    <button data-page="portfolio" onclick="quickNav('portfolio')">자산</button>
+  </div>
 </div>
 
 <script>
@@ -157,7 +244,7 @@ const LOAN_POLICY = {
 // 등급별 환전 수수료 우대
 const GRADE_FX_FEE = {브론즈:0.010, 실버:0.009, 골드:0.007, 플래티넘:0.005};
 const fxFeeRate = () => (GRADE_FX_FEE[currentGrade()] != null ? GRADE_FX_FEE[currentGrade()] : FEE_FX);
-const pages=[["domestic","국내 주식"],["foreign","해외 주식"],["mega","초대형주"],["special","특별 주식"],["banking","예금·적금"],["fx","환율"],["news","뉴스 속보"],["portfolio","내 자산"]];
+const pages=[["domestic","국내 주식"],["foreign","해외 주식"],["mega","초대형주"],["special","특별 주식"],["watch","관심종목"],["banking","예금·적금"],["fx","환율"],["news","뉴스 속보"],["portfolio","내 자산"]];
 
 // 전면 교체된 주식 종목 데이터 리스트
 const stockDefinitions = [
@@ -177,7 +264,8 @@ const stockDefinitions = [
 ["lunar_mob","Lunar Mobility","LNMB","특별","special",21*START_FX,.0018,.095,"우주 산업"],
 ["hyper_vis","HyperVision","HPVS","특별","special",255*START_FX,.0014,.085,"디지털 자산"],
 ["deep_forge","DeepForge","DPFG","특별","special",125*START_FX,.0016,.075,"AI 데이터 분석"],
-["zero_orbit","Zero Orbit","ZROR","특별","special",85*START_FX,.0015,.090,"위성 통신"]
+["zero_orbit","Zero Orbit","ZROR","특별","special",85*START_FX,.0015,.090,"위성 통신"],
+["market_etf","시장지수 ETF","KIDX","국내","domestic",10000,.0,.010,"시장지수"]
 ];
 
 let stocks = stockDefinitions.map(x=>{
@@ -233,7 +321,20 @@ const state={
   goals: {},        // 달성한 목표 id
   realizedYTD: 0,   // 연간 실현손익 누계(양도세 계산)
   taxedProfit: 0,   // 이미 과세된 누적 실현손익
-  taxPaid: 0        // 누적 납부 세금
+  taxPaid: 0,       // 누적 납부 세금
+  // ── 확장 기능 상태(구버전 세이브는 applySaveData에서 기본값 보정) ──
+  watch: [],        // 관심종목 id
+  journal: [],      // 최근 거래 200건
+  alerts: [],       // 알림 30건
+  achievements: {}, // 달성한 업적
+  loanTotal: 0,     // 누적 대출 실행액(상환 업적 판정)
+  dividendTotal: 0, // 누적 배당 수령액
+  feesTotal: 0,     // 누적 거래 수수료
+  notify: {order:true, dividend:true, goal:true, grade:true, tax:true, sound:false, haptic:false},
+  auto: {enabled:false, stockPct:60, minCash:1000000, every:60},
+  daily: {date:"", counts:{}, claimed:{}},
+  speed: 1, paused: false, lastSeen: 0,
+  seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈"
 };
 
 // anchor는 아주 천천히 움직이는 환율 추세선입니다(완만한 추세용).
@@ -271,6 +372,383 @@ function nextGradeInfo(){
   const next=GRADES[i+1];
   return {grade:next, remain:Math.max(0, GRADE_FLOORS[next]-totalAssetsKRW())};
 }
+
+// ── 시장 지수 · 관심종목 ─────────────────────────────
+function marketIndex(){
+  const list=stocks.filter(s=>s.id!=="market_etf");
+  if(!list.length) return 1000;
+  return 1000*list.reduce((a,s)=>a+s.price/s.start,0)/list.length;
+}
+const stockView={query:"",sort:"default",watchOnly:false};
+const SORT_OPTIONS=[["default","기본 순서"],["name","이름순"],["price","가격 높은순"],["change","등락 높은순"],["own","보유 많은순"]];
+const isWatched=id=>(state.watch||[]).includes(id);
+const stockPriceKRW=s=>s.price*(isForeignStock(s)?fx.usd:1);
+
+function toggleWatch(id){
+  if(!Array.isArray(state.watch)) state.watch=[];
+  state.watch=isWatched(id)?state.watch.filter(x=>x!==id):[...state.watch,id];
+  saveGame();
+  ["domestic","foreign","mega","special","watch"].forEach(g=>{ if($("grid-"+g)) applyStockView(g); });
+  update();
+}
+
+function visibleStocks(group){
+  let list=group==="watch"?stocks.filter(s=>isWatched(s.id)):stocks.filter(s=>s.group===group);
+  const q=(stockView.query||"").trim().toLowerCase();
+  if(q) list=list.filter(s=>`${s.name} ${s.ticker} ${s.theme} ${s.market}`.toLowerCase().includes(q));
+  if(stockView.watchOnly) list=list.filter(s=>isWatched(s.id));
+  if(stockView.sort==="name") list.sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+  else if(stockView.sort==="price") list.sort((a,b)=>stockPriceKRW(b)-stockPriceKRW(a));
+  else if(stockView.sort==="change") list.sort((a,b)=>b.lastMove-a.lastMove);
+  else if(stockView.sort==="own") list.sort((a,b)=>b.own-a.own);
+  return list;
+}
+function applyStockView(group){
+  const box=$("grid-"+group); if(!box) return;
+  const list=visibleStocks(group);
+  box.innerHTML=list.length?list.map(card).join("")
+    :`<div class="row" style="grid-template-columns:1fr"><b>조건에 맞는 종목이 없습니다</b><span>검색어를 지우거나 필터를 해제해 보세요.</span></div>`;
+  const count=$("count-"+group); if(count) count.textContent=list.length+"개";
+}
+
+// ── 알림 · 토스트 · 모달 ─────────────────────────────
+let audioCtx=null;
+function beep(kind){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type="sine"; o.frequency.value=kind==="goal"?880:kind==="dividend"?660:520;
+    g.gain.value=0.05;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+0.12);
+  }catch(e){}
+}
+function notify(kind,title,text){
+  const n=state.notify||{};
+  if(n[kind]===false) return;
+  if(!Array.isArray(state.alerts)) state.alerts=[];
+  state.alerts.unshift({at:Date.now(),kind,title,text,read:false});
+  if(state.alerts.length>40) state.alerts.pop();
+  showToast(title,text);
+  if(n.sound) beep(kind);
+  if(n.haptic && typeof navigator!=="undefined" && navigator.vibrate) navigator.vibrate(25);
+  updateBell();
+}
+function showToast(title,text){
+  const wrap=$("toastWrap"); if(!wrap || typeof wrap.appendChild!=="function") return;
+  const el=document.createElement("div");
+  el.className="toast";
+  el.innerHTML=`<b>${title}</b>${text||""}`;
+  wrap.appendChild(el);
+  // 토스트는 최대 3개만 보여 줍니다(동시에 여러 이벤트가 터질 때 화면을 가리지 않도록).
+  while(wrap.children && wrap.children.length>3) wrap.removeChild(wrap.children[0]);
+  setTimeout(()=>{ try{ wrap.removeChild(el); }catch(e){} },4200);
+}
+function updateBell(){
+  const unread=(state.alerts||[]).filter(a=>!a.read).length;
+  const label=unread>99?"99+":String(unread);
+  ["bellBadge","bbBadge"].forEach(id=>{
+    const b=$(id); if(!b) return;
+    b.textContent=label;
+    b.style.display=unread?"inline-flex":"none";
+  });
+}
+function openModal(title,html){
+  const root=$("modalRoot"); if(!root) return;
+  root.innerHTML=`<div class="modal-box" role="document"><div class="modal-head"><h2>${title}</h2><button class="modal-close" onclick="closeModal()">닫기</button></div>${html}</div>`;
+  root.classList.add("on");
+  if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","false");
+}
+function closeModal(){
+  const root=$("modalRoot"); if(!root) return;
+  root.classList.remove("on");
+  if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","true");
+  root.innerHTML="";
+}
+function setNotify(k,v){ state.notify[k]=v; saveGame(); updateBell(); }
+function openNotifModal(){
+  (state.alerts||[]).forEach(a=>{ a.read=true; });
+  updateBell();
+  const n=state.notify||{};
+  const sw=(k,label)=>`<label class="switch"><input type="checkbox" ${n[k]?"checked":""} onchange="setNotify('${k}',this.checked)">${label}</label>`;
+  const rows=(state.alerts||[]).slice(0,30).map(a=>`<div class="journal" style="margin-bottom:8px"><div><b>${a.title}</b><span>${new Date(a.at).toLocaleTimeString("ko-KR")}</span></div><small style="color:#667085">${a.text||""}</small></div>`).join("")||"<p>아직 알림이 없습니다.</p>";
+  openModal("알림 센터",`
+    <div style="margin-bottom:12px">${sw("order","지정가 체결")}${sw("dividend","배당")}${sw("goal","목표·업적")}${sw("grade","등급 변동")}${sw("tax","세금")}${sw("sound","효과음")}${sw("haptic","진동")}</div>
+    <p style="margin-bottom:8px;color:#667085;font-size:12px">최근 30건 · 저장 파일에 함께 보관됩니다.</p>
+    ${rows}`);
+}
+
+// ── 거래 저널 · 성과 분석 ────────────────────────────
+function recordTrade(s,side,qty,priceNative,profitKRW){
+  if(!Array.isArray(state.journal)) state.journal=[];
+  const foreign=isForeignStock(s);
+  const valueKRW=priceNative*qty*(foreign?fx.usd:1);
+  const fee=valueKRW*FEE_STOCK;
+  state.feesTotal=(state.feesTotal||0)+fee;
+  state.journal.unshift({at:Date.now(),name:s.name,side,qty,valueKRW,fee,profit:side==="sell"?(profitKRW||0):0});
+  if(state.journal.length>200) state.journal.pop();
+  bumpDaily("trades");
+  checkAchievements();
+  saveGame();
+}
+function performanceStats(){
+  const j=state.journal||[];
+  const sells=j.filter(x=>x.side==="sell");
+  const wins=sells.filter(x=>x.profit>0);
+  const realized=sells.reduce((a,x)=>a+(x.profit||0),0);
+  const volume=j.reduce((a,x)=>a+(x.valueKRW||0),0);
+  const held=stocks.filter(s=>s.realizedProfit!==0);
+  return {
+    trades:j.length, sells:sells.length,
+    winRate:sells.length?wins.length/sells.length:0,
+    realized, volume, fees:state.feesTotal||0,
+    best:[...held].sort((a,b)=>b.realizedProfit-a.realizedProfit)[0],
+    worst:[...held].sort((a,b)=>a.realizedProfit-b.realizedProfit)[0]
+  };
+}
+
+// ── 자동 적립 ─────────────────────────────────
+function bestProductForAuto(){
+  let best=null,rate=-1;
+  products.forEach(p=>{
+    if(!canJoin(p.id)) return;
+    const r=gradeRateFor(p.id,currentGrade());
+    if(!p.amount && r>rate){ rate=r; best=p; }
+  });
+  return best;
+}
+function saveAutoSettings(){
+  const enabled=$("auto-enabled") ? $("auto-enabled").checked : true;
+  const pct=+($("auto-pct")?$("auto-pct").value:60)||0;
+  const min=+($("auto-min")?$("auto-min").value:0)||0;
+  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),every:60});
+  saveGame(); portfolio(); update();
+  notify("system","자동 적립",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)}로 켰습니다.`);
+}
+function disableAuto(){
+  state.auto=Object.assign({},state.auto,{enabled:false});
+  saveGame(); portfolio(); update();
+  notify("system","자동 적립","규칙을 껐습니다.");
+}
+function autoInvest(force){
+  const a=state.auto||{};
+  if(!force && !a.enabled) return 0;
+  if(!force && !state.marketOpen) return 0;
+  const min=Math.max(0,a.minCash||0);
+  const budget=state.cash-min;
+  if(budget<100000) return 0;
+  const stockPart=Math.max(0,Math.min(100,a.stockPct||0))*budget/100;
+  let invested=0;
+  if(stockPart>0){
+    const list=stocks.filter(s=>s.id!=="market_etf");
+    const perKRW=stockPart/list.length;
+    list.forEach(s=>{
+      const foreign=isForeignStock(s);
+      const unitKRW=s.price*(1+FEE_STOCK)*(foreign?fx.usd:1);
+      const qty=Math.floor(perKRW/unitKRW);
+      if(qty<=0) return;
+      const costNative=qty*s.price*(1+FEE_STOCK);
+      if(foreign){
+        if(state.usd<costNative){
+          const need=costNative-state.usd;
+          const krw=need*fx.usd*(1+fxFeeRate());
+          if(krw>state.cash) return;
+          state.cash-=krw; state.usd+=need;
+        }
+        state.usd-=costNative;
+      }else{
+        if(state.cash<costNative) return;
+        state.cash-=costNative;
+      }
+      s.avgBuy=((s.avgBuy*s.own)+(s.price*(1+FEE_STOCK))*qty)/(s.own+qty);
+      s.own+=qty;
+      invested+=costNative*(foreign?fx.usd:1);
+    });
+  }
+  const remain=state.cash-min;
+  if(remain>0){
+    const p=bestProductForAuto();
+    if(p && remain>=p.min){
+      const v=Math.floor(remain/10000)*10000;
+      if(v>0){
+        if(p.amount===0) p.rate=gradeRateFor(p.id,currentGrade());
+        state.cash-=v; p.amount+=v; invested+=v;
+      }
+    }
+  }
+  if(invested>0){
+    addLog(`자동 적립 실행: ${won(invested)} 재투자`);
+    notify("system","자동 적립",`${won(invested)}을 규칙대로 재투자했습니다.`);
+    saveGame(); update();
+  }
+  return invested;
+}
+
+// ── 일일 미션 · 업적 ───────────────────────────────
+const DAILY_POOL=[
+  {id:"trades",label:"주식 5회 거래",target:5,reward:300000},
+  {id:"dividends",label:"배당 2회 수령",target:2,reward:200000},
+  {id:"orders",label:"지정가 주문 1회 체결",target:1,reward:250000},
+  {id:"goals",label:"목표 1개 달성",target:1,reward:500000},
+  {id:"deposit",label:"금융상품 1회 가입",target:1,reward:150000}
+];
+function todayKey(){ const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
+function dailyMissions(){
+  const seed=[...todayKey()].reduce((a,c)=>a+c.charCodeAt(0),0);
+  const picks=[];
+  for(let i=0;i<3;i++) picks.push(DAILY_POOL[(seed+i*2)%DAILY_POOL.length]);
+  return [...new Map(picks.map(m=>[m.id,m])).values()];
+}
+function ensureDaily(){
+  const key=todayKey();
+  if(!state.daily || state.daily.date!==key || !state.daily.counts || !state.daily.claimed){
+    state.daily={date:key,counts:{trades:0,dividends:0,orders:0,goals:0,deposit:0},claimed:{}};
+  }
+}
+function bumpDaily(k,n=1){
+  ensureDaily();
+  state.daily.counts[k]=(state.daily.counts[k]||0)+n;
+}
+function claimDaily(id){
+  ensureDaily();
+  const m=DAILY_POOL.find(x=>x.id===id); if(!m) return;
+  const d=state.daily;
+  if(d.claimed[id]) return;
+  if((d.counts[id]||0)<m.target) return alert("아직 조건을 채우지 못했습니다.");
+  d.claimed[id]=true;
+  state.cash+=m.reward;
+  addLog(`오늘의 미션 완료: ${m.label} (+${won(m.reward)})`);
+  notify("goal","미션 보상",`${m.label} 완료! ${won(m.reward)} 지급`);
+  saveGame(); portfolio(); update();
+}
+const ACHIEVEMENTS=[
+  {id:"first_trade",label:"첫 거래",reward:100000,done:()=>(state.journal||[]).length>0},
+  {id:"first_div",label:"첫 배당 수령",reward:100000,done:()=>(state.dividendTotal||0)>0},
+  {id:"ten_stocks",label:"10종목 동시 보유",reward:500000,done:()=>stocks.filter(s=>s.own>0).length>=10},
+  {id:"no_debt",label:"대출 전액 상환",reward:200000,done:()=>(state.loanTotal||0)>0 && (state.loan||0)===0},
+  {id:"silver",label:"실버 등급",reward:200000,done:()=>gradeIndex(currentGrade())>=1},
+  {id:"gold",label:"골드 등급",reward:500000,done:()=>gradeIndex(currentGrade())>=2},
+  {id:"platinum",label:"플래티넘 등급",reward:1000000,done:()=>gradeIndex(currentGrade())>=3},
+  {id:"billion",label:"순자산 10억",reward:2000000,done:()=>totalAssetsKRW()>=1000000000}
+];
+function checkAchievements(){
+  ACHIEVEMENTS.forEach(a=>{
+    if((state.achievements||{})[a.id]) return;
+    let ok=false;
+    try{ ok=!!a.done(); }catch(e){ ok=false; }
+    if(!ok) return;
+    state.achievements[a.id]=true;
+    state.cash+=a.reward;
+    addLog(`업적 달성: ${a.label} (+${won(a.reward)})`);
+    notify("goal","업적 달성",`${a.label} · ${won(a.reward)}`);
+  });
+}
+
+// ── 게임 속도 ────────────────────────────────
+function setSpeed(n){
+  state.speed=Math.max(1,Math.min(10,+n||1));
+  state.paused=false;
+  saveGame(); updateSpeedUI();
+}
+function togglePause(){ state.paused=!state.paused; saveGame(); updateSpeedUI(); }
+function cycleSpeed(){
+  const seq=[1,3,10];
+  const i=seq.indexOf(state.speed||1);
+  setSpeed(seq[(i+1)%seq.length]);
+}
+function updateSpeedUI(){
+  const label=state.paused?"⏸ 정지":`${state.speed||1}x`;
+  ["speedState","bbSpeed"].forEach(id=>{ const el=$(id); if(el) el.textContent=label; });
+  const bar=$("marketTimeBar");
+  if(bar && state.paused) bar.textContent="⏸ 일시정지 중 · 재개하면 시장이 다시 움직입니다.";
+  document.querySelectorAll("[data-speed]").forEach(b=>{
+    b.classList.toggle("on",!state.paused && +b.dataset.speed===(state.speed||1));
+  });
+}
+
+// ── 오프라인 정산(최대 2시간) ─────────────────────
+const OFFLINE_MAX=2*3600;
+function applyOfflineProgress(){
+  const now=Date.now();
+  const last=state.lastSeen||0;
+  state.lastSeen=now;
+  if(!last) return null;
+  const sec=Math.min(OFFLINE_MAX, Math.floor((now-last)/1000));
+  if(sec<120) return null;
+  const periods=sec/15;
+  let interest=0, loanInterest=0;
+  products.forEach(p=>{
+    if(p.amount<=0 || p.rate<=0) return;
+    for(let i=0;i<periods;i++){
+      const eff=p.amount>30000000?30000000+(p.amount-30000000)*0.5:p.amount;
+      const add=eff*(p.rate*0.015);
+      p.amount+=add; interest+=add;
+    }
+  });
+  const parking=state.cash>500000?state.cash*0.00002*periods:0;
+  state.cash+=parking;
+  if((state.loan||0)>0){
+    for(let i=0;i<periods;i++){
+      const li=state.loan*((state.loanRate||0)*0.015);
+      loanInterest+=li;
+      if(state.cash>=li) state.cash-=li;
+      else { state.loan+=li-state.cash; state.cash=0; }
+    }
+  }
+  const divPeriods=Math.min(30, Math.floor(sec/DIVIDEND_EVERY));
+  const dividends=expectedDividend()*divPeriods;
+  if(dividends>0){ state.cash+=dividends; state.dividendTotal=(state.dividendTotal||0)+dividends; }
+  const summary={sec,interest,dividends,loanInterest,parking};
+  addLog(`오프라인 정산: ${Math.floor(sec/60)}분 · 이자 ${won(interest)} · 배당 ${won(dividends)}`);
+  notify("system","오프라인 정산",`${Math.floor(sec/60)}분 동안 이자 ${won(interest)} · 배당 ${won(dividends)}`);
+  openModal("오프라인 정산",`<div class="kpis">
+    <div class="kpi"><small>경과 시간</small><b>${Math.floor(sec/60)}분</b></div>
+    <div class="kpi"><small>금융상품 이자</small><b>${won(interest)}</b></div>
+    <div class="kpi"><small>배당(최대 1시간)</small><b>${won(dividends)}</b></div>
+    <div class="kpi"><small>대출 이자</small><b>${won(loanInterest)}</b></div>
+  </div><p style="margin-top:10px;font-size:12px;color:#667085">주가 변동은 반영하지 않고 이자·배당만 정산합니다(최대 2시간).</p>`);
+  saveGame();
+  return summary;
+}
+
+// ── 결산 리포트 ───────────────────────────────
+function reportData(){
+  const stats=performanceStats();
+  const total=totalAssetsKRW();
+  const base=state.seasonBase||START_CASH;
+  const idxBase=state.seasonBaseIndex||1000;
+  return Object.assign({},stats,{
+    base,total,
+    ret:base>0?(total-base)/base:0,
+    indexRet:idxBase>0?marketIndex()/idxBase-1:0,
+    dividends:state.dividendTotal||0,
+    tax:state.taxPaid||0,
+    debt:state.loan||0,
+    grade:currentGrade()
+  });
+}
+function reportHTML(){
+  const r=reportData();
+  const diff=r.ret-r.indexRet;
+  return `<div class="kpis">
+    <div class="kpi"><small>시즌 시작 자산</small><b>${won(r.base)}</b></div>
+    <div class="kpi"><small>현재 순자산</small><b>${won(r.total)}</b></div>
+    <div class="kpi"><small>내 수익률</small><b class="${r.ret>=0?"up":"down"}">${pct(r.ret)}</b></div>
+    <div class="kpi"><small>시장 지수</small><b class="${r.indexRet>=0?"up":"down"}">${pct(r.indexRet)}</b></div>
+    <div class="kpi"><small>시장 대비</small><b class="${diff>=0?"up":"down"}">${pct(diff)}</b></div>
+    <div class="kpi"><small>현재 등급</small><b>${r.grade}</b></div>
+  </div>
+  <div class="kpis" style="margin-top:10px">
+    <div class="kpi"><small>거래 횟수</small><b>${r.trades}회</b></div>
+    <div class="kpi"><small>매도 승률</small><b>${(r.winRate*100).toFixed(0)}% (${r.sells}건)</b></div>
+    <div class="kpi"><small>실현손익</small><b class="${r.realized>=0?"up":"down"}">${won(r.realized)}</b></div>
+    <div class="kpi"><small>누적 배당</small><b>${won(r.dividends)}</b></div>
+    <div class="kpi"><small>납부 세금</small><b>${won(r.tax)}</b></div>
+    <div class="kpi"><small>거래 수수료</small><b>${won(r.fees)}</b></div>
+  </div>
+  <p style="margin-top:12px;font-size:12px;color:#667085">최고 수익 종목: <b>${r.best?r.best.name+" "+won(r.best.realizedProfit):"-"}</b> · 최저: <b>${r.worst?r.worst.name+" "+won(r.worst.realizedProfit):"-"}</b></p>`;
+}
+function openReport(){ openModal("결산 리포트",reportHTML()); }
 
 // ── 자산 추이·배분 ──────────────────────────────────
 // 추이 데이터는 저장 파일에 넣지 않고 메모리에만 쌓습니다(저장/불러오기 호환 유지).
@@ -330,6 +808,8 @@ function checkGoals(){
     state.cash += m.reward;
     addLog(`🎯 목표 달성: ${m.label} (보상 ${won(m.reward)})`);
     publishBreakingNews("🎯 목표 달성", `${m.label}! 보상 ${won(m.reward)}이 지급되었습니다.`);
+    bumpDaily("goals");
+    notify("goal","목표 달성",`${m.label} · ${won(m.reward)}`);
   });
 }
 
@@ -382,6 +862,9 @@ function processOrders(){
       s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + FEE_STOCK)) * o.qty) / (s.own + o.qty);
       s.own += o.qty;
       addLog(`⏱ 예약 매수 체결: ${s.name} ${o.qty}주 @ ${foreign ? usdStr(s.price) : won(s.price)}`);
+      bumpDaily("orders");
+      notify("order","지정가 매수 체결",`${s.name} ${o.qty}주`);
+      recordTrade(s,"buy",o.qty,s.price,0);
     } else {
       if(s.own < o.qty){ remain.push(o); return; }
       const revenue = s.price * (1 - FEE_STOCK - TAX_TRADE) * o.qty;
@@ -392,6 +875,9 @@ function processOrders(){
       s.own -= o.qty;
       if(s.own === 0) s.avgBuy = 0;
       addLog(`⏱ 예약 매도 체결: ${s.name} ${o.qty}주 @ ${foreign ? usdStr(s.price) : won(s.price)}`);
+      bumpDaily("orders");
+      notify("order","지정가 매도 체결",`${s.name} ${o.qty}주 · ${won(profitKRW)}`);
+      recordTrade(s,"sell",o.qty,s.price,profitKRW);
       settleTax(profitKRW);
     }
   });
@@ -411,6 +897,7 @@ function settleTax(profitKRW){
   if(state.cash >= tax){ state.cash -= tax; }
   else { state.loan = (state.loan || 0) + (tax - state.cash); state.cash = 0; } // 현금 부족분은 대출로 전환
   addLog(`양도세 원천징수: ${won(tax)} (연 누적 실현손익 ${won(state.realizedYTD)})`);
+  notify("tax","양도세 원천징수",`${won(tax)}`);
   return tax;
 }
 
@@ -426,6 +913,7 @@ function borrowLoan(){
   if(amt > avail) return alert(`대출 한도를 초과했습니다. (가능 ${won(avail)})`);
   state.loan = (state.loan || 0) + amt;
   state.loanRate = pol.rate;
+  state.loanTotal = (state.loanTotal || 0) + amt;
   state.cash += amt;
   addLog(`신용 대출 실행: ${won(amt)} (연 ${(pol.rate * 100).toFixed(1)}%)`);
   saveGame(); portfolio(); update();
@@ -473,8 +961,11 @@ function payDividends(){
     else { state.cash += amount; totalKRW += amount; }
   });
   if(totalKRW <= 0) return;
+  state.dividendTotal = (state.dividendTotal || 0) + totalKRW;
+  bumpDaily("dividends");
   addLog(`💰 배당금 지급: ${won(totalKRW)}`);
   publishBreakingNews("💰 배당 지급", `보유 주식 배당금 ${won(totalKRW)}이 지급되었습니다.`);
+  notify("dividend","배당금 지급",`${won(totalKRW)}`);
 }
 
 function earningsSurprise(){
@@ -533,22 +1024,37 @@ function init(){
   stockPage("foreign","해외 주식","해외 유명 종목을 달러(USD) 기준으로 거래합니다.");
   stockPage("mega","초대형주","세계 시장 영향력이 큰 종목입니다. 달러(USD)로 거래됩니다.");
   stockPage("special","특별 주식","변동성이 높고 성장이 기대되는 테마 종목입니다. 달러(USD)로 거래됩니다.");
+  stockPage("watch","관심종목","카드의 ★로 담은 종목을 한곳에서 봅니다. 검색과 정렬도 사용할 수 있습니다.");
   // 저장 데이터를 먼저 불러온 뒤 화면을 그려야 잠금 상태·보유 현황·등급이 올바르게 표시됩니다.
   loadGame();
+  state.lastGrade=currentGrade();
+  applyOfflineProgress();
   banking();fxPage();news();portfolio();
   update();
   recordAssetHistory();
-  
-  // 메인 마켓 틱 (5초 주기 -> 실제 속도감 향상 위해 내부 로직 연동)
-  setInterval(tickMarket,5000);
-  // 이자 반영 (15초 주기)
-  setInterval(interest,15000);
-  // 환율 변동 (5초 주기)
-  setInterval(updateFX,5000);
-  // 시장 시간 시스템 처리용 1초 타이머
-  setInterval(tickSeconds,1000);
-  // 이벤트 및 정기 뉴스 생성기
-  setInterval(marketEventsAndNews, 7000);
+  ensureDaily(); checkAchievements(); updateSpeedUI(); updateBell();
+
+  // 1초 드라이버: 배속(1x/3x/10x)·일시정지를 한곳에서 처리합니다.
+  setInterval(gameLoop,1000);
+  setInterval(()=>saveGame(),10000);
+  if(typeof window!=="undefined" && window.addEventListener){
+    window.addEventListener("beforeunload",()=>{ try{ saveGame(); }catch(e){} });
+  }
+  if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  }
+}
+
+function gameLoop(){
+  if(state.paused){ updateSpeedUI(); return; }
+  const n=Math.max(1,Math.min(10,state.speed||1));
+  for(let i=0;i<n;i++){
+    tickSeconds();
+    if(state.marketSeconds%5===0){ tickMarket(); updateFX(); }
+    if(state.marketSeconds%7===0) marketEventsAndNews();
+    if(state.marketSeconds%15===0) interest();
+  }
+  update();
 }
 
 function addLog(text) {
@@ -570,6 +1076,7 @@ function buildSaveData() {
 }
 
 function saveGame() {
+  state.lastSeen=Date.now();
   localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveData()));
 }
 
@@ -619,6 +1126,22 @@ function applySaveData(data) {
     if(!Number.isFinite(state[k])) state[k] = 0;
   });
   if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
+  // 신규 기능 필드 기본값 보정
+  if(!Array.isArray(state.watch)) state.watch=[];
+  if(!Array.isArray(state.journal)) state.journal=[];
+  if(!Array.isArray(state.alerts)) state.alerts=[];
+  if(!state.achievements || typeof state.achievements!=="object") state.achievements={};
+  ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
+  const NOTIFY_DEFAULT={order:true,dividend:true,goal:true,grade:true,tax:true,sound:false,haptic:false};
+  state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
+  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60};
+  state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
+  if(!state.daily || typeof state.daily!=="object") state.daily={date:"",counts:{},claimed:{}};
+  if(!Number.isFinite(state.speed) || state.speed<1) state.speed=1;
+  if(typeof state.paused!=="boolean") state.paused=false;
+  if(!Number.isFinite(state.seasonBase) || state.seasonBase<=0) state.seasonBase=totalAssetsKRW();
+  if(!Number.isFinite(state.seasonBaseIndex) || state.seasonBaseIndex<=0) state.seasonBaseIndex=marketIndex();
+  state.lastGrade=currentGrade();
 }
 
 function clearGame(skipConfirm) {
@@ -640,6 +1163,18 @@ function clearGame(skipConfirm) {
   state.realizedYTD = 0;
   state.taxedProfit = 0;
   state.taxPaid = 0;
+  state.watch = [];
+  state.journal = [];
+  state.alerts = [];
+  state.achievements = {};
+  state.loanTotal = 0;
+  state.dividendTotal = 0;
+  state.feesTotal = 0;
+  state.daily = {date:"",counts:{},claimed:{}};
+  state.paused = false;
+  state.speed = 1;
+  state.auto = Object.assign({},state.auto,{enabled:false});
+  state.seasonBase = START_CASH;
   fx.usd = START_FX;
   fx.anchor = START_FX;
   stocks.forEach(s=>{
@@ -651,9 +1186,12 @@ function clearGame(skipConfirm) {
     s.hist = [s.start];
   });
   products.forEach(p => { p.amount = 0; p.rate = 0; });
+  state.seasonBaseIndex = marketIndex();
+  state.lastGrade = currentGrade();
   assetHistory.points=[];
   assetHistory.peak=0;
   recordAssetHistory();
+  ensureDaily(); updateSpeedUI(); updateBell();
   addLog("게임 초기화가 수행되었습니다.");
   news();
   banking();
@@ -662,26 +1200,41 @@ function clearGame(skipConfirm) {
 }
 
 function nav(){
-  $("nav").innerHTML=pages.map((p,i)=>`<button class="${i?"":"on"}" onclick="show('${p[0]}',this)">${p[1]}</button>`).join("");
+  $("nav").innerHTML=pages.map((p,i)=>`<button class="${i?"":"on"}" data-page="${p[0]}" onclick="show('${p[0]}',this)">${p[1]}</button>`).join("");
 }
 
-function show(id,btn){
+function goPage(id){
   document.querySelectorAll(".page").forEach(x=>x.classList.toggle("on",x.id==id));
-  document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("on"));
-  btn.classList.add("on");
+  document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("on",x.dataset.page==id));
+  document.querySelectorAll(".bb-nav button").forEach(x=>x.classList.toggle("on",x.dataset.page==id));
   if(id=="news")news();
   if(id=="portfolio")portfolio();
-  if(id=="banking")refreshBankingState(); // 입력값을 보존한 채 등급·보유 현황만 갱신
+  if(id=="banking")refreshBankingState();
+  if(["domestic","foreign","mega","special","watch"].includes(id)) applyStockView(id);
 }
+function show(id){ goPage(id); }
+function quickNav(id){ goPage(id); }
+
+const escAttr=v=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
 function stockPage(group,title,desc){
-  $(group).innerHTML=`<div class="head"><div><h1>${title}</h1><p>${desc}</p></div><span class="pill">5초마다 가격 갱신</span></div><div class="notice">거래 시 0.15%의 수수료가 차감됩니다. 휴장 중에는 주식 거래가 제한됩니다.</div><div class="grid">${stocks.filter(s=>s.group==group).map(card).join("")}</div>`;
+  const page=$(group); if(!page) return;
+  page.innerHTML=`<div class="head"><div><h1>${title}</h1><p>${desc}</p></div><span class="pill">5초마다 가격 갱신</span></div>
+  <div class="notice">거래 시 0.15%의 수수료가 차감됩니다. 휴장 중에는 주식 거래가 제한됩니다.</div>
+  <div class="toolbar">
+    <input type="search" placeholder="종목명·티커·테마 검색" value="${escAttr(stockView.query)}" oninput="stockView.query=this.value; applyStockView('${group}')">
+    <select onchange="stockView.sort=this.value; applyStockView('${group}')">${SORT_OPTIONS.map(([v,l])=>`<option value="${v}" ${stockView.sort===v?"selected":""}>${l}</option>`).join("")}</select>
+    <button class="chip ${stockView.watchOnly?"on":""}" onclick="stockView.watchOnly=!stockView.watchOnly; this.classList.toggle('on'); ['domestic','foreign','mega','special','watch'].forEach(g=>applyStockView(g))">★ 관심만</button>
+    <span class="pill" id="count-${group}"></span>
+  </div>
+  <div class="grid" id="grid-${group}"></div>`;
+  applyStockView(group);
 }
 
 function card(s){
   const isForeign = ["foreign","mega","special"].includes(s.group);
   return `<article class="card">
-    <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><span class="pill">${s.market}</span></div>
+    <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><div style="display:flex;gap:6px;align-items:flex-start"><span class="pill">${s.market}</span><button class="star ${isWatched(s.id)?"on":""}" onclick="toggleWatch('${s.id}')" aria-label="관심종목" title="관심종목">★</button></div></div>
     <div class="price" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
     <p data-change="${s.id}">시작가 대비 +0.00%</p>
     <div class="spark" data-spark="${s.id}"></div>
@@ -767,7 +1320,7 @@ function news(){
 function portfolio(){
   // 5초마다 다시 그려지므로 입력 중인 값을 스냅샷해 두었다가 복원합니다.
   const keep={};
-  ["order-stock","order-side","order-qty","order-limit","loan-amt"].forEach(id=>{
+  ["order-stock","order-side","order-qty","order-limit","loan-amt","auto-pct","auto-min"].forEach(id=>{
     const el=document.getElementById(id);
     if(el) keep[id]=el.value;
   });
@@ -814,6 +1367,41 @@ function portfolio(){
     </div>`;
   }).join("");
 
+  ensureDaily();
+  const missions=dailyMissions();
+  const missionsHtml=missions.map(m=>{
+    const prog=Math.min(m.target,state.daily.counts[m.id]||0);
+    const done=prog>=m.target;
+    const claimed=!!state.daily.claimed[m.id];
+    return `<div class="mission">
+      <div class="mission-top"><b>${m.label}</b><span class="pill">보상 ${won(m.reward)}</span></div>
+      <div class="bar"><span style="width:${(prog/m.target*100).toFixed(0)}%"></span></div>
+      <div class="mission-top"><small>${prog} / ${m.target}</small>
+        <button class="${done&&!claimed?"buy":"ghost"}" ${done&&!claimed?"":"disabled"} onclick="claimDaily('${m.id}')">${claimed?"수령 완료":done?"보상 받기":"진행 중"}</button></div>
+    </div>`;
+  }).join("");
+  const achHtml=ACHIEVEMENTS.map(a=>`<div class="${(state.achievements||{})[a.id]?"done":""}"><b>${(state.achievements||{})[a.id]?"✅":"▫️"} ${a.label}</b><br><small>보상 ${won(a.reward)}</small></div>`).join("");
+  const perf=performanceStats();
+  const journalHtml=(state.journal||[]).slice(0,8).map(x=>`<div><span>${x.side==="buy"?"매수":"매도"} ${x.name} ${x.qty}주</span><span class="${x.side==="sell"?(x.profit>=0?"up":"down"):""}">${x.side==="sell"?won(x.profit):won(x.valueKRW)}</span></div>`).join("")||"<div><span>아직 거래 기록이 없습니다.</span><span>-</span></div>";
+  const perfHtml=`<div class="kpis">
+      <div class="kpi"><small>거래 횟수</small><b>${perf.trades}회</b></div>
+      <div class="kpi"><small>매도 승률</small><b>${(perf.winRate*100).toFixed(0)}%</b></div>
+      <div class="kpi"><small>실현손익</small><b class="${perf.realized>=0?"up":"down"}">${won(perf.realized)}</b></div>
+      <div class="kpi"><small>누적 배당</small><b>${won(state.dividendTotal||0)}</b></div>
+      <div class="kpi"><small>거래 수수료</small><b>${won(perf.fees)}</b></div>
+      <div class="kpi"><small>납부 세금</small><b>${won(state.taxPaid||0)}</b></div>
+    </div>
+    <div class="journal" style="margin-top:10px">${journalHtml}</div>`;
+  const autoState=state.auto||{};
+  const autoHtml=`<div class="inline-form">
+      <label>주식 비중 (%)<input id="auto-pct" type="number" min="0" max="100" step="5" value="${autoState.stockPct??60}"></label>
+      <label>최소 보유 현금 (원)<input id="auto-min" type="number" min="0" step="100000" value="${autoState.minCash??1000000}"></label>
+      <label>&nbsp;<button class="buy" onclick="saveAutoSettings()">${autoState.enabled?"규칙 저장":"자동 적립 켜기"}</button></label>
+      <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
+      ${autoState.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 적립 끄기</button></label>':""}
+    </div>
+    <p style="margin-top:8px;font-size:12px;">${autoState.enabled?`✅ 켜짐 · 60초마다 현금을 주식 ${autoState.stockPct}% / 예금으로 재투자합니다.`:"꺼짐 · 켜면 60초마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
+
   const orderRows = state.orders.length ? state.orders.map(o=>{
     const s=stock(o.stockId);
     if(!s) return "";
@@ -850,6 +1438,8 @@ function portfolio(){
             ? `<span class="pill">구간 수익률 <b class="${changePct>=0?"up":"down"}">${pct(changePct)}</b></span>`
             : `<span class="pill">기록 수집 중</span>`}
           <span class="pill">고점 ${wonShort(peak)}</span>
+          <span class="pill">시즌 ${pct(reportData().ret)}</span>
+          <span class="pill">시장 ${pct(reportData().indexRet)}</span>
         </div>
       </div>
       <div class="trend">${assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 이곳에 그래프가 표시됩니다.</small></div>`}</div>
@@ -869,6 +1459,14 @@ function portfolio(){
     </div>
 
     <div class="section"><h3>목표·미션</h3><div class="panel">${goalsHtml}</div></div>
+
+    <div class="section"><h3>오늘의 미션</h3><div class="panel">${missionsHtml}</div></div>
+
+    <div class="section"><h3>업적</h3><div class="panel"><div class="ach">${achHtml}</div></div></div>
+
+    <div class="section"><h3>성과 분석</h3><div class="panel">${perfHtml}</div></div>
+
+    <div class="section"><h3>자동 적립</h3><div class="panel">${autoHtml}</div></div>
 
     <div class="section"><h3>예약 주문 (지정가)</h3><div class="panel">
       <div class="field">
@@ -912,6 +1510,8 @@ function portfolio(){
     <div class="section"><h3>저장·시즌</h3><div class="panel">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="buy" onclick="saveGame()">수동 저장</button>
+        <button class="ghost" onclick="openReport()">결산 리포트</button>
+        <button class="ghost" onclick="openNotifModal()">알림 센터</button>
         <button class="ghost" onclick="exportSave()">파일로 내보내기</button>
         <label class="ghost" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border-radius:7px;background:#e7ebef;color:#18212f;cursor:pointer;font-size:13px;">파일 불러오기<input type="file" accept="application/json" onchange="handleImport(event)" style="display:none"></label>
         <button class="sell" onclick="seasonReset()">시즌 종료</button>
@@ -1022,6 +1622,7 @@ function buy(id){
     s.own += 1;
     addLog(`${s.name} 1주 매수 (${won(s.price)}, 수수료 포함)`);
   }
+  recordTrade(s,"buy",1,s.price,0);
   saveGame();
   update();
 }
@@ -1046,6 +1647,7 @@ function sell(id){
     s.realizedProfit += profit;
     addLog(`${s.name} 1주 매도 (${won(s.price)}, 실현손익: ${won(profit)})`);
   }
+  recordTrade(s,"sell",1,s.price,profitKRW);
   settleTax(profitKRW);
   
   s.own -= 1;
@@ -1076,6 +1678,7 @@ function fullBuy(id){
     s.own += count;
     addLog(`${s.name} ${count}주 풀매수`);
   }
+  recordTrade(s,"buy",count,s.price,0);
   saveGame();
   update();
 }
@@ -1101,6 +1704,7 @@ function fullSell(id){
     s.realizedProfit += profitTotal;
     addLog(`${s.name} ${count}주 풀매도 (${won(s.price)}, 실현손익: ${won(profitTotal)})`);
   }
+  recordTrade(s,"sell",count,s.price,profitKRW);
   settleTax(profitKRW);
   s.own=0;
   s.avgBuy=0;
@@ -1118,6 +1722,7 @@ function join(id){
   state.cash-=v;
   p.amount+=v;
   addLog(`${p.name} 가입: ${won(v)} (확정 연 ${(p.rate*100).toFixed(1)}%)`);
+  bumpDaily("deposit");
   saveGame();
   update();
 }
@@ -1174,17 +1779,29 @@ function tickSeconds() {
   // 자산 추이 기록(15초 간격, 최근 45분)
   if(state.marketSeconds % 15 === 0) recordAssetHistory();
 
-  // 5초마다 내부 백그라운드 자동 저장 연동
-  if(state.marketSeconds % 5 === 0) {
+  if(state.marketSeconds % 5 === 0){
     checkGoals();
-    saveGame();
+    checkAchievements();
+    ensureDaily();
+  }
+  // 자동 적립 규칙
+  if(state.auto && state.auto.enabled && state.marketSeconds % Math.max(15,state.auto.every||60) === 0){
+    autoInvest();
   }
 }
 
 function tickMarket(){
   state.tick++;
+  const idx=marketIndex();
   stocks.forEach(s=>{
     let old=s.price;
+    // 시장지수 ETF는 랜덤워크 대신 지수(1,000 기준)를 10배로 추종합니다.
+    if(s.id==="market_etf"){
+      s.price=Math.max(100,Math.round(idx*10/100)*100);
+      s.lastMove=(s.price-old)/old;
+      s.hist.push(s.price); if(s.hist.length>60) s.hist.shift();
+      return;
+    }
     let noise=(Math.random()-.50)*s.vol;
     
     // 기본 크래시 및 급등 확률 기본 밸런스 조정
@@ -1338,43 +1955,36 @@ function update(){
 
   stocks.forEach(s=>{
     let c=(s.price-s.start)/s.start;
-    let pe=document.querySelector(`[data-price="${s.id}"]`),ce=document.querySelector(`[data-change="${s.id}"]`);
     const isForeign = ["foreign","mega","special"].includes(s.group);
-    
-    if(pe){
+    // 관심종목 페이지 등 같은 종목 카드가 여러 곳에 있을 수 있어 전부 갱신합니다.
+    document.querySelectorAll(`[data-price="${s.id}"]`).forEach(pe=>{
       pe.textContent=isForeign ? usdStr(s.price) : won(s.price);
       pe.className="price "+(s.lastMove>=0?"up":"down");
-    }
-    if(ce){
+    });
+    document.querySelectorAll(`[data-change="${s.id}"]`).forEach(ce=>{
       ce.textContent="시작가 대비 "+pct(c)+" · 최근 "+pct(s.lastMove);
       ce.className=c>=0?"up":"down";
-    }
-    
-    // 실시간 평단가 및 개별 보유 수익률 엘리먼트 업데이트
-    let ae = document.querySelector(`[data-avg="${s.id}"]`);
-    let re = document.querySelector(`[data-roipct="${s.id}"]`);
-    if(ae) {
+    });
+    document.querySelectorAll(`[data-avg="${s.id}"]`).forEach(ae=>{
       ae.textContent = s.own > 0 ? (isForeign ? usdStr(s.avgBuy) : won(s.avgBuy)) : "-";
-    }
-    if(re) {
+    });
+    document.querySelectorAll(`[data-roipct="${s.id}"]`).forEach(re=>{
       if(s.own > 0 && s.avgBuy > 0) {
-        let currentRoi = (s.price - s.avgBuy) / s.avgBuy;
+        const currentRoi = (s.price - s.avgBuy) / s.avgBuy;
         re.textContent = pct(currentRoi);
         re.className = currentRoi >= 0 ? "up" : "down";
       } else {
         re.textContent = "0%";
         re.className = "";
       }
-    }
-
-    let o=document.querySelector(`[data-own="${s.id}"]`),mb=document.querySelector(`[data-maxbuy="${s.id}"]`),ms=document.querySelector(`[data-maxsell="${s.id}"]`),sp=document.querySelector(`[data-spark="${s.id}"]`);
-    if(o)o.textContent=s.own+"주";
-    if(mb){
-      let singleCost = s.price * (1 + FEE_STOCK);
+    });
+    document.querySelectorAll(`[data-own="${s.id}"]`).forEach(el=>{ el.textContent=s.own+"주"; });
+    document.querySelectorAll(`[data-maxbuy="${s.id}"]`).forEach(mb=>{
+      const singleCost = s.price * (1 + FEE_STOCK);
       mb.textContent=isForeign ? Math.floor(state.usd/singleCost)+"주" : Math.floor(state.cash/singleCost)+"주";
-    }
-    if(ms)ms.textContent=s.own+"주";
-    if(sp)sp.innerHTML=sparklineSVG(s);
+    });
+    document.querySelectorAll(`[data-maxsell="${s.id}"]`).forEach(ms=>{ ms.textContent=s.own+"주"; });
+    document.querySelectorAll(`[data-spark="${s.id}"]`).forEach(sp=>{ sp.innerHTML=sparklineSVG(s); });
   });
 
   products.forEach(p=>{
@@ -1387,7 +1997,20 @@ function update(){
   // 금융 화면에서는 배너·해금 상태만 갱신해 입력 중인 금액을 보존합니다.
   if(activePage()==="banking") refreshBankingState();
 
-  if(activePage()=="portfolio") portfolio();
+  const bn=$("bottomNet");
+  if(bn) bn.textContent=wonShort(totalAssetsKRW());
+
+  const grade=currentGrade();
+  if(state.lastGrade && state.lastGrade!==grade) notify("grade","등급 변동",`${state.lastGrade} → ${grade}`);
+  state.lastGrade=grade;
+
+  // 내 자산 화면은 입력·클릭 중에 다시 그리지 않습니다(5초마다 재렌더로 입력이 끊기는 문제 방지).
+  if(activePage()=="portfolio"){
+    const pf=document.getElementById("portfolio");
+    const hovered=pf && typeof pf.matches==="function" && pf.matches(":hover");
+    const focused=pf && document.activeElement && typeof pf.contains==="function" && pf.contains(document.activeElement);
+    if(!hovered && !focused) portfolio();
+  }
 }
 
 init();

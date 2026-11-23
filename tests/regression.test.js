@@ -226,7 +226,8 @@ const RESET = total => `
   check('대출 이자가 잔액에 가산', Math.abs(g.run('state.loan') - 1001800) < 1e-6, g.run('state.loan'));
 
   // 거래세: 즉시 매도 손실 = 매수 수수료 + 매도 수수료 + 거래세
-  g.run(RESET(10000000) + 'state.loan = 0; 1');
+  // 업적 보상이 현금 검증을 흐리지 않도록 이 테스트에서는 보상을 미리 수령 처리합니다.
+  g.run(RESET(10000000) + 'state.loan = 0; state.achievements = Object.fromEntries(ACHIEVEMENTS.map(a=>[a.id,true])); 1');
   g.run("stock('future_ai').price = 100000; stock('future_ai').start = 100000; buy('future_ai'); sell('future_ai'); 1");
   check('매도 시 거래세 0.2% 반영', g.run("stock('future_ai').realizedProfit") === -500, g.run("stock('future_ai').realizedProfit"));
   check('거래세 반영 후 현금', Math.round(g.run('state.cash')) === 9999500, g.run('state.cash'));
@@ -412,6 +413,116 @@ const RESET = total => `
   const emptyHtml = g.run("document.getElementById('portfolio').innerHTML");
   check('자산 0원 대시보드에 NaN 없음', !emptyHtml.includes('NaN'), (emptyHtml.match(/NaN/g) || []).length);
   check('자산 0원 배분 비중 0%', g.run('allocation().parts.every(p => p.pct === 0)') === true);
+}
+
+// ── 7. 관심종목·알림·저널·자동화·미션·속도·오프라인·지수·PWA ──────────
+{
+  const g = createGame();
+  g.run(RESET(10000000) + `
+    state.loan = 0; state.loanRate = 0; state.usd = 0;
+    state.watch = []; state.journal = []; state.alerts = [];
+    state.achievements = Object.fromEntries(ACHIEVEMENTS.map(a=>[a.id,true]));
+    state.dividendTotal = 0; state.feesTotal = 0; state.loanTotal = 0;
+    state.daily = {date:"", counts:{}, claimed:{}};
+    state.notify = {order:true,dividend:true,goal:true,grade:true,tax:true,sound:false,haptic:false};
+    state.auto = {enabled:false, stockPct:60, minCash:1000000, every:60};
+    1;
+  `);
+
+  // 관심종목·검색·정렬
+  g.run("toggleWatch('future_ai'); 1");
+  check('관심종목 추가', g.run("isWatched('future_ai')") === true && g.run('state.watch.length') === 1);
+  g.run("stockView.watchOnly=true; 1");
+  check('관심종목만 보기', g.run("visibleStocks('domestic').length") === 1, g.run("visibleStocks('domestic').length"));
+  g.run("stockView.watchOnly=false; stockView.query='반도체'; 1");
+  check('종목 검색', g.run("visibleStocks('domestic').every(s=>(s.theme+s.name).includes('반도체'))") === true);
+  g.run("stockView.query=''; toggleWatch('future_ai'); 1");
+  check('관심종목 해제', g.run('state.watch.length') === 0);
+
+  // 알림
+  g.run("state.alerts=[]; notify('dividend','테스트 배당','1,000원'); 1");
+  check('알림 저장', g.run('state.alerts.length') === 1 && g.run("state.alerts[0].title") === '테스트 배당');
+  g.run("state.notify.dividend=false; state.alerts=[]; notify('dividend','꺼짐','x'); 1");
+  check('알림 종류별 끄기', g.run('state.alerts.length') === 0);
+  g.run("state.notify.dividend=true; state.alerts=[]; notify('tax','세금','1원'); openNotifModal(); 1");
+  check('알림 센터 읽음 처리', g.run('state.alerts.every(a=>a.read)') === true);
+
+  // 거래 저널·성과
+  g.run("state.journal=[]; state.feesTotal=0; state.realizedYTD=0; state.taxedProfit=0; state.cash=10000000; 1");
+  g.run("stock('future_ai').price=100000; stock('future_ai').start=100000; stock('future_ai').own=0; buy('future_ai'); stock('future_ai').price=120000; sell('future_ai'); 1");
+  const perf = g.run('performanceStats()');
+  check('거래 저널 기록', perf.trades === 2, perf.trades);
+  check('매도 승률 계산', Math.abs(perf.winRate - 1) < 1e-9, perf.winRate);
+  check('실현손익 집계', perf.realized > 0, Math.round(perf.realized));
+  check('수수료 누적', perf.fees > 0, perf.fees.toFixed(1));
+
+  // 자동 적립
+  g.run("state.cash=100000000; state.usd=0; stocks.forEach(s=>{s.own=0;s.avgBuy=0}); products.forEach(p=>{p.amount=0;p.rate=0}); state.auto={enabled:true,stockPct:60,minCash:1000000,every:60}; autoInvest(true); 1");
+  const auto = g.run("({cash: state.cash, stock: stockValueKRW(), prod: productValueKRW(), own: stocks.filter(s=>s.own>0).length})");
+  check('자동 적립 주식 매수', auto.stock > 0 && auto.own > 0, Math.round(auto.stock));
+  check('자동 적립 최소 현금 유지', auto.cash >= 1000000 - 1, Math.round(auto.cash));
+  check('자동 적립 예금 분배', auto.prod > 0, Math.round(auto.prod));
+
+  // 일일 미션
+  g.run("state.daily={date:todayKey(),counts:{},claimed:{}}; const miss=dailyMissions()[0]; state.daily.counts[miss.id]=miss.target; 1");
+  const missionId = g.run('dailyMissions()[0].id');
+  const cashBefore = g.run('state.cash');
+  g.run(`claimDaily('${missionId}'); 1`);
+  check('일일 미션 보상 수령', g.run(`!!state.daily.claimed['${missionId}']`) === true);
+  check('일일 미션 보상 지급', g.run('state.cash') > cashBefore, g.run('state.cash') - cashBefore);
+  const cashAfterClaim = g.run('state.cash');
+  g.run(`claimDaily('${missionId}'); 1`);
+  check('일일 미션 중복 수령 방지', g.run('state.cash') === cashAfterClaim, g.run('state.cash'));
+
+  // 업적
+  g.run("state.achievements={}; state.journal=[{side:'buy',name:'x',qty:1,valueKRW:1,profit:0}]; checkAchievements(); 1");
+  check('업적 달성 처리', g.run('!!state.achievements.first_trade') === true);
+
+  // 속도·일시정지
+  g.run('state.speed=10; state.paused=false; state.marketSeconds=0; gameLoop(); 1');
+  check('10x에서 10초 진행', g.run('state.marketSeconds') === 10, g.run('state.marketSeconds'));
+  g.run('state.paused=true; const beforePause=state.marketSeconds; gameLoop(); state.paused=false; 1');
+  check('일시정지 중 시간 정지', g.run('state.marketSeconds') === 10, g.run('state.marketSeconds'));
+
+  // 오프라인 정산(최대 2시간)
+  g.run(`
+    products.forEach(p=>{p.amount=0;p.rate=0});
+    product('deposit').amount=10000000; product('deposit').rate=0.042;
+    state.cash=0; state.usd=0; state.loan=0; stocks.forEach(s=>{s.own=0});
+    state.dividendTotal=0; state.lastSeen=Date.now()-3600*1000;
+    1
+  `);
+  const off = g.run('applyOfflineProgress()');
+  check('오프라인 이자 정산', !!off && off.interest > 0, off && Math.round(off.interest));
+  check('오프라인 정산 상한 2시간', !!off && off.sec <= 7200, off && off.sec);
+
+  // 시장 지수·ETF
+  g.run("stocks.forEach(s=>{s.price=s.start}); 1");
+  check('시장 지수 기준 1000', Math.abs(g.run('marketIndex()') - 1000) < 1e-9, g.run('marketIndex()'));
+  const idxBefore = g.run('marketIndex()');
+  g.run('tickMarket(); 1');
+  check('ETF가 지수를 추종', Math.abs(g.run("stock('market_etf').price") - Math.max(100, Math.round(idxBefore*10/100)*100)) < 1, g.run("stock('market_etf').price"));
+
+  // 확장 필드 저장/복원
+  g.run("state.watch=['future_ai']; state.auto={enabled:true,stockPct:40,minCash:500000,every:60}; state.notify.sound=true; state.journal=[{side:'buy',name:'x',qty:1,valueKRW:1,profit:0}]; state.achievements={x:true}; saveGame(); state.watch=[]; state.auto.enabled=false; state.journal=[]; state.achievements={}; state.notify.sound=false; loadGame(); 1");
+  check('관심종목 저장/복원', g.run('state.watch.length') === 1 && g.run("state.watch[0]") === 'future_ai');
+  check('자동 적립 설정 저장/복원', g.run('state.auto.enabled') === true && g.run('state.auto.stockPct') === 40);
+  check('알림 설정 저장/복원', g.run('state.notify.sound') === true);
+  check('저널·업적 저장/복원', g.run('state.journal.length') === 1 && g.run('state.achievements.x') === true);
+
+  // 결산 리포트
+  g.run('state.seasonBase=10000000; state.seasonBaseIndex=1000; state.cash=20000000; 1');
+  check('결산 리포트 생성', g.run('reportHTML()').includes('시장 대비') && g.run('reportHTML()').includes('매도 승률'));
+}
+
+// ── 8. PWA 파일 ────────────────────────────────
+{
+  const root = path.join(__dirname, '..');
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+  check('PWA 매니페스트', manifest.name.includes('머니') && manifest.display === 'standalone');
+  check('PWA 서비스워커 파일', fs.readFileSync(path.join(root, 'sw.js'), 'utf8').includes('addEventListener("fetch"'));
+  check('PWA 아이콘', fs.existsSync(path.join(root, 'icon.svg')));
+  check('index.html PWA 연결', html.includes('rel="manifest"') && html.includes('serviceWorker'));
 }
 
 const failed = results.filter(r => !r.pass);

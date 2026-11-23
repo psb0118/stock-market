@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="머니 플레이그라운드">
+  <rect width="192" height="192" rx="36" fill="#17202b"/>
+  <polyline points="28,132 70,96 104,112 164,52" fill="none" stroke="#f7c948" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="164" cy="52" r="10" fill="#0f766e"/>
+  <rect x="28" y="148" width="136" height="10" rx="5" fill="#2b3a4d"/>
+</svg>
