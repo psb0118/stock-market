@@ -559,6 +559,113 @@ const RESET = total => `
   check('클라우드 패널: 닉네임 이스케이프', g.run('escHtml("<b>x</b>")') === '&lt;b&gt;x&lt;/b&gt;');
 }
 
+// ── 10. 대규모 확장: 8단계 등급·부동산·금은·기업·주간 미션·만기·설정 ──
+{
+  const g = createGame();
+  g.run(RESET(10000000) + `
+    state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null;
+    state.altPrices={}; state.economy={phase:"중립",baseRate:.03,cycleLeft:99,rateAdj:0};
+    1
+  `);
+  g.run('state.cash=500000000; 1');
+  check('다이아몬드 등급', g.run('currentGrade()') === '다이아몬드', g.run('currentGrade()'));
+  g.run('state.cash=1000000000; 1');
+  check('마스터 등급', g.run('currentGrade()') === '마스터', g.run('currentGrade()'));
+  g.run('state.cash=10000000000; 1');
+  check('레전드 등급', g.run('currentGrade()') === '레전드', g.run('currentGrade()'));
+  check('레전드 칭호', g.run('currentTitle()') === '전설의 투자자', g.run('currentTitle()'));
+
+  // 부동산 가치·매수
+  g.run('state.cash=100000000; state.estate={apt:{qty:1,avgBuy:300000000}}; state.altPrices={apt:300000000}; 1');
+  check('부동산이 순자산에 포함', Math.round(g.run('totalAssetsKRW()')) === 400000000, g.run('totalAssetsKRW()'));
+  check('자산 배분에 부동산', g.run('allocation().parts.some(p=>p.label==="부동산"&&p.value>0)') === true);
+  g.run('state.cash=400000000; state.estate={}; state.altPrices={apt:300000000}; buyEstate("apt"); 1');
+  check('부동산 매수', g.run('state.estate.apt.qty') === 1 && Math.round(g.run('state.cash')) === 100000000, g.run('state.cash'));
+
+  // 금 매수
+  g.run('state.cash=1000000; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; document.getElementById("metal-qty-gold").value="10"; buyMetal("gold"); 1');
+  check('금 매수', g.run('state.metals.gold.qty') === 10 && g.run('metalValue()') > 0, g.run('state.metals.gold.qty'));
+
+  // 기업 설립·확장
+  g.run('state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.cash=100000000; state.company=null; foundCompany(); 1');
+  check('기업 설립', g.run('!!state.company') === true && Math.round(g.run('totalAssetsKRW()')) === 100000000, g.run('totalAssetsKRW()'));
+  g.run('state.cash=100000000; expandCompany(); 1');
+  check('기업 확장', g.run('state.company.level') === 2, g.run('state.company.level'));
+
+  // 만기 보너스
+  g.run('state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null; state.cash=30000000; state.marketSeconds=0; state.economy.rateAdj=0; products.forEach(p=>{p.amount=0;p.rate=0;p.bank=null;p.startedAt=null;p.matured=false}); document.getElementById("prod-deposit").value="1000000"; document.getElementById("bank-deposit").value=""; join("deposit"); 1');
+  check('예금 가입 이율 확정', Math.abs(g.run('product("deposit").rate') - 0.02) < 1e-9, g.run('product("deposit").rate'));
+  g.run('state.marketSeconds=600; interest(); 1');
+  check('만기 보너스 지급', g.run('product("deposit").matured') === true && g.run('product("deposit").amount') > 1000000, g.run('product("deposit").amount'));
+
+  // 은행별 금리
+  g.run('state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null; state.cash=30000000; products.forEach(p=>{p.amount=0;p.rate=0;p.bank=null;p.startedAt=null;p.matured=false}); document.getElementById("prod-deposit").value="1000000"; document.getElementById("bank-deposit").value="jeil"; join("deposit"); 1');
+  check('은행별 금리 경쟁', Math.abs(g.run('product("deposit").rate') - 0.0232) < 1e-9, g.run('product("deposit").rate'));
+
+  // 주간 미션
+  g.run('state.weekly={key:isoWeekKey(),counts:{trades:20},claimed:{}}; state.cash=0; claimWeekly("trades"); 1');
+  check('주간 미션 보상', g.run('state.cash') === 1200000, g.run('state.cash'));
+
+  // 자동 배분
+  g.run('state.cash=100000000; state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.auto={enabled:true,stockPct:0,minCash:0,goldPct:50,estatePct:0,every:60}; autoInvest(true); 1');
+  check('자동 배분 금 매수', g.run('state.metals.gold.qty') > 0, g.run('state.metals.gold.qty'));
+
+  // 거래 검색·필터
+  g.run("state.journal=[{at:1,name:'미래AI전자',side:'buy',qty:1,valueKRW:100,profit:0},{at:2,name:'한빛반도체',side:'sell',qty:1,valueKRW:200,profit:50}]; state.journalFilter={q:'미래',side:'all'}; 1");
+  check('거래 검색', g.run('journalFiltered().length') === 1, g.run('journalFiltered().length'));
+  g.run("state.journalFilter={q:'',side:'sell'}; 1");
+  check('거래 필터', g.run('journalFiltered().length') === 1);
+
+  // 설정·저장 복원
+  g.run("setSetting('theme','dark'); 1");
+  check('다크 테마 저장', g.run('state.settings.theme') === 'dark');
+  g.run('state.peakNet=123456789; state.targetGoal=2000000000; state.estate={apt:{qty:2,avgBuy:300000000}}; saveGame(); state.estate={}; state.peakNet=0; loadGame(); 1');
+  check('확장 자산 저장/복원', g.run('state.estate.apt.qty') === 2 && g.run('state.peakNet') >= 123456789, g.run('state.estate.apt.qty') + '/' + g.run('state.peakNet'));
+
+  // 임대 수익·유지비 틱
+  g.run(`
+    state.cash=0; state.estate={apt:{qty:1,avgBuy:300000000}}; state.altPrices={apt:300000000};
+    state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}};
+    state.special={sp_estate:true,sp_company:true,sp_billion:true,sp_gold:true}; state.company=null;
+    state.rewardedGrade=7; state.marketSeconds=60; state.economy.cycleLeft=99;
+    tickAlt();
+    1
+  `);
+  const rentExpected = g.run('state.estate.apt.qty*estatePrice("apt")*(.0035-.0008)');
+  check('부동산 월세·유지비 정산', Math.abs(g.run('state.cash') - rentExpected) < 1, g.run('state.cash') + ' vs ' + rentExpected.toFixed(2));
+
+  // 기업 배당 틱
+  g.run(`
+    state.cash=0; state.estate={}; state.marketSeconds=30;
+    state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}};
+    state.special={sp_estate:true,sp_company:true,sp_billion:true,sp_gold:true};
+    state.company={name:'테스트기업',level:1,valuation:50000000,revenue:2000000,profit:1000000,payout:0.5};
+    state.rewardedGrade=7; state.economy.cycleLeft=99;
+    tickAlt();
+    1
+  `);
+  check('기업 배당 지급', Math.round(g.run('state.cash')) === 500000, g.run('state.cash'));
+
+  // 오프라인 임대 정산
+  g.run(`
+    state.estate={apt:{qty:1,avgBuy:300000000}}; state.altPrices={apt:300000000};
+    state.cash=0; state.company=null; products.forEach(p=>{p.amount=0});
+    state.lastSeen=Date.now()-3600*1000;
+    1
+  `);
+  const off = g.run('applyOfflineProgress()');
+  check('오프라인 임대 수익 정산', off && off.rent > 0 && off.sec <= 7200, off && Math.round(off.rent));
+
+  // 자동 배분: 부동산
+  g.run(`
+    state.cash=1000000000; state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}};
+    state.auto={enabled:true,stockPct:0,minCash:0,goldPct:0,estatePct:100,every:60};
+    autoInvest(true);
+    1
+  `);
+  check('자동 배분 부동산 매수', g.run('Object.keys(state.estate).length') > 0, g.run('JSON.stringify(state.estate)'));
+}
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n== ${results.length - failed.length}/${results.length} passed ==`);
 if (failed.length) process.exit(1);

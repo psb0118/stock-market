@@ -14,7 +14,7 @@
 body{margin:0;font-family:Arial,"Noto Sans KR",sans-serif;background:#f5f3ee;color:#18212f}
 .app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
 .side{background:#17202b;color:white;padding:20px;position:sticky;top:0;height:100vh}
-.logo{font-size:21px;font-weight:800;margin-bottom:8px}
+.logo{font-size:19px;font-weight:800;margin-bottom:8px;white-space:nowrap}
 .sub{font-size:13px;color:#cbd5e1;line-height:1.4;margin-bottom:18px}
 .nav{display:grid;gap:8px}
 .nav button{background:transparent;color:#dbe4ef;text-align:left}
@@ -86,7 +86,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 /* 알림·토스트·모달 */
 .bell{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:34px;margin-top:10px;background:#22303f;font-size:13px}
 .badge{display:none;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#f7c948;color:#17202b;font-size:11px;font-weight:800}
-.toast-wrap{position:fixed;right:14px;bottom:18px;display:grid;gap:8px;z-index:60;max-width:320px}
+.toast-wrap{position:fixed;right:14px;bottom:18px;display:grid;gap:8px;z-index:60;max-width:320px;max-height:calc(100vh - 36px);overflow:hidden}
 .toast{background:#111827;color:#fff;border-left:5px solid #f7c948;border-radius:8px;padding:10px 12px;box-shadow:0 10px 24px #0003;font-size:13px;animation:toastIn .18s ease-out}
 .toast b{color:#f7c948;display:block;margin-bottom:2px}
 @keyframes toastIn{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
@@ -127,7 +127,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .speed span{font-size:12px;color:#cbd5e1;margin-left:auto}
 #bottomBar{display:none}
 @media(max-width:850px){
-  main{padding-bottom:126px}
+  main{padding-bottom:158px}
   #bottomBar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:50;background:#17202bee;border-top:1px solid #2b3a4d;padding:6px 8px 8px;color:#e2e8f0}
   .bb-net{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:0 6px 6px;border-bottom:1px solid #2b3a4d}
   .bb-net b{font-size:15px;color:#f7c948}
@@ -138,7 +138,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
   .bb-nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px}
   .bb-nav button{background:transparent;color:#cbd5e1;font-size:12px;min-height:34px}
   .bb-nav button.on{background:#f7c948;color:#17202b;font-weight:800}
-  .toast-wrap{left:12px;right:12px;bottom:104px;max-width:none}
+  .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
 }
 @media(max-width:540px){.kpis{grid-template-columns:1fr 1fr}.ach{grid-template-columns:1fr}.ach div{line-height:1.5}}
 .alloc-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#edf2f7}
@@ -152,7 +152,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .row{overflow-wrap:anywhere}
 @media(max-width:1024px){.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
-@media(max-width:540px){main{padding:14px}.stats{grid-template-columns:minmax(0,1fr)}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
+@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
@@ -161,9 +161,31 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .rank-row{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center;padding:7px 9px;border-radius:7px;background:#f5f8fa;font-size:13px}
 .rank-row.me{background:#e7f5ef;font-weight:700}
 .rank-row b{color:#0f766e}
+.alt-card{border:1px solid #d8ded4;background:#fffdf8;border-radius:8px;padding:12px;margin-bottom:8px}
+.alt-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px}
+.alt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:8px;font-size:12px}
+.alt-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.grade-pill{border:1px solid currentColor;border-radius:999px;padding:4px 8px;font-size:12px;font-weight:700}
+.page.on{animation:fadeUp .26s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.modal.on .modal-box{animation:popIn .18s ease}
+@keyframes popIn{from{transform:scale(.98);opacity:.6}to{transform:none;opacity:1}}
+body.no-anim *{animation:none!important;transition:none!important}
+body.dark{background:#0b131d;color:#e2e8f0}
+body.dark .box,body.dark .card,body.dark .product,body.dark .news,body.dark .row,body.dark .panel,body.dark .section,body.dark .dash,body.dark .kpi,body.dark .journal,body.dark .log-box,body.dark .alt-card{background:#16202c;border-color:#2a3a4d;color:#e2e8f0}
+body.dark .side{background:#080f18}
+body.dark .pill{background:#243447;color:#dbe4ef}
+body.dark p,body.dark small,body.dark .sub,body.dark .dash-foot{color:#9fb0c3}
+body.dark input,body.dark select{background:#0f1a26;color:#e2e8f0;border-color:#33465c}
+body.dark .modal-box{background:#101b27;color:#e2e8f0}
+body.dark .product-grid div,body.dark .mini div{background:#0f1a26;border-color:#2a3a4d}
+body.dark .toast{background:#1b2a3a;color:#e2e8f0}
+body.dark .trend{background:#0f1a26;border-color:#2a3a4d}
+body.dark .breaking{background:#060b12}
 </style>
 </head>
 <body>
+<div id="boot" style="position:fixed;inset:0;display:grid;place-items:center;background:#f5f3ee;color:#334155;z-index:99;font-weight:700">머니 플레이그라운드 불러오는 중…</div>
 <div class="app">
   <aside class="side">
     <div class="logo">머니 플레이그라운드</div>
@@ -246,10 +268,17 @@ const LOAN_POLICY = {
   브론즈:{limit:0, rate:0},
   실버:{limit:10000000, rate:0.12},
   골드:{limit:30000000, rate:0.09},
-  플래티넘:{limit:100000000, rate:0.06}
+  플래티넘:{limit:100000000, rate:0.06},
+  다이아몬드:{limit:300000000, rate:0.045},
+  마스터:{limit:1000000000, rate:0.035},
+  그랜드마스터:{limit:3000000000, rate:0.030},
+  레전드:{limit:10000000000, rate:0.025}
 };
 // 등급별 환전 수수료 우대
-const GRADE_FX_FEE = {브론즈:0.010, 실버:0.009, 골드:0.007, 플래티넘:0.005};
+const GRADE_FX_FEE = {브론즈:0.010, 실버:0.009, 골드:0.007, 플래티넘:0.005, 다이아몬드:0.004, 마스터:0.0035, 그랜드마스터:0.003, 레전드:0.0025};
+// 등급별 칭호와 프로필 테두리 색
+const TITLES={브론즈:"새내기 투자자", 실버:"성장하는 투자자", 골드:"노련한 투자자", 플래티넘:"자산관리 전문가", 다이아몬드:"금융 전략가", 마스터:"시장의 지배자", 그랜드마스터:"경제 거물", 레전드:"전설의 투자자"};
+const GRADE_COLORS={브론즈:"#a16207", 실버:"#64748b", 골드:"#b45309", 플래티넘:"#0f766e", 다이아몬드:"#0369a1", 마스터:"#6d28d9", 그랜드마스터:"#be123c", 레전드:"#f59e0b"};
 const fxFeeRate = () => (GRADE_FX_FEE[currentGrade()] != null ? GRADE_FX_FEE[currentGrade()] : FEE_FX);
 const pages=[["domestic","국내 주식"],["foreign","해외 주식"],["mega","초대형주"],["special","특별 주식"],["watch","관심종목"],["banking","예금·적금"],["fx","환율"],["news","뉴스 속보"],["portfolio","내 자산"]];
 
@@ -284,27 +313,64 @@ let stocks = stockDefinitions.map(x=>{
 // 가입 금액(amount)과 별개로, 가입 당시 확정된 연이율(rate)을 함께 보관합니다.
 // rate가 0이면 미가입 상태이며, 가입하는 순간의 등급 이율이 그 값으로 고정됩니다.
 let products=[
-{id:"deposit",name:"안심 정기예금",type:"예금",min:100000,risk:"낮음",amount:0,rate:0},
-{id:"saving",name:"성장 적금",type:"적금",min:50000,risk:"낮음",amount:0,rate:0},
-{id:"parking",name:"단기 파킹 통장",type:"파킹",min:10000,risk:"낮음",amount:0,rate:0},
-{id:"bond",name:"우량 회사채 펀드",type:"채권",min:100000,risk:"보통",amount:0,rate:0},
-{id:"etf",name:"글로벌 인덱스 ETF",type:"펀드",min:100000,risk:"보통",amount:0,rate:0},
-{id:"pension",name:"연금 모의 계좌",type:"연금",min:100000,risk:"보통",amount:0,rate:0}
+{id:"deposit",name:"안심 정기예금",type:"예금",min:100000,risk:"낮음",amount:0,rate:0,term:600,bonus:0.002},
+{id:"saving",name:"성장 적금",type:"적금",min:50000,risk:"낮음",amount:0,rate:0,term:900,bonus:0.003},
+{id:"parking",name:"단기 파킹 통장",type:"파킹",min:10000,risk:"낮음",amount:0,rate:0,term:0,bonus:0},
+{id:"bond",name:"우량 회사채 펀드",type:"채권",min:100000,risk:"보통",amount:0,rate:0,term:1200,bonus:0.004},
+{id:"etf",name:"글로벌 인덱스 ETF",type:"펀드",min:100000,risk:"보통",amount:0,rate:0,term:0,bonus:0},
+{id:"pension",name:"연금 모의 계좌",type:"연금",min:100000,risk:"보통",amount:0,rate:0,term:1800,bonus:0.005},
+{id:"prime",name:"프라임 정기예금",type:"예금",min:1000000,risk:"낮음",amount:0,rate:0,term:1800,bonus:0.006},
+{id:"private",name:"프라이빗 뱅킹",type:"종합",min:5000000,risk:"보통",amount:0,rate:0,term:2400,bonus:0.009}
+];
+// 은행별 금리 경쟁: 같은 상품도 은행에 따라 이율이 다릅니다(가입 시점 확정).
+const BANKS=[
+{id:"hanbit",name:"한빛은행",mult:1.00},
+{id:"mirae",name:"미래은행",mult:1.08},
+{id:"jeil",name:"제일은행",mult:1.16}
+];
+// 부동산: 가격 변동 · 월세 수익 · 유지비
+const ESTATES=[
+{id:"apt",name:"도심 아파트",price:300000000,vol:.012,rent:.0035,upkeep:.0008,desc:"안정적인 임대 수요"},
+{id:"shop",name:"번화가 상가",price:180000000,vol:.015,rent:.0050,upkeep:.0012,desc:"높은 임대료, 높은 공실 위험"},
+{id:"office",name:"오피스 빌딩",price:600000000,vol:.009,rent:.0042,upkeep:.0010,desc:"큰 자본, 안정적 현금흐름"},
+{id:"land",name:"개발 예정지",price:120000000,vol:.020,rent:.0015,upkeep:.0004,desc:"시세 차익 기대, 임대 수익 낮음"}
+];
+// 실물자산(금·은)
+const METALS=[
+{id:"gold",name:"금",unit:"g",price:90000,vol:.010},
+{id:"silver",name:"은",unit:"g",price:1200,vol:.018}
+];
+// 가상 기업: 설립 → 확장 → 인수합병
+const COMPANY_LEVELS=[
+{cost:50000000,revenue:2000000,profit:600000,val:50000000},
+{cost:80000000,revenue:4000000,profit:1200000,val:80000000},
+{cost:150000000,revenue:8000000,profit:2500000,val:150000000},
+{cost:300000000,revenue:16000000,profit:5200000,val:300000000},
+{cost:600000000,revenue:32000000,profit:11000000,val:600000000}
+];
+const RIVALS=[
+{id:"r1",name:"경쟁사 알파",cost:120000000,boost:150000000},
+{id:"r2",name:"경쟁사 베타",cost:300000000,boost:400000000},
+{id:"r3",name:"경쟁사 감마",cost:800000000,boost:1200000000}
 ];
 
 // ── 자산 등급 시스템 ───────────────────────────────────────────
 // 등급은 총자산(현금 + 달러 환산액 + 주식 평가액 + 금융상품)으로 결정됩니다.
-const GRADES=["브론즈","실버","골드","플래티넘"];
-const GRADE_FLOORS={브론즈:0, 실버:30000000, 골드:100000000, 플래티넘:200000000};
-// 등급별 상품 이율(연). 상위 등급일수록 같은 상품의 이율이 높습니다.
+const GRADES=["브론즈","실버","골드","플래티넘","다이아몬드","마스터","그랜드마스터","레전드"];
+const GRADE_FLOORS={브론즈:0, 실버:30000000, 골드:100000000, 플래티넘:200000000, 다이아몬드:500000000, 마스터:1000000000, 그랜드마스터:3000000000, 레전드:10000000000};
+// 등급별 상품 이율(연). 기존 4개 등급의 이율은 그대로 두고 상위 등급을 이어 붙였습니다.
 const GRADE_RATES={
   브론즈:{deposit:.012, saving:.020},
   실버:{deposit:.020, saving:.030, parking:.018},
   골드:{deposit:.030, saving:.045, parking:.024, bond:.040},
-  플래티넘:{deposit:.042, saving:.058, parking:.028, bond:.065, etf:.085, pension:.070}
+  플래티넘:{deposit:.042, saving:.058, parking:.028, bond:.065, etf:.085, pension:.070},
+  다이아몬드:{deposit:.050, saving:.066, parking:.031, bond:.075, etf:.100, pension:.085},
+  마스터:{deposit:.058, saving:.074, parking:.034, bond:.085, etf:.112, pension:.095, prime:.120},
+  그랜드마스터:{deposit:.066, saving:.082, parking:.037, bond:.095, etf:.124, pension:.105, prime:.135},
+  레전드:{deposit:.075, saving:.090, parking:.040, bond:.105, etf:.136, pension:.115, prime:.150, private:.165}
 };
 // 상품별 해금 등급: 브론즈는 예금·적금만, 실버는 파킹, 골드는 채권, 플래티넘이 ETF·연금
-const PRODUCT_UNLOCK={deposit:"브론즈", saving:"브론즈", parking:"실버", bond:"골드", etf:"플래티넘", pension:"플래티넘"};
+const PRODUCT_UNLOCK={deposit:"브론즈", saving:"브론즈", parking:"실버", bond:"골드", etf:"플래티넘", pension:"플래티넘", prime:"마스터", private:"레전드"};
 const FOREIGN_GROUPS=["foreign","mega","special"];
 const isForeignStock=s=>FOREIGN_GROUPS.includes(s.group);
 const gradeIndex=g=>GRADES.indexOf(g);
@@ -338,11 +404,20 @@ const state={
   dividendTotal: 0, // 누적 배당 수령액
   feesTotal: 0,     // 누적 거래 수수료
   notify: {order:true, dividend:true, goal:true, grade:true, tax:true, sound:false, haptic:false},
-  auto: {enabled:false, stockPct:60, minCash:1000000, every:60},
+  auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0},
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
   seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈",
-  cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""}
+  cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""},
+  // ── 확장 자산·성장 시스템 ──
+  estate:{}, metals:{gold:{qty:0,avg:0},silver:{qty:0,avg:0}}, altPrices:{}, company:null,
+  economy:{phase:"중립", baseRate:.03, cycleLeft:90, rateAdj:0},
+  weekly:{key:"", counts:{}, claimed:{}}, special:{},
+  streak:{days:1, last:"", best:1},
+  dex:{stocks:{},products:{},estates:{},metals:{}},
+  settings:{theme:"light", confirmTrades:true, animations:true},
+  peakNet:START_CASH, altRealized:0, journalFilter:{q:"",side:"all"},
+  rewardedGrade:0, targetGoal:1000000000
 };
 
 // anchor는 아주 천천히 움직이는 환율 추세선입니다(완만한 추세용).
@@ -366,12 +441,20 @@ function stockValueKRW(){
 }
 function productValueKRW(){ return products.reduce((a,p)=>a+p.amount, 0); }
 // 순자산 = 현금 + 달러 환산액 + 주식 평가액 + 금융상품 평가액 - 대출 잔액
-function totalAssetsKRW(){ return state.cash + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW() - (state.loan||0); }
+function totalAssetsKRW(){ return state.cash + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW() + estateValue() + metalValue() + companyValue() - (state.loan||0); }
+// ── 부동산·실물자산·기업 가치 ─────────────────────
+function estatePrice(id){ const d=ESTATES.find(x=>x.id===id); return (state.altPrices && Number.isFinite(state.altPrices[id])) ? state.altPrices[id] : (d?d.price:0); }
+function estateValue(){ return ESTATES.reduce((a,e)=>a + (state.estate&&state.estate[e.id]?state.estate[e.id].qty:0)*estatePrice(e.id),0); }
+function metalPrice(id){ const d=METALS.find(x=>x.id===id); return (state.altPrices && Number.isFinite(state.altPrices[id])) ? state.altPrices[id] : (d?d.price:0); }
+function metalValue(){ return METALS.reduce((a,m)=>a + ((state.metals&&state.metals[m.id]?state.metals[m.id].qty:0)||0)*metalPrice(m.id),0); }
+function companyValue(){ return state.company ? Math.max(0,state.company.valuation||0) : 0; }
+function currentTitle(){ return TITLES[currentGrade()]||TITLES["브론즈"]; }
 function currentGrade(){
   const total=totalAssetsKRW();
-  if(total >= GRADE_FLOORS["플래티넘"]) return "플래티넘";
-  if(total >= GRADE_FLOORS["골드"]) return "골드";
-  if(total >= GRADE_FLOORS["실버"]) return "실버";
+  // 8단계 등급을 높은 순서로 비교해, 자산이 늘었는데 낮은 등급이 보이는 오류를 막습니다.
+  for(let i=GRADES.length-1;i>=0;i--){
+    if(total >= GRADE_FLOORS[GRADES[i]]) return GRADES[i];
+  }
   return "브론즈";
 }
 function nextGradeInfo(){
@@ -501,15 +584,21 @@ function recordTrade(s,side,qty,priceNative,profitKRW){
 }
 function performanceStats(){
   const j=state.journal||[];
-  const sells=j.filter(x=>x.side==="sell");
+  const sells=j.filter(x=>x.side==="sell"), buys=j.filter(x=>x.side==="buy");
   const wins=sells.filter(x=>x.profit>0);
   const realized=sells.reduce((a,x)=>a+(x.profit||0),0);
   const volume=j.reduce((a,x)=>a+(x.valueKRW||0),0);
+  const buyVolume=buys.reduce((a,x)=>a+(x.valueKRW||0),0);
+  const sellVolume=sells.reduce((a,x)=>a+(x.valueKRW||0),0);
   const held=stocks.filter(s=>s.realizedProfit!==0);
+  const roiRows=stockReturnRows();
   return {
-    trades:j.length, sells:sells.length,
+    trades:j.length, buys:buys.length, sells:sells.length,
     winRate:sells.length?wins.length/sells.length:0,
-    realized, volume, fees:state.feesTotal||0,
+    realized, volume, buyVolume, sellVolume, fees:state.feesTotal||0,
+    unrealized:unrealizedPL(),
+    periods:periodReturns(),
+    roiRows, bestRoi:roiRows[0], worstRoi:roiRows[roiRows.length-1],
     best:[...held].sort((a,b)=>b.realizedProfit-a.realizedProfit)[0],
     worst:[...held].sort((a,b)=>a.realizedProfit-b.realizedProfit)[0]
   };
@@ -529,7 +618,9 @@ function saveAutoSettings(){
   const enabled=$("auto-enabled") ? $("auto-enabled").checked : true;
   const pct=+($("auto-pct")?$("auto-pct").value:60)||0;
   const min=+($("auto-min")?$("auto-min").value:0)||0;
-  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),every:60});
+  const goldPct=+($("auto-gold")?$("auto-gold").value:0)||0;
+  const estatePct=+($("auto-estate")?$("auto-estate").value:0)||0;
+  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every:60});
   saveGame(); portfolio(); update();
   notify("system","자동 적립",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)}로 켰습니다.`);
 }
@@ -573,6 +664,28 @@ function autoInvest(force){
       invested+=costNative*(foreign?fx.usd:1);
     });
   }
+  // 자동 배분: 금·은과 부동산 비중(설정한 경우에만 동작, 기본 0%).
+  const goldBudget=Math.max(0,state.cash-min)*((a.goldPct||0)/100);
+  if(goldBudget>=metalPrice("gold")){
+    const price=metalPrice("gold"), qty=Math.floor(goldBudget/price), cost=price*qty;
+    if(qty>0){
+      state.cash-=cost;
+      const h=state.metals.gold||{qty:0,avg:0};
+      h.avg=((h.avg*h.qty)+cost)/(h.qty+qty); h.qty+=qty; state.metals.gold=h;
+      markDex("metals","gold"); invested+=cost;
+    }
+  }
+  const estateBudget=Math.max(0,state.cash-min)*((a.estatePct||0)/100);
+  if(estateBudget>0){
+    const pick=ESTATES.filter(e=>estatePrice(e.id)<=estateBudget).sort((x,y)=>estatePrice(y.id)-estatePrice(x.id))[0];
+    if(pick){
+      const price=estatePrice(pick.id);
+      state.cash-=price;
+      const h=state.estate[pick.id]||{qty:0,avgBuy:0};
+      h.avgBuy=((h.avgBuy*h.qty)+price)/(h.qty+1); h.qty++; state.estate[pick.id]=h;
+      markDex("estates",pick.id); invested+=price;
+    }
+  }
   const remain=state.cash-min;
   if(remain>0){
     const p=bestProductForAuto();
@@ -592,14 +705,297 @@ function autoInvest(force){
   return invested;
 }
 
+// ── 확장 자산: 부동산 · 실물자산 · 기업 ───────────────
+function markDex(kind,id){
+  if(!state.dex||typeof state.dex!=="object") state.dex={stocks:{},products:{},estates:{},metals:{},company:false};
+  if(kind==="company"){ state.dex.company=true; return; }
+  if(!state.dex[kind]||typeof state.dex[kind]!=="object") state.dex[kind]={};
+  state.dex[kind][id]=true;
+}
+function confirmTrade(label,detail){
+  const s=state.settings||{};
+  if(s.confirmTrades===false) return true;
+  return confirm(`[${label}]\n${detail}\n\n진행할까요?`);
+}
+function buyEstate(id){
+  const e=ESTATES.find(x=>x.id===id); if(!e) return;
+  const price=estatePrice(id);
+  if(state.cash<price) return alert("현금이 부족합니다.");
+  if(!confirmTrade("부동산 매수",`${e.name} 1채 · ${won(price)}`)) return;
+  state.cash-=price;
+  const h=state.estate[id]||{qty:0,avgBuy:0};
+  h.avgBuy=((h.avgBuy*h.qty)+price)/(h.qty+1); h.qty++;
+  state.estate[id]=h; markDex("estates",id);
+  bumpDaily("estateBuy"); bumpDaily("altTrades");
+  addLog(`🏢 부동산 매수: ${e.name} 1채 (${won(price)})`);
+  notify("system","부동산 매수",`${e.name} 1채 · ${won(price)}`);
+  saveGame(); portfolio(); update();
+}
+function sellEstate(id){
+  const e=ESTATES.find(x=>x.id===id); const h=state.estate[id];
+  if(!e||!h||h.qty<=0) return alert("보유한 부동산이 없습니다.");
+  const price=estatePrice(id), net=Math.round(price*(1-0.03));
+  if(!confirmTrade("부동산 매도",`${e.name} 1채 · ${won(net)} (거래비용 3%)`)) return;
+  state.altRealized=(state.altRealized||0)+(net-(h.avgBuy||0));
+  state.cash+=net; h.qty--; if(h.qty<=0) delete state.estate[id];
+  bumpDaily("altTrades");
+  addLog(`🏢 부동산 매도: ${e.name} 1채 (${won(net)})`);
+  saveGame(); portfolio(); update();
+}
+function buyMetal(id){
+  const m=METALS.find(x=>x.id===id); if(!m) return;
+  const qty=Math.max(1,Math.floor(+($("metal-qty-"+id)?$("metal-qty-"+id).value:1)||1));
+  const price=metalPrice(id), cost=Math.round(price*qty);
+  if(state.cash<cost) return alert("현금이 부족합니다.");
+  if(!confirmTrade("실물자산 매수",`${m.name} ${qty}${m.unit} · ${won(cost)}`)) return;
+  state.cash-=cost;
+  const h=state.metals[id]||{qty:0,avg:0};
+  h.avg=((h.avg*h.qty)+cost)/(h.qty+qty); h.qty+=qty; state.metals[id]=h;
+  markDex("metals",id); bumpDaily("altTrades");
+  addLog(`🪙 ${m.name} ${qty}${m.unit} 매수 (${won(cost)})`);
+  saveGame(); portfolio(); update();
+}
+function sellMetal(id){
+  const m=METALS.find(x=>x.id===id); const h=state.metals[id];
+  if(!m||!h||h.qty<=0) return alert("보유한 실물자산이 없습니다.");
+  const qty=Math.min(h.qty,Math.max(1,Math.floor(+($("metal-qty-"+id)?$("metal-qty-"+id).value:1)||1)));
+  const price=metalPrice(id), net=Math.round(price*qty*(1-0.01));
+  if(!confirmTrade("실물자산 매도",`${m.name} ${qty}${m.unit} · ${won(net)}`)) return;
+  state.altRealized=(state.altRealized||0)+(net-price*qty);
+  state.cash+=net; h.qty-=qty; if(h.qty<=0) delete state.metals[id];
+  bumpDaily("altTrades");
+  addLog(`🪙 ${m.name} ${qty}${m.unit} 매도 (${won(net)})`);
+  saveGame(); portfolio(); update();
+}
+function foundCompany(){
+  if(state.company) return alert("이미 기업을 운영 중입니다.");
+  const def=COMPANY_LEVELS[0];
+  if(state.cash<def.cost) return alert(`기업 설립에는 ${won(def.cost)}이 필요합니다.`);
+  const name=($("company-name")?$("company-name").value.trim():"")||"나의 기업";
+  if(!confirmTrade("기업 설립",`${name} · ${won(def.cost)}`)) return;
+  state.cash-=def.cost;
+  state.company={name,level:1,valuation:def.val,revenue:def.revenue,profit:def.profit,payout:.3};
+  markDex("company",true);
+  addLog(`🏭 기업 설립: ${name} (${won(def.cost)})`);
+  notify("system","기업 설립",`${name} 설립 완료`);
+  saveGame(); portfolio(); update();
+}
+function expandCompany(){
+  const c=state.company; if(!c) return alert("먼저 기업을 설립해 주세요.");
+  const def=COMPANY_LEVELS[c.level]; if(!def) return alert("최대 레벨입니다.");
+  if(state.cash<def.cost) return alert(`확장 비용 ${won(def.cost)}이 부족합니다.`);
+  if(!confirmTrade("사업 확장",`Lv.${c.level+1} · ${won(def.cost)}`)) return;
+  state.cash-=def.cost; c.level++; c.valuation+=def.val; c.revenue+=def.revenue; c.profit+=def.profit;
+  addLog(`🏭 사업 확장: Lv.${c.level} (${won(def.cost)})`);
+  saveGame(); portfolio(); update();
+}
+function acquireRival(id){
+  const c=state.company; if(!c) return alert("먼저 기업을 설립해 주세요.");
+  const r=RIVALS.find(x=>x.id===id); if(!r||c.acquired&&c.acquired[id]) return;
+  if(state.cash<r.cost) return alert(`인수 비용 ${won(r.cost)}이 부족합니다.`);
+  if(!confirmTrade("기업 인수",`${r.name} · ${won(r.cost)}`)) return;
+  state.cash-=r.cost; c.valuation+=r.boost; c.revenue+=Math.round(r.boost*.02); c.profit+=Math.round(r.boost*.006);
+  c.acquired=Object.assign({},c.acquired,{[id]:true});
+  addLog(`🤝 기업 인수: ${r.name} (+${won(r.boost)})`);
+  notify("system","인수합병",`${r.name} 인수 완료`);
+  saveGame(); portfolio(); update();
+}
+function setCompanyPayout(v){ if(!state.company) return; state.company.payout=Math.max(0,Math.min(1,(+v||0)/100)); saveGame(); portfolio(); }
+function tickAlt(){
+  if(!state.altPrices||typeof state.altPrices!=="object") state.altPrices={};
+  ESTATES.forEach(e=>{
+    const p=estatePrice(e.id);
+    const shock=Math.random()<.03?(Math.random()-.5)*.12:0;
+    state.altPrices[e.id]=Math.max(Math.round(e.price*.35),Math.round(p*(1+(Math.random()-.5)*e.vol+shock)));
+  });
+  METALS.forEach(m=>{
+    const p=metalPrice(m.id);
+    state.altPrices[m.id]=Math.max(Math.round(m.price*.35*100)/100,Math.round(p*(1+(Math.random()-.5)*m.vol)*100)/100);
+  });
+  if(state.marketSeconds%60===0){
+    let rent=0,upkeep=0;
+    ESTATES.forEach(e=>{ const q=(state.estate[e.id]&&state.estate[e.id].qty)||0; if(!q) return; rent+=q*estatePrice(e.id)*e.rent; upkeep+=q*estatePrice(e.id)*e.upkeep; });
+    if(rent||upkeep){ state.cash+=rent-upkeep; addLog(`🏢 임대 수익 ${won(rent)} · 유지비 ${won(upkeep)}`); }
+  }
+  const c=state.company;
+  if(c){
+    c.revenue=Math.max(0,Math.round(c.revenue*(0.99+Math.random()*.02)));
+    c.valuation=Math.max(10000000,Math.round(c.valuation*(0.997+Math.random()*.008)));
+    if(state.marketSeconds%30===0){ const pay=Math.round(c.profit*(c.payout==null?.3:c.payout)); state.cash+=pay; if(pay>0) addLog(`🏭 기업 배당 +${won(pay)}`); }
+  }
+  const eco=state.economy||(state.economy={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0});
+  eco.cycleLeft=(eco.cycleLeft||0)-1;
+  if(eco.cycleLeft<=0){
+    const phases=["호황","중립","불황"];
+    eco.phase=phases[Math.floor(Math.random()*3)];
+    eco.cycleLeft=60+Math.floor(Math.random()*60);
+    eco.rateAdj=eco.phase==="호황"?.004:eco.phase==="불황"?-.004:0;
+    const dir=Math.random()<.5?-1:1;
+    eco.baseRate=Math.max(.01,Math.min(.08,(eco.baseRate||.03)+dir*.0025));
+    publishBreakingNews("🏦 기준금리", `기준금리 ${(eco.baseRate*100).toFixed(2)}% · 경기 ${eco.phase} 국면이 시작되었습니다.`);
+    notify("system","경제 지표",`경기 ${eco.phase} · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+  }
+  if(state.marketSeconds%180===0 && Math.random()<.5){
+    const sector=["AI","반도체","배터리","우주","디지털 자산"][Math.floor(Math.random()*5)];
+    const up=Math.random()<.5;
+    stocks.filter(s=>s.theme.includes(sector)).forEach(s=>applyShock(s,(up?1:-1)*(.01+Math.random()*.03)));
+    publishBreakingNews("📈 산업 뉴스", `${sector} 업종에 ${up?"매수세":"차익 실현"}가 몰리고 있습니다.`);
+  }
+  const gi=gradeIndex(currentGrade());
+  if(gi>(state.rewardedGrade||0)){
+    let reward=0;
+    for(let i=(state.rewardedGrade||0)+1;i<=gi;i++) reward+=i*500000;
+    state.rewardedGrade=gi; state.cash+=reward;
+    addLog(`🏅 승급 보상: ${GRADES[gi]} (+${won(reward)})`);
+    notify("grade","승급 보상",`${GRADES[gi]} · ${won(reward)}`);
+  }
+  checkSpecial();
+}
+function setTargetGoal(v){
+  const n=Math.max(1000000,Math.round(+v||1000000000));
+  state.targetGoal=n; saveGame(); portfolio();
+}
+function periodReturns(){
+  // 게임 시간 기준: 하루=60초, 일주=420초, 한 달=1800초로 압축해 계산합니다.
+  const cur=totalAssetsKRW(), now=state.marketSeconds;
+  const at=sec=>{ const p=[...assetHistory.points].reverse().find(x=>x.t<=now-sec); return p?p.v:null; };
+  const calc=sec=>{ const v=at(sec); return v&&v>0?(cur-v)/v:null; };
+  return {m1:calc(60),m5:calc(420),m15:calc(1800)};
+}
+function unrealizedPL(){
+  return stocks.reduce((a,s)=>a+(s.own>0?(s.price-s.avgBuy)*s.own*(isForeignStock(s)?fx.usd:1):0),0);
+}
+function stockReturnRows(){
+  return stocks.filter(s=>s.own>0).map(s=>({name:s.name,roi:s.avgBuy>0?(s.price-s.avgBuy)/s.avgBuy:0,value:s.price*s.own*(isForeignStock(s)?fx.usd:1)})).sort((a,b)=>b.roi-a.roi);
+}
+function altReturnRows(){
+  const rows=[];
+  ESTATES.forEach(e=>{ const h=state.estate[e.id]; if(!h||h.qty<=0||!h.avgBuy) return; const p=estatePrice(e.id); rows.push({name:e.name,roi:(p-h.avgBuy)/h.avgBuy,value:p*h.qty}); });
+  METALS.forEach(m=>{ const h=state.metals[m.id]; if(!h||h.qty<=0||!h.avg) return; const p=metalPrice(m.id); rows.push({name:m.name,roi:(p-h.avg)/h.avg,value:p*h.qty}); });
+  return rows.sort((a,b)=>b.roi-a.roi);
+}
+function journalFiltered(){
+  const f=state.journalFilter||{q:"",side:"all"};
+  const q=(f.q||"").trim().toLowerCase();
+  return (state.journal||[]).filter(x=>(f.side==="all"||x.side===f.side)&&(!q||String(x.name).toLowerCase().includes(q)));
+}
+function setJournalFilter(k,v){ state.journalFilter=Object.assign({q:"",side:"all"},state.journalFilter,{[k]:v}); portfolio(); }
+function setSetting(k,v){
+  state.settings=Object.assign({theme:"light",confirmTrades:true,animations:true},state.settings,{[k]:v});
+  saveGame(); applyTheme(); portfolio();
+}
+function bootDone(){ const b=document.getElementById("boot"); if(b&&b.parentNode&&typeof b.parentNode.removeChild==="function") b.parentNode.removeChild(b); }
+function applyTheme(){
+  const dark=(state.settings&&state.settings.theme)==="dark";
+  if(typeof document!=="undefined"&&document.body) document.body.classList.toggle("dark",dark);
+  if(typeof document!=="undefined"&&document.body) document.body.classList.toggle("no-anim",state.settings&&state.settings.animations===false);
+}
+function openSettings(){ openModal("게임 설정",`
+  <div class="journal" style="margin-bottom:10px"><div><b>다크 테마</b><span></span></div><button class="ghost" onclick="setSetting('theme',state.settings.theme==='dark'?'light':'dark');closeModal();openSettings()">${state.settings.theme==="dark"?"라이트로":"다크로"}</button></div>
+  <div class="journal" style="margin-bottom:10px"><div><b>거래 확인 창</b><span></span></div><button class="ghost" onclick="setSetting('confirmTrades',!state.settings.confirmTrades);closeModal();openSettings()">${state.settings.confirmTrades?"켜짐":"꺼짐"}</button></div>
+  <div class="journal" style="margin-bottom:10px"><div><b>화면 애니메이션</b><span></span></div><button class="ghost" onclick="setSetting('animations',!state.settings.animations);closeModal();openSettings()">${state.settings.animations?"켜짐":"꺼짐"}</button></div>
+  <p style="font-size:12px;">설정은 저장 파일에 함께 보관됩니다. 거래 확인을 끄면 즉시 체결됩니다.</p>
+`); }
+function openAssetDetail(kind,id){
+  let html="";
+  if(kind==="estate"){
+    const e=ESTATES.find(x=>x.id===id), h=state.estate[id]||{qty:0,avgBuy:0}, p=estatePrice(id);
+    html=`<div class="kpis"><div class="kpi"><small>현재가</small><b>${won(p)}</b></div><div class="kpi"><small>보유</small><b>${h.qty||0}채</b></div><div class="kpi"><small>평단</small><b>${h.avgBuy?won(h.avgBuy):"-"}</b></div><div class="kpi"><small>월세(60초)</small><b>${won((h.qty||0)*p*e.rent)}</b></div><div class="kpi"><small>유지비(60초)</small><b>${won((h.qty||0)*p*e.upkeep)}</b></div><div class="kpi"><small>설명</small><b style="font-size:13px">${e.desc}</b></div></div>`;
+  } else if(kind==="metal"){
+    const m=METALS.find(x=>x.id===id), h=state.metals[id]||{qty:0,avg:0}, p=metalPrice(id);
+    html=`<div class="kpis"><div class="kpi"><small>현재가</small><b>${won(p)}/${m.unit}</b></div><div class="kpi"><small>보유</small><b>${h.qty||0}${m.unit}</b></div><div class="kpi"><small>평단</small><b>${h.avg?won(h.avg):"-"}</b></div><div class="kpi"><small>평가액</small><b>${won((h.qty||0)*p)}</b></div></div>`;
+  } else if(kind==="stock"){
+    const s=stock(id); if(!s) return;
+    html=`<div class="kpis"><div class="kpi"><small>현재가</small><b>${isForeignStock(s)?usdStr(s.price):won(s.price)}</b></div><div class="kpi"><small>보유</small><b>${s.own}주</b></div><div class="kpi"><small>평단(수수료 포함)</small><b>${isForeignStock(s)?usdStr(s.avgBuy):won(s.avgBuy)}</b></div><div class="kpi"><small>평가손익</small><b class="${s.price>=s.avgBuy?"up":"down"}">${won((s.price-s.avgBuy)*s.own*(isForeignStock(s)?fx.usd:1))}</b></div><div class="kpi"><small>실현손익</small><b>${won(s.realizedProfit)}</b></div><div class="kpi"><small>테마</small><b style="font-size:13px">${s.theme}</b></div></div>`;
+  } else if(kind==="company"){
+    const c=state.company; if(!c) return;
+    html=`<div class="kpis"><div class="kpi"><small>기업명</small><b>${c.name}</b></div><div class="kpi"><small>레벨</small><b>Lv.${c.level}</b></div><div class="kpi"><small>기업 가치</small><b>${won(c.valuation)}</b></div><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div></div>`;
+  }
+  openModal("자산 상세",html||"<p>정보가 없습니다.</p>");
+}
+function openGlobalRanking(){
+  if(!cloudConfigured()){ openModal("글로벌 랭킹",`<p style="font-size:13px">글로벌 랭킹은 클라우드 서버가 연결되면 켜집니다. <code>meta[name=cloud-api]</code>에 Worker 주소를 넣어 주세요.</p>`); return; }
+  openModal("글로벌 랭킹",`<div id="rank-modal-body"><p>불러오는 중…</p></div>`);
+  cloudCall(`/api/leaderboard?season=${encodeURIComponent(seasonKey())}&limit=20`,{auth:!!cloudCreds()}).then(d=>{
+    const rows=((d&&d.entries)||[]).map(e=>`<div class="rank-row"><b>${e.rank}</b><span>${escHtml(e.nickname)}</span><span>${won(e.score)}</span></div>`).join("");
+    const body=$("rank-modal-body"); if(body) body.innerHTML=(d&&d.me?`<p style="font-size:13px">내 순위 <b>${d.me.rank}위</b> · ${won(d.me.score)}</p>`:"")+(rows||"<p>등록된 순위가 없습니다.</p>");
+  }).catch(e=>{ const body=$("rank-modal-body"); if(body) body.innerHTML=`<p>${escHtml(cloudErr(e))}</p>`; });
+}
+function openRetire(){
+  const total=totalAssetsKRW(), goal=1000000000, monthly=Math.round(total*0.004);
+  openModal("은퇴 설계",`<div class="kpis"><div class="kpi"><small>현재 순자산</small><b>${won(total)}</b></div><div class="kpi"><small>은퇴 기준</small><b>${won(goal)}</b></div><div class="kpi"><small>예상 월 연금</small><b>${won(monthly)}</b></div></div>
+  <p style="margin-top:10px;font-size:12px;">은퇴하면 명예의 전당에 기록하고 새 시즌을 시작합니다. 보유 자산은 초기화됩니다.</p>
+  <button class="sell" style="margin-top:10px;width:100%" onclick="retire()" ${total<goal?"disabled":""}>은퇴하고 새 시즌 시작</button>`);
+}
+function retire(){
+  if(totalAssetsKRW()<1000000000) return alert("은퇴하려면 순자산 10억원이 필요합니다.");
+  if(!confirm("은퇴하고 새 시즌을 시작할까요? 현재 자산은 초기화됩니다.")) return;
+  const hof=JSON.parse(localStorage.getItem(HOF_KEY)||"[]");
+  hof.unshift({at:new Date().toISOString(),total:Math.round(totalAssetsKRW()),grade:currentGrade(),retired:true});
+  localStorage.setItem(HOF_KEY,JSON.stringify(hof.slice(0,10)));
+  clearGame(true);
+  openModal("은퇴 완료",`<p>새 시즌을 시작했습니다. 명예의 전당에 기록되었습니다.</p>`);
+}
+
 // ── 일일 미션 · 업적 ───────────────────────────────
 const DAILY_POOL=[
   {id:"trades",label:"주식 5회 거래",target:5,reward:300000},
   {id:"dividends",label:"배당 2회 수령",target:2,reward:200000},
   {id:"orders",label:"지정가 주문 1회 체결",target:1,reward:250000},
   {id:"goals",label:"목표 1개 달성",target:1,reward:500000},
-  {id:"deposit",label:"금융상품 1회 가입",target:1,reward:150000}
+  {id:"deposit",label:"금융상품 1회 가입",target:1,reward:150000},
+  {id:"estateBuy",label:"부동산 1회 매수",target:1,reward:400000},
+  {id:"altTrades",label:"실물자산 1회 거래",target:1,reward:200000}
 ];
+const WEEKLY_POOL=[
+  {id:"trades",label:"주식 20회 거래",target:20,reward:1200000},
+  {id:"deposit",label:"금융상품 3회 가입",target:3,reward:900000},
+  {id:"goals",label:"목표 2개 달성",target:2,reward:1500000},
+  {id:"altTrades",label:"부동산·실물 3회 거래",target:3,reward:1000000}
+];
+const SPECIAL_MISSIONS=[
+  {id:"sp_estate",label:"부동산 첫 구매",target:1,reward:2000000,value:()=>Object.values(state.estate||{}).reduce((a,h)=>a+(h.qty||0),0)},
+  {id:"sp_company",label:"기업 설립",target:1,reward:3000000,value:()=>state.company?1:0},
+  {id:"sp_gold",label:"금 100g 보유",target:100,reward:1500000,value:()=>((state.metals&&state.metals.gold)?state.metals.gold.qty||0:0)},
+  {id:"sp_billion",label:"순자산 10억 달성",target:1,reward:5000000,value:()=>totalAssetsKRW()>=1000000000?1:0}
+];
+function isoWeekKey(){
+  const d=new Date();
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=t.getUTCDay()||7;
+  t.setUTCDate(t.getUTCDate()+4-day);
+  const y=t.getUTCFullYear();
+  const w=Math.ceil(((t-new Date(Date.UTC(y,0,1)))/86400000+1)/7);
+  return `${y}-W${String(w).padStart(2,"0")}`;
+}
+function weeklyMissions(){ ensureWeekly(); return WEEKLY_POOL; }
+function ensureWeekly(){
+  const k=isoWeekKey();
+  if(!state.weekly||state.weekly.key!==k||!state.weekly.counts||!state.weekly.claimed){
+    state.weekly={key:k,counts:{},claimed:{}};
+  }
+}
+function claimWeekly(id){
+  ensureWeekly();
+  const m=WEEKLY_POOL.find(x=>x.id===id); if(!m) return;
+  const w=state.weekly; if(w.claimed[id]) return;
+  if((w.counts[id]||0)<m.target) return alert("아직 주간 조건을 채우지 못했습니다.");
+  w.claimed[id]=true; state.cash+=m.reward;
+  addLog(`주간 미션 완료: ${m.label} (+${won(m.reward)})`);
+  notify("goal","주간 미션",`${m.label} · ${won(m.reward)}`);
+  saveGame(); portfolio(); update();
+}
+function checkSpecial(){
+  SPECIAL_MISSIONS.forEach(m=>{
+    if((state.special||{})[m.id]) return;
+    let v=0; try{ v=m.value(); }catch(e){ v=0; }
+    if(v<m.target) return;
+    state.special=Object.assign({},state.special,{[m.id]:true});
+    state.cash+=m.reward;
+    addLog(`특별 미션 달성: ${m.label} (+${won(m.reward)})`);
+    notify("goal","특별 미션",`${m.label} · ${won(m.reward)}`);
+  });
+}
 function todayKey(){ const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
 function dailyMissions(){
   const seed=[...todayKey()].reduce((a,c)=>a+c.charCodeAt(0),0);
@@ -610,12 +1006,30 @@ function dailyMissions(){
 function ensureDaily(){
   const key=todayKey();
   if(!state.daily || state.daily.date!==key || !state.daily.counts || !state.daily.claimed){
-    state.daily={date:key,counts:{trades:0,dividends:0,orders:0,goals:0,deposit:0},claimed:{}};
+    state.daily={date:key,counts:{trades:0,dividends:0,orders:0,goals:0,deposit:0,estateBuy:0,altTrades:0},claimed:{}};
+  }
+  ensureWeekly();
+  // 연속 접속: 날짜가 바뀐 첫 호출에서만 계산합니다.
+  if(!state.streak||typeof state.streak!=="object") state.streak={days:1,last:"",best:1};
+  if(state.streak.last!==key){
+    const y=new Date(Date.now()-86400000);
+    const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
+    state.streak.days=state.streak.last===yk?Math.min(365,(state.streak.days||1)+1):1;
+    state.streak.last=key;
+    state.streak.best=Math.max(state.streak.best||1,state.streak.days);
+    if(state.streak.days>1 && state.streak.days%3===0){
+      const reward=state.streak.days%7===0?1000000:300000;
+      state.cash+=reward;
+      addLog(`🔥 연속 접속 ${state.streak.days}일 보상 +${won(reward)}`);
+      notify("goal","연속 접속",`${state.streak.days}일 연속 · ${won(reward)}`);
+    }
   }
 }
 function bumpDaily(k,n=1){
   ensureDaily();
   state.daily.counts[k]=(state.daily.counts[k]||0)+n;
+  ensureWeekly();
+  state.weekly.counts[k]=(state.weekly.counts[k]||0)+n;
 }
 function claimDaily(id){
   ensureDaily();
@@ -637,7 +1051,12 @@ const ACHIEVEMENTS=[
   {id:"silver",label:"실버 등급",reward:200000,done:()=>gradeIndex(currentGrade())>=1},
   {id:"gold",label:"골드 등급",reward:500000,done:()=>gradeIndex(currentGrade())>=2},
   {id:"platinum",label:"플래티넘 등급",reward:1000000,done:()=>gradeIndex(currentGrade())>=3},
-  {id:"billion",label:"순자산 10억",reward:2000000,done:()=>totalAssetsKRW()>=1000000000}
+  {id:"billion",label:"순자산 10억",reward:2000000,done:()=>totalAssetsKRW()>=1000000000},
+  {id:"first_estate",label:"첫 부동산 구매",reward:1000000,done:()=>Object.values(state.estate||{}).some(h=>h.qty>0)},
+  {id:"first_company",label:"첫 기업 설립",reward:1500000,done:()=>!!state.company},
+  {id:"gold_holder",label:"금 보유",reward:500000,done:()=>((state.metals&&state.metals.gold)?state.metals.gold.qty:0)>0},
+  {id:"diamond",label:"다이아몬드 등급",reward:3000000,done:()=>gradeIndex(currentGrade())>=4},
+  {id:"legend",label:"레전드 등급",reward:10000000,done:()=>gradeIndex(currentGrade())>=7}
 ];
 function checkAchievements(){
   ACHIEVEMENTS.forEach(a=>{
@@ -706,7 +1125,13 @@ function applyOfflineProgress(){
   const divPeriods=Math.min(30, Math.floor(sec/DIVIDEND_EVERY));
   const dividends=expectedDividend()*divPeriods;
   if(dividends>0){ state.cash+=dividends; state.dividendTotal=(state.dividendTotal||0)+dividends; }
-  const summary={sec,interest,dividends,loanInterest,parking};
+  // 부동산 임대료·유지비와 기업 배당도 오프라인 동안 정산합니다(가격 변동은 제외).
+  const rentPeriods=Math.floor(sec/60);
+  let rent=0,upkeep=0;
+  ESTATES.forEach(e=>{ const q=(state.estate[e.id]&&state.estate[e.id].qty)||0; if(!q) return; rent+=q*estatePrice(e.id)*e.rent*rentPeriods; upkeep+=q*estatePrice(e.id)*e.upkeep*rentPeriods; });
+  const companyPay=state.company?Math.round(state.company.profit*((state.company.payout==null?.3:state.company.payout))*sec/30):0;
+  state.cash+=rent-upkeep+companyPay;
+  const summary={sec,interest,dividends,loanInterest,parking,rent,upkeep,companyPay};
   addLog(`오프라인 정산: ${Math.floor(sec/60)}분 · 이자 ${won(interest)} · 배당 ${won(dividends)}`);
   notify("system","오프라인 정산",`${Math.floor(sec/60)}분 동안 이자 ${won(interest)} · 배당 ${won(dividends)}`);
   openModal("오프라인 정산",`<div class="kpis">
@@ -714,7 +1139,10 @@ function applyOfflineProgress(){
     <div class="kpi"><small>금융상품 이자</small><b>${won(interest)}</b></div>
     <div class="kpi"><small>배당(최대 1시간)</small><b>${won(dividends)}</b></div>
     <div class="kpi"><small>대출 이자</small><b>${won(loanInterest)}</b></div>
-  </div><p style="margin-top:10px;font-size:12px;color:#667085">주가 변동은 반영하지 않고 이자·배당만 정산합니다(최대 2시간).</p>`);
+    <div class="kpi"><small>임대 수익</small><b>${won(rent||0)}</b></div>
+    <div class="kpi"><small>유지비</small><b>${won(upkeep||0)}</b></div>
+    <div class="kpi"><small>기업 배당</small><b>${won(companyPay||0)}</b></div>
+  </div><p style="margin-top:10px;font-size:12px;color:#667085">주가·부동산 가격 변동은 반영하지 않고 이자·배당·임대료만 정산합니다(최대 2시간).</p>`);
   saveGame();
   return summary;
 }
@@ -790,7 +1218,10 @@ function allocation(){
     {label:"현금",value:Math.max(0,state.cash),color:"#0f766e"},
     {label:"달러",value:Math.max(0,(state.usd||0)*fx.usd),color:"#0369a1"},
     {label:"주식",value:Math.max(0,stockValueKRW()),color:"#b45309"},
-    {label:"금융상품",value:Math.max(0,productValueKRW()),color:"#6d28d9"}
+    {label:"금융상품",value:Math.max(0,productValueKRW()),color:"#6d28d9"},
+    {label:"부동산",value:Math.max(0,estateValue()),color:"#be123c"},
+    {label:"금·은",value:Math.max(0,metalValue()),color:"#a16207"},
+    {label:"기업",value:Math.max(0,companyValue()),color:"#0f766e"}
   ];
   const gross=parts.reduce((a,p)=>a+p.value,0);
   parts.forEach(p=>{ p.pct=gross>0?(p.value/gross)*100:0; });
@@ -1246,7 +1677,7 @@ function init(){
   banking();fxPage();news();portfolio();
   update();
   recordAssetHistory();
-  ensureDaily(); checkAchievements(); updateSpeedUI(); updateBell(); cloudBoot();
+  ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); cloudBoot();
 
   // 1초 드라이버: 배속(1x/3x/10x)·일시정지를 한곳에서 처리합니다.
   setInterval(gameLoop,1000);
@@ -1254,7 +1685,9 @@ function init(){
   if(typeof window!=="undefined" && window.addEventListener){
     window.addEventListener("beforeunload",()=>{ try{ saveGame(); }catch(e){} });
     window.addEventListener("storage",e=>{ if(e.key===SAVE_KEY && e.newValue) handleExternalSave(); });
+    window.addEventListener("error",e=>{ try{ notify("system","오류가 발생했습니다",String((e&&e.message)||"알 수 없는 오류")); }catch(_){} });
   }
+  setTimeout(bootDone,350);
   if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
     navigator.serviceWorker.register("sw.js").catch(()=>{});
   }
@@ -1266,6 +1699,7 @@ function gameLoop(){
   const n=Math.max(1,Math.min(10,state.speed||1));
   for(let i=0;i<n;i++){
     tickSeconds();
+    if(state.marketSeconds%15===0) tickAlt();
     if(state.marketSeconds%5===0){ tickMarket(); updateFX(); }
     if(state.marketSeconds%7===0) marketEventsAndNews();
     if(state.marketSeconds%15===0) interest();
@@ -1287,7 +1721,7 @@ function buildSaveData() {
     state: state,
     fx: fx,
     stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove})),
-    products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate}))
+    products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate, bank:p.bank||null, startedAt:Number.isFinite(p.startedAt)?p.startedAt:null, matured:!!p.matured}))
   };
 }
 
@@ -1343,6 +1777,9 @@ function applySaveData(data) {
       // 현재 등급이 해당 상품을 열 수 없으면 그 상품의 해금 등급 이율로 확정해 이자가 0이 되지 않도록 함
       p.rate = (Number.isFinite(lp.rate) && lp.rate > 0) ? lp.rate
         : (p.amount > 0 ? (gradeRateFor(p.id, currentGrade()) || gradeRateFor(p.id, PRODUCT_UNLOCK[p.id])) : 0);
+      p.bank=lp.bank||null;
+      p.startedAt=Number.isFinite(lp.startedAt)?lp.startedAt:null;
+      p.matured=!!lp.matured;
     });
   }
   // 새 기능 필드 기본값 보정(구버전 세이브 대응)
@@ -1360,8 +1797,12 @@ function applySaveData(data) {
   ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
   const NOTIFY_DEFAULT={order:true,dividend:true,goal:true,grade:true,tax:true,sound:false,haptic:false};
   state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
-  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60};
+  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0};
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
+  state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
+  state.auto.estatePct=Math.max(0,Math.min(100,+state.auto.estatePct||0));
+  if(!Number.isFinite(+state.rewardedGrade)) state.rewardedGrade=gradeIndex(currentGrade());
+  if(!Number.isFinite(+state.targetGoal)||+state.targetGoal<=0) state.targetGoal=1000000000;
   if(!state.daily || typeof state.daily!=="object") state.daily={date:"",counts:{},claimed:{}};
   if(!Number.isFinite(state.speed) || state.speed<1) state.speed=1;
   if(typeof state.paused!=="boolean") state.paused=false;
@@ -1370,6 +1811,36 @@ function applySaveData(data) {
   const CLOUD_DEFAULT={nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""};
   state.cloud=Object.assign({},CLOUD_DEFAULT,(state.cloud&&typeof state.cloud==="object")?state.cloud:{});
   delete state.cloud.token; // 기기 토큰은 localStorage에만 둠(내보내기 파일에 포함 금지)
+  // 확장 자산 기본값/정규화(구버전 세이브 호환)
+  if(!state.estate||typeof state.estate!=="object") state.estate={};
+  ESTATES.forEach(e=>{ const h=state.estate[e.id]; if(!h||typeof h!=="object") { delete state.estate[e.id]; return; } h.qty=Math.max(0,Math.floor(+h.qty||0)); h.avgBuy=Math.max(0,+h.avgBuy||0); if(!h.qty) delete state.estate[e.id]; });
+  if(!state.metals||typeof state.metals!=="object") state.metals={};
+  METALS.forEach(m=>{ const h=state.metals[m.id]; if(!h||typeof h!=="object"){ state.metals[m.id]={qty:0,avg:0}; return; } h.qty=Math.max(0,+h.qty||0); h.avg=Math.max(0,+h.avg||0); });
+  if(!state.altPrices||typeof state.altPrices!=="object") state.altPrices={};
+  ESTATES.forEach(e=>{ if(!Number.isFinite(state.altPrices[e.id])||state.altPrices[e.id]<=0) state.altPrices[e.id]=e.price; });
+  METALS.forEach(m=>{ if(!Number.isFinite(state.altPrices[m.id])||state.altPrices[m.id]<=0) state.altPrices[m.id]=m.price; });
+  if(state.company && typeof state.company==="object"){
+    const c=state.company;
+    c.level=Math.max(1,Math.min(COMPANY_LEVELS.length,Math.floor(+c.level||1)));
+    c.valuation=Math.max(0,+c.valuation||COMPANY_LEVELS[0].val);
+    c.revenue=Math.max(0,+c.revenue||0); c.profit=Math.max(0,+c.profit||0);
+    c.payout=Math.max(0,Math.min(1,Number.isFinite(+c.payout)?+c.payout:.3));
+    if(typeof c.name!=="string") c.name="나의 기업";
+  } else state.company=null;
+  const ECON={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0};
+  state.economy=Object.assign({},ECON,(state.economy&&typeof state.economy==="object")?state.economy:{});
+  if(!["호황","중립","불황"].includes(state.economy.phase)) state.economy.phase="중립";
+  if(!state.weekly||typeof state.weekly!=="object"||!state.weekly.counts) state.weekly={key:"",counts:{},claimed:{}};
+  if(!state.special||typeof state.special!=="object") state.special={};
+  if(!state.streak||typeof state.streak!=="object") state.streak={days:1,last:"",best:1};
+  if(!state.dex||typeof state.dex!=="object") state.dex={stocks:{},products:{},estates:{},metals:{},company:false};
+  ["stocks","products","estates","metals"].forEach(k=>{ if(!state.dex[k]||typeof state.dex[k]!=="object") state.dex[k]={}; });
+  state.dex.company=!!state.dex.company;
+  const SETTINGS={theme:"light",confirmTrades:true,animations:true};
+  state.settings=Object.assign({},SETTINGS,(state.settings&&typeof state.settings==="object")?state.settings:{});
+  if(!state.journalFilter||typeof state.journalFilter!=="object") state.journalFilter={q:"",side:"all"};
+  state.peakNet=Math.max(Number.isFinite(+state.peakNet)?+state.peakNet:0,totalAssetsKRW());
+  if(!Number.isFinite(+state.altRealized)) state.altRealized=0;
   state.lastGrade=currentGrade();
 }
 
@@ -1403,6 +1874,10 @@ function clearGame(skipConfirm) {
   state.paused = false;
   state.speed = 1;
   state.auto = Object.assign({},state.auto,{enabled:false});
+  state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null;
+  state.weekly={key:"",counts:{},claimed:{}}; state.special={}; state.streak={days:1,last:"",best:1};
+  state.dex={stocks:{},products:{},estates:{},metals:{},company:false}; state.peakNet=START_CASH; state.altRealized=0;
+  state.journalFilter={q:"",side:"all"}; state.rewardedGrade=0; state.targetGoal=1000000000;
   state.seasonBase = START_CASH;
   fx.usd = START_FX;
   fx.anchor = START_FX;
@@ -1414,7 +1889,7 @@ function clearGame(skipConfirm) {
     s.realizedProfit = 0;
     s.hist = [s.start];
   });
-  products.forEach(p => { p.amount = 0; p.rate = 0; });
+  products.forEach(p => { p.amount = 0; p.rate = 0; p.bank=null; p.startedAt=null; p.matured=false; });
   state.seasonBaseIndex = marketIndex();
   state.lastGrade = currentGrade();
   assetHistory.points=[];
@@ -1490,7 +1965,9 @@ function banking(){
 
 // 상품 카드의 부제(현재 등급 이율 또는 잠금 안내)
 function productSubText(p, unlocked, held){
-  return `${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}${held?" · 보유 중(이자는 확정 이율로 유지)":""}`}`;
+  const term=p.term>0?` · 만기 ${p.term}초 · 보너스 ${(p.bonus*100).toFixed(1)}%`:" · 수시 입출금";
+  const bank=BANKS.find(b=>b.id===p.bank);
+  return `${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}${held?" · 보유 중(이자는 확정 이율로 유지)":""}`}${term}${bank?` · ${bank.name}`:""}`;
 }
 
 // 배너와 해금 상태만 갱신합니다. 금융 화면을 다시 그리지 않으므로 입력 중인 금액이 보존됩니다.
@@ -1539,6 +2016,10 @@ function productCard(p){
       <button class="buy" data-join="${p.id}" onclick="join('${p.id}')" ${unlocked?"":"disabled"}>가입</button>
       <button class="sell" onclick="leave('${p.id}')">해지</button>
     </div>
+    <div class="inline-form" style="margin-top:8px">
+      <label>은행<select id="bank-${p.id}" ${unlocked?"":"disabled"}>${BANKS.map(b=>`<option value="${b.id}" ${(p.bank||"hanbit")===b.id?"selected":""}>${b.name} (${b.mult>1?"+":""}${((b.mult-1)*100).toFixed(0)}%)</option>`).join("")}</select></label>
+      <label>만기 상태<input value="${p.amount<=0?"미가입":p.term>0?(p.matured?"만기 완료":`${Math.max(0,p.term-(state.marketSeconds-(p.startedAt||state.marketSeconds)))}초 남음`):"수시"}" readonly></label>
+    </div>
   </article>`;
 }
 
@@ -1549,7 +2030,7 @@ function news(){
 function portfolio(){
   // 5초마다 다시 그려지므로 입력 중인 값을 스냅샷해 두었다가 복원합니다.
   const keep={};
-  ["order-stock","order-side","order-qty","order-limit","loan-amt","auto-pct","auto-min"].forEach(id=>{
+  ["order-stock","order-side","order-qty","order-limit","loan-amt","auto-pct","auto-min","auto-gold","auto-estate","goal-target"].forEach(id=>{
     const el=document.getElementById(id);
     if(el) keep[id]=el.value;
   });
@@ -1611,7 +2092,8 @@ function portfolio(){
   }).join("");
   const achHtml=ACHIEVEMENTS.map(a=>`<div class="${(state.achievements||{})[a.id]?"done":""}"><b>${(state.achievements||{})[a.id]?"✅":"▫️"} ${a.label}</b><br><small>보상 ${won(a.reward)}</small></div>`).join("");
   const perf=performanceStats();
-  const journalHtml=(state.journal||[]).slice(0,8).map(x=>`<div><span>${x.side==="buy"?"매수":"매도"} ${x.name} ${x.qty}주</span><span class="${x.side==="sell"?(x.profit>=0?"up":"down"):""}">${x.side==="sell"?won(x.profit):won(x.valueKRW)}</span></div>`).join("")||"<div><span>아직 거래 기록이 없습니다.</span><span>-</span></div>";
+  const journalHtml=journalFiltered().slice(0,8).map(x=>`<div><span>${x.side==="buy"?"매수":"매도"} ${escHtml(x.name)} ${x.qty}주</span><span class="${x.side==="sell"?(x.profit>=0?"up":"down"):""}">${x.side==="sell"?won(x.profit):won(x.valueKRW)}</span></div>`).join("")||"<div><span>조건에 맞는 거래가 없습니다.</span><span>-</span></div>";
+  const ret=v=>v==null?"-":pct(v);
   const perfHtml=`<div class="kpis">
       <div class="kpi"><small>거래 횟수</small><b>${perf.trades}회</b></div>
       <div class="kpi"><small>매도 승률</small><b>${(perf.winRate*100).toFixed(0)}%</b></div>
@@ -1620,11 +2102,70 @@ function portfolio(){
       <div class="kpi"><small>거래 수수료</small><b>${won(perf.fees)}</b></div>
       <div class="kpi"><small>납부 세금</small><b>${won(state.taxPaid||0)}</b></div>
     </div>
-    <div class="journal" style="margin-top:10px">${journalHtml}</div>`;
+    <div class="kpis" style="margin-top:8px">
+      <div class="kpi"><small>총매수액</small><b>${won(perf.buyVolume)}</b></div>
+      <div class="kpi"><small>총매도액</small><b>${won(perf.sellVolume)}</b></div>
+      <div class="kpi"><small>평가손익</small><b class="${perf.unrealized>=0?"up":"down"}">${won(perf.unrealized)}</b></div>
+      <div class="kpi"><small>일간 수익률</small><b>${ret(perf.periods.m1)}</b></div>
+      <div class="kpi"><small>주간 수익률</small><b>${ret(perf.periods.m5)}</b></div>
+      <div class="kpi"><small>월간 수익률</small><b>${ret(perf.periods.m15)}</b></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+      <input id="journal-q" placeholder="거래 검색" value="${escHtml((state.journalFilter||{}).q||"")}" onchange="setJournalFilter('q',this.value)" style="flex:1;min-width:140px">
+      <button class="ghost" onclick="setJournalFilter('side','all')">전체</button>
+      <button class="ghost" onclick="setJournalFilter('side','buy')">매수</button>
+      <button class="ghost" onclick="setJournalFilter('side','sell')">매도</button>
+    </div>
+    <div class="journal" style="margin-top:10px">${journalHtml}</div>
+    <div style="margin-top:10px">${perf.roiRows.slice(0,5).map(r=>`<div class="row" style="grid-template-columns:1fr 1fr auto"><b>${escHtml(r.name)}</b><span>${won(r.value)}</span><span class="${r.roi>=0?"up":"down"}">${pct(r.roi)}</span></div>`).join("")||'<small>보유 종목이 없습니다.</small>'}</div>
+    ${altReturnRows().length?`<div style="margin-top:8px">${altReturnRows().map(r=>`<div class="row" style="grid-template-columns:1fr 1fr auto"><b>${escHtml(r.name)}</b><span>${won(r.value)}</span><span class="${r.roi>=0?"up":"down"}">${pct(r.roi)}</span></div>`).join("")}</div>`:""}
+    <p style="margin-top:8px;font-size:12px;">가장 수익률 높은 종목: <b class="up">${perf.roiRows[0]?escHtml(perf.roiRows[0].name)+" "+pct(perf.roiRows[0].roi):"-"}</b></p>`;
+  ensureWeekly();
+  const eco=state.economy||{phase:"중립",baseRate:.03,cycleLeft:0};
+  const estateHtml=ESTATES.map(e=>{
+    const h=state.estate[e.id]||{qty:0,avgBuy:0}, price=estatePrice(e.id);
+    const rent=h.qty*price*e.rent, upkeep=h.qty*price*e.upkeep;
+    return `<div class="alt-card">
+      <div class="alt-top"><b>🏢 ${e.name}</b><span class="pill">${h.qty}채</span></div>
+      <small>${e.desc}</small>
+      <div class="alt-grid"><span>현재가 <b>${won(price)}</b></span><span>월세 <b>${won(rent)}</b></span><span>유지비 <b>${won(upkeep)}</b></span><span>평단 <b>${h.avgBuy?won(h.avgBuy):"-"}</b></span></div>
+      <div class="alt-actions"><button class="buy" onclick="buyEstate('${e.id}')">매수</button><button class="ghost" onclick="sellEstate('${e.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('estate','${e.id}')">상세</button></div>
+    </div>`;
+  }).join("");
+  const metalHtml=METALS.map(m=>{
+    const h=state.metals[m.id]||{qty:0,avg:0}, price=metalPrice(m.id);
+    return `<div class="alt-card">
+      <div class="alt-top"><b>🪙 ${m.name}</b><span class="pill">${h.qty}${m.unit}</span></div>
+      <div class="alt-grid"><span>현재가 <b>${won(price)}</b></span><span>평가액 <b>${won(h.qty*price)}</b></span><span>평단 <b>${h.avg?won(h.avg):"-"}</b></span></div>
+      <div class="alt-actions"><input id="metal-qty-${m.id}" type="number" min="1" step="1" value="1" style="max-width:110px"><button class="buy" onclick="buyMetal('${m.id}')">매수</button><button class="ghost" onclick="sellMetal('${m.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('metal','${m.id}')">상세</button></div>
+    </div>`;
+  }).join("");
+  const c=state.company;
+  const companyHtml=c?`
+    <div class="cloud-head"><div><b>🏭 ${escHtml(c.name)}</b> <span class="pill">Lv.${c.level}</span></div><div>기업 가치 <b>${won(c.valuation)}</b></div></div>
+    <div class="kpis" style="margin-top:8px"><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div></div>
+    <div class="inline-form" style="margin-top:8px">
+      <label>배당 성향 (%)<input type="number" min="0" max="100" step="5" value="${Math.round((c.payout||0)*100)}" onchange="setCompanyPayout(this.value)"></label>
+      <label>&nbsp;<button class="buy" onclick="expandCompany()">사업 확장${COMPANY_LEVELS[c.level]?` (${won(COMPANY_LEVELS[c.level].cost)})`:" (최대)"}</button></label>
+      <label>&nbsp;<button class="ghost" onclick="openAssetDetail('company')">상세</button></label>
+    </div>
+    <div style="margin-top:8px">${RIVALS.map(r=>`<div class="row" style="grid-template-columns:1fr auto auto auto;align-items:center"><b>${r.name}</b><span>${won(r.cost)}</span><span class="up">+${won(r.boost)}</span><button class="ghost" onclick="acquireRival('${r.id}')" ${c.acquired&&c.acquired[r.id]?"disabled":""}>${c.acquired&&c.acquired[r.id]?"인수 완료":"인수"}</button></div>`).join("")}</div>`
+    :`<div class="inline-form"><label>기업명<input id="company-name" maxlength="12" placeholder="예: 한빛캐피탈"></label><label>&nbsp;<button class="buy" onclick="foundCompany()">기업 설립 (${won(COMPANY_LEVELS[0].cost)})</button></label></div>
+    <p style="font-size:12px;margin-top:8px">기업은 30초마다 배당을 지급하고 가치가 변동합니다. 사업 확장·인수합병으로 기업 가치를 키우세요.</p>`;
+  const weeklyHtml=`<div class="kpis"><div class="kpi"><small>연속 접속</small><b>${state.streak.days}일</b></div><div class="kpi"><small>최고 연속</small><b>${state.streak.best}일</b></div><div class="kpi"><small>주간 키</small><b style="font-size:13px">${state.weekly.key||"-"}</b></div></div>
+    ${WEEKLY_POOL.map(m=>{const p=Math.min(m.target,state.weekly.counts[m.id]||0),done=p>=m.target,claimed=!!state.weekly.claimed[m.id];return `<div class="mission"><div class="mission-top"><b>${m.label}</b><span class="pill">보상 ${won(m.reward)}</span></div><div class="bar"><span style="width:${(p/m.target*100).toFixed(0)}%"></span></div><div class="mission-top"><small>${p} / ${m.target}</small><button class="${done&&!claimed?"buy":"ghost"}" ${done&&!claimed?"":"disabled"} onclick="claimWeekly('${m.id}')">${claimed?"수령 완료":done?"보상 받기":"진행 중"}</button></div></div>`;}).join("")}
+    <h3 style="margin:14px 0 8px;font-size:15px">특별 미션</h3>
+    ${SPECIAL_MISSIONS.map(m=>`<div class="row" style="grid-template-columns:1fr auto"><b>${m.label}</b><span>${state.special[m.id]?"✅ 완료":`보상 ${won(m.reward)}`}</span></div>`).join("")}`;
+  const dex=state.dex||{stocks:{},products:{},estates:{},metals:{}};
+  const dexCount=o=>Object.keys(o||{}).length;
+  const dexHtml=`<div class="kpis"><div class="kpi"><small>주식 도감</small><b>${dexCount(dex.stocks)} / ${stocks.length}</b></div><div class="kpi"><small>상품 도감</small><b>${dexCount(dex.products)} / ${products.length}</b></div><div class="kpi"><small>부동산 도감</small><b>${dexCount(dex.estates)} / ${ESTATES.length}</b></div><div class="kpi"><small>실물 도감</small><b>${dexCount(dex.metals)} / ${METALS.length}</b></div><div class="kpi"><small>기업</small><b>${dex.company?"설립":"미설립"}</b></div></div>`;
+  const economyHtml=`<div class="kpis"><div class="kpi"><small>경기 국면</small><b>${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b>${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>다음 전환</small><b>${eco.cycleLeft||0}초</b></div><div class="kpi"><small>시장 지수</small><b>${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b>${won(state.peakNet||totalAssetsKRW())}</b></div></div>`;
   const autoState=state.auto||{};
   const autoHtml=`<div class="inline-form">
       <label>주식 비중 (%)<input id="auto-pct" type="number" min="0" max="100" step="5" value="${autoState.stockPct??60}"></label>
       <label>최소 보유 현금 (원)<input id="auto-min" type="number" min="0" step="100000" value="${autoState.minCash??1000000}"></label>
+      <label>금 비중 (%)<input id="auto-gold" type="number" min="0" max="100" step="5" value="${autoState.goldPct??0}"></label>
+      <label>부동산 비중 (%)<input id="auto-estate" type="number" min="0" max="100" step="5" value="${autoState.estatePct??0}"></label>
       <label>&nbsp;<button class="buy" onclick="saveAutoSettings()">${autoState.enabled?"규칙 저장":"자동 적립 켜기"}</button></label>
       <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
       ${autoState.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 적립 끄기</button></label>':""}
@@ -1666,7 +2207,8 @@ function portfolio(){
           ${hasTrend
             ? `<span class="pill">구간 수익률 <b class="${changePct>=0?"up":"down"}">${pct(changePct)}</b></span>`
             : `<span class="pill">기록 수집 중</span>`}
-          <span class="pill">고점 ${wonShort(peak)}</span>
+          <span class="pill grade-pill" style="color:${GRADE_COLORS[currentGrade()]}">${currentGrade()} · ${currentTitle()}</span>
+          <span class="pill">고점 ${wonShort(Math.max(peak,state.peakNet||0))}</span>
           <span class="pill">시즌 ${pct(reportData().ret)}</span>
           <span class="pill">시장 ${pct(reportData().indexRet)}</span>
         </div>
@@ -1694,6 +2236,22 @@ function portfolio(){
     <div class="section"><h3>업적</h3><div class="panel"><div class="ach">${achHtml}</div></div></div>
 
     <div class="section"><h3>성과 분석</h3><div class="panel">${perfHtml}</div></div>
+
+    <div class="section"><h3>부동산</h3><div class="panel">${estateHtml}</div></div>
+
+    <div class="section"><h3>실물자산 (금·은)</h3><div class="panel">${metalHtml}</div></div>
+
+    <div class="section"><h3>나의 기업</h3><div class="panel">${companyHtml}</div></div>
+
+    <div class="section"><h3>주간 미션 · 연속 접속</h3><div class="panel">${weeklyHtml}</div></div>
+
+    <div class="section"><h3>자산·상품 도감</h3><div class="panel">${dexHtml}</div></div>
+
+    <div class="section"><h3>경제 통계실</h3><div class="panel">${economyHtml}
+    <div class="inline-form" style="margin-top:8px"><label>내 자산 목표 (원)<input id="goal-target" type="number" min="1000000" step="10000000" value="${state.targetGoal||1000000000}" onchange="setTargetGoal(this.value)"></label></div>
+    <div class="bar" style="margin-top:8px"><span style="width:${Math.min(100,(total/Math.max(1,state.targetGoal||1))*100).toFixed(1)}%"></span></div>
+    <small>${won(total)} / ${won(state.targetGoal||1000000000)}</small>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="ghost" onclick="openGlobalRanking()">글로벌 랭킹</button><button class="ghost" onclick="openSettings()">게임 설정</button><button class="ghost" onclick="openRetire()">은퇴 설계</button></div></div></div>
 
     <div class="section"><h3>자동 적립</h3><div class="panel">${autoHtml}</div></div>
 
@@ -1837,6 +2395,7 @@ function buy(id){
   if(!checkMarketOpen()) return;
   let s=stock(id);
   const isForeign = ["foreign","mega","special"].includes(s.group);
+  if(!confirmTrade("매수",`${s.name} 1주 · ${isForeign?usdStr(s.price*(1+FEE_STOCK)):won(s.price*(1+FEE_STOCK))}`)) return;
   
   if(isForeign){
     let cost = s.price * (1 + FEE_STOCK);
@@ -1853,6 +2412,7 @@ function buy(id){
     s.own += 1;
     addLog(`${s.name} 1주 매수 (${won(s.price)}, 수수료 포함)`);
   }
+  markDex("stocks",s.id);
   recordTrade(s,"buy",1,s.price,0);
   saveGame();
   update();
@@ -1863,6 +2423,7 @@ function sell(id){
   let s=stock(id);
   if(s.own<=0)return alert("보유 주식이 없습니다.");
   const isForeign = ["foreign","mega","special"].includes(s.group);
+  if(!confirmTrade("매도",`${s.name} 1주 · ${isForeign?usdStr(s.price*(1-FEE_STOCK-TAX_TRADE)):won(s.price*(1-FEE_STOCK-TAX_TRADE))}`)) return;
   
   let revenue = s.price * (1 - FEE_STOCK - TAX_TRADE); // 수수료 0.15% + 거래세 0.2%
   // 평단가가 매수 수수료를 포함한 취득원가이므로 실현손익 = 순수취금액 - 취득원가
@@ -1891,6 +2452,7 @@ function fullBuy(id){
   if(!checkMarketOpen()) return;
   let s=stock(id);
   const isForeign = ["foreign","mega","special"].includes(s.group);
+  if(!confirmTrade("전액 매수",`${s.name} · 보유 가능 수량 전부`)) return;
   
   if(isForeign){
     let singleCost = s.price * (1 + FEE_STOCK);
@@ -1919,6 +2481,7 @@ function fullSell(id){
   let s=stock(id);
   if(s.own<=0)return alert("매도할 주식이 없습니다.");
   const isForeign = ["foreign","mega","special"].includes(s.group);
+  if(!confirmTrade("전액 매도",`${s.name} ${s.own}주 전부`)) return;
   
   let count = s.own;
   let revenue = (s.price * count) * (1 - FEE_STOCK - TAX_TRADE); // 수수료 + 거래세
@@ -1949,10 +2512,17 @@ function join(id){
   if(v>state.cash)return alert("현금이 부족합니다.");
   // 가입 시점 이율은 현금을 빼기 전 등급으로 확정합니다.
   // 현금을 먼저 빼면 총자산이 줄어 등급이 내려가고, 상위 등급 전용 상품(채권·ETF·연금)은 이율이 0으로 굳습니다.
-  if(p.amount===0) p.rate=gradeRateFor(id, currentGrade());
+  const bankEl=$("bank-"+id);
+  const bank=BANKS.find(b=>b.id===(bankEl&&bankEl.value))||BANKS[0];
+  if(p.amount===0){
+    p.rate=gradeRateFor(id,currentGrade())*(bank.mult||1)*(1+((state.economy&&state.economy.rateAdj)||0));
+    p.bank=bank.id; p.bankMult=bank.mult||1;
+    p.startedAt=state.marketSeconds; p.matured=!(p.term>0);
+  }
   state.cash-=v;
   p.amount+=v;
-  addLog(`${p.name} 가입: ${won(v)} (확정 연 ${(p.rate*100).toFixed(1)}%)`);
+  markDex("products",id);
+  addLog(`${p.name} 가입: ${won(v)} (${bank.name} 확정 연 ${(p.rate*100).toFixed(1)}%)`);
   bumpDaily("deposit");
   saveGame();
   update();
@@ -1961,10 +2531,13 @@ function join(id){
 function leave(id){
   let p=product(id);
   if(p.amount<=0)return alert("해지할 금액이 없습니다.");
-  state.cash+=p.amount;
-  addLog(`${p.name} 해지: ${won(p.amount)} 원금 회수`);
-  p.amount=0;
-  p.rate=0; // 해지하면 확정 이율도 초기화(다시 가입할 때 그 시점 등급 이율로 확정)
+  // 만기 전 해지에는 원금의 0.5% 중도해지 페널티를 적용합니다(파킹·ETF는 예외).
+  const early=p.term>0 && p.startedAt!=null && !p.matured;
+  const penalty=early?p.amount*0.005:0;
+  if(early && !confirm(`${p.name}을(를) 만기 전에 해지하면 ${won(penalty)}의 페널티가 적용됩니다. 계속할까요?`)) return;
+  state.cash+=p.amount-penalty;
+  addLog(`${p.name} 해지: ${won(p.amount-penalty)} 회수${penalty?` (페널티 ${won(penalty)})`:""}`);
+  p.amount=0; p.rate=0; p.startedAt=null; p.matured=false; p.bank=null;
   saveGame();
   update();
 }
@@ -2082,7 +2655,7 @@ function tickMarket(){
 function marketEventsAndNews() {
   // 15% 확률로 시장 빅 트렌드 이벤트 발생
   if(!state.currentEvent && Math.random() < 0.15) {
-    const evs = ["AI_BOOM", "SEMI_STRONG", "FX_SURGE", "MARKET_CRASH", "BUBBLE_SHOCK"];
+    const evs = ["AI_BOOM", "SEMI_STRONG", "FX_SURGE", "FX_CRASH", "MARKET_CRASH", "BUBBLE_SHOCK"];
     state.currentEvent = evs[Math.floor(Math.random() * evs.length)];
     state.eventTimer = 25 + Math.floor(Math.random() * 35); // 25~60초간 지속
     
@@ -2090,6 +2663,7 @@ function marketEventsAndNews() {
     if(state.currentEvent === "AI_BOOM") evText = "🔥 초거대 글로벌 인공지능 호황기가 도래하며 관련 테마주가 유례없는 초강세를 보입니다!";
     if(state.currentEvent === "SEMI_STRONG") evText = "🛠️ 전세계 반도체 공급 부족 심화! 반도체 생산 공급망 테마군에 자금이 집중됩니다.";
     if(state.currentEvent === "FX_SURGE") evText = "🇺🇸 달러 자본 독주 체제 가동으로 원/달러 환율이 급격한 변동성을 동반하여 요동칩니다.";
+    if(state.currentEvent === "FX_CRASH") evText = "💵 달러 약세 전환으로 원/달러 환율이 급락하고 있습니다.";
     if(state.currentEvent === "MARKET_CRASH") evText = "📉 긴축 공포 확산! 글로벌 거시 경제 위기로 시장 전체 자산군에 무차별 폭락 쇼크가 몰아칩니다.";
     if(state.currentEvent === "BUBBLE_SHOCK") evText = "⚠️ 고점 과열 지적에 따른 차익 실현 버블 조정 구간 진입. 시장 변동성이 극대화됩니다.";
     
@@ -2107,6 +2681,9 @@ function marketEventsAndNews() {
     }
     if(state.currentEvent === "FX_SURGE"){
       fx.usd = Math.round(fx.usd * 1.03);
+    }
+    if(state.currentEvent === "FX_CRASH"){
+      fx.usd = Math.round(fx.usd * 0.97);
     }
     return;
   }
@@ -2162,6 +2739,16 @@ function interest(){
     let parkingBonus = state.cash * 0.00002;
     state.cash += parkingBonus;
   }
+
+  // 만기 보너스: 가입 시점부터 term초가 지나면 한 번만 지급합니다.
+  products.forEach(p=>{
+    if(p.amount>0 && p.term>0 && p.startedAt!=null && !p.matured && state.marketSeconds-p.startedAt>=p.term){
+      const bonus=p.amount*(p.bonus||0);
+      p.amount+=bonus; p.matured=true;
+      addLog(`🎁 만기 보너스: ${p.name} +${won(bonus)}`);
+      notify("system","만기 보너스",`${p.name} +${won(bonus)}`);
+    }
+  });
 
   // 대출 이자(15초 단위): 연이율 × 0.015, 현금이 부족하면 대출 잔액에 가산
   if(state.loan > 0) {
@@ -2228,6 +2815,7 @@ function update(){
   // 금융 화면에서는 배너·해금 상태만 갱신해 입력 중인 금액을 보존합니다.
   if(activePage()==="banking") refreshBankingState();
 
+  state.peakNet=Math.max(state.peakNet||0,totalAssetsKRW());
   const bn=$("bottomNet");
   if(bn) bn.textContent=wonShort(totalAssetsKRW());
 
