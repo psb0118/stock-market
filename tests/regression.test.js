@@ -681,6 +681,24 @@ const RESET = total => `
   check('클라우드 미설정 시 UI 숨김', !g.run("document.getElementById('portfolio').innerHTML").includes('클라우드 저장·랭킹'));
 }
 
+// ── 11. 고정 시드 1시간 시뮬레이션(자산 폭주 회귀) ─────────────────
+{
+  const { runSimulation } = require('./simulate-1h');
+  const seed = 20261123;
+  const hourA = runSimulation({ seconds: 3600, seed });
+  const hourB = runSimulation({ seconds: 3600, seed });
+  check('고정 시드 시뮬레이션 재현', hourA.end.total === hourB.end.total && hourA.max === hourB.max, Math.round(hourA.end.total));
+  check('1배속 1시간 자산 폭주 없음', hourA.end.total > 600000000 && hourA.end.total < 1500000000 && hourA.max < 1500000000, Math.round(hourA.end.total) + '/' + Math.round(hourA.max));
+
+  const stress = runSimulation({ seconds: 36000, seed });
+  check('10배속 1시간 자산 폭주 없음', stress.end.total > 0 && stress.end.total < 2200000000 && stress.max < 2200000000, Math.round(stress.end.total) + '/' + Math.round(stress.max));
+
+  const deposit = runSimulation({ seconds: 36000, seed, mode: 'deposit' });
+  check('10억 예금 10배속 1시간 폭주 없음', deposit.end.total > 0 && deposit.end.total < 2000000000, Math.round(deposit.end.total));
+
+  check('시뮬레이션 손익 유한값', [hourA, stress, deposit].every(r => Number.isFinite(r.end.total) && Number.isFinite(r.max)), 'finite');
+}
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n== ${results.length - failed.length}/${results.length} passed ==`);
 if (failed.length) process.exit(1);

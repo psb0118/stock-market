@@ -150,8 +150,10 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .order-row{grid-template-columns:1fr repeat(3,auto)}
 .app,main,.page,.panel,.section,.row{min-width:0}
 .row{overflow-wrap:anywhere}
+.rival-row{grid-template-columns:1fr auto auto auto;align-items:center}
+@media(max-width:540px){.rival-row{grid-template-columns:1fr auto}.rival-row b{grid-column:1/-1}.rival-row button{grid-column:2;grid-row:2/4}}
 @media(max-width:1024px){.stats{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;padding:0 8px;font-size:12px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
+@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible;padding-bottom:0}.nav button{white-space:nowrap;min-height:34px;padding:0 8px;font-size:12px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
 @media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stats .box:last-child{grid-column:1/-1}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
@@ -2191,7 +2193,7 @@ function portfolio(){
       <label>&nbsp;<button class="buy" onclick="expandCompany()">사업 확장${COMPANY_LEVELS[c.level]?` (${won(COMPANY_LEVELS[c.level].cost)})`:" (최대)"}</button></label>
       <label>&nbsp;<button class="ghost" onclick="openAssetDetail('company')">상세</button></label>
     </div>
-    <div style="margin-top:8px">${RIVALS.map(r=>`<div class="row" style="grid-template-columns:1fr auto auto auto;align-items:center"><b>${r.name}</b><span>${won(r.cost)}</span><span class="up">+${won(r.boost)}</span><button class="ghost" onclick="acquireRival('${r.id}')" ${c.acquired&&c.acquired[r.id]?"disabled":""}>${c.acquired&&c.acquired[r.id]?"인수 완료":"인수"}</button></div>`).join("")}</div>`
+    <div style="margin-top:8px">${RIVALS.map(r=>`<div class="row rival-row"><b>${r.name}</b><span>${won(r.cost)}</span><span class="up">+${won(r.boost)}</span><button class="ghost" onclick="acquireRival('${r.id}')" ${c.acquired&&c.acquired[r.id]?"disabled":""}>${c.acquired&&c.acquired[r.id]?"인수 완료":"인수"}</button></div>`).join("")}</div>`
     :`<div class="inline-form"><label>기업명<input id="company-name" maxlength="12" placeholder="예: 한빛캐피탈"></label><label>&nbsp;<button class="buy" onclick="foundCompany()">기업 설립 (${won(COMPANY_LEVELS[0].cost)})</button></label></div>
     <p style="font-size:12px;margin-top:8px">기업은 30초마다 배당을 지급하고 가치가 변동합니다. 사업 확장·인수합병으로 기업 가치를 키우세요.</p>`;
   const weeklyHtml=`<div class="kpis"><div class="kpi"><small>연속 접속</small><b>${state.streak.days}일</b></div><div class="kpi"><small>최고 연속</small><b>${state.streak.best}일</b></div><div class="kpi"><small>주간 키</small><b style="font-size:13px">${state.weekly.key||"-"}</b></div></div>
