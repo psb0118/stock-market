@@ -198,7 +198,6 @@ function nextGradeInfo(){
   const next=GRADES[i+1];
   return {grade:next, remain:Math.max(0, GRADE_FLOORS[next]-totalAssetsKRW())};
 }
-let lastBankingGrade=null; // 등급이 바뀔 때만 금융상품 화면을 다시 그리기 위한 캐시
 
 function init(){
   nav();
@@ -319,7 +318,7 @@ function show(id,btn){
   btn.classList.add("on");
   if(id=="news")news();
   if(id=="portfolio")portfolio();
-  if(id=="banking")banking(); // 등급·보유 현황이 바뀌었을 수 있으므로 금융 화면 전환 시 갱신
+  if(id=="banking")refreshBankingState(); // 입력값을 보존한 채 등급·보유 현황만 갱신
 }
 
 function stockPage(group,title,desc){
@@ -351,8 +350,30 @@ function card(s){
 }
 
 function banking(){
-  lastBankingGrade=currentGrade();
   $("banking").innerHTML=`<div class="head"><div><h1>예금·적금</h1><p>현금을 안정적으로 굴리는 금융상품입니다. 15초마다 이자가 반영됩니다.</p></div></div><div class="notice" id="gradeBanner" style="background:#e0f2fe; border-color:#7dd3fc; color:#0369a1;">${gradeBannerHTML()}</div><div class="notice">⚠️ 효율 저하 시스템: 각 상품별 원금 가입액이 3,000만 원을 초과하면 초과분에 대해 이율이 50%로 감소합니다.</div><div class="products">${products.map(productCard).join("")}</div>`;
+}
+
+// 상품 카드의 부제(현재 등급 이율 또는 잠금 안내)
+function productSubText(p, unlocked, held){
+  return `${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}${held?" · 보유 중(이자는 확정 이율로 유지)":""}`}`;
+}
+
+// 배너와 해금 상태만 갱신합니다. 금융 화면을 다시 그리지 않으므로 입력 중인 금액이 보존됩니다.
+function refreshBankingState(){
+  products.forEach(p=>{
+    const card=document.querySelector(`[data-card="${p.id}"]`);
+    if(!card) return;
+    const unlocked=canJoin(p.id), held=p.amount>0;
+    card.className="product"+(unlocked ? "" : (held ? " locked holding" : " locked"));
+    const sub=card.querySelector(`[data-sub="${p.id}"]`);
+    if(sub) sub.textContent=productSubText(p, unlocked, held);
+    const input=document.getElementById(`prod-${p.id}`);
+    if(input) input.disabled=!unlocked;
+    const joinBtn=card.querySelector(`[data-join="${p.id}"]`);
+    if(joinBtn) joinBtn.disabled=!unlocked;
+  });
+  const gb=document.getElementById("gradeBanner");
+  if(gb) gb.innerHTML=gradeBannerHTML();
 }
 
 // 등급 안내 배너: 현재 등급, 총자산, 다음 등급까지 남은 금액
@@ -369,9 +390,9 @@ function productCard(p){
   const held=p.amount>0;
   // 보유 중인 상품은 등급이 내려가도 이자가 계속 되므로 흐리게 처리하지 않습니다.
   const stateClass=unlocked ? "" : (held ? " locked holding" : " locked");
-  return `<article class="product${stateClass}">
+  return `<article class="product${stateClass}" data-card="${p.id}">
     <h2>${p.name}</h2>
-    <p>${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}${held?" · 보유 중(이자는 확정 이율로 유지)":""}`}</p>
+    <p data-sub="${p.id}">${productSubText(p, unlocked, held)}</p>
     <div class="product-grid">
       <div><small>가입액</small><b data-prod="${p.id}">${won(p.amount)}</b></div>
       <div><small>최소 금액</small><b>${won(p.min)}</b></div>
@@ -380,7 +401,7 @@ function productCard(p){
     </div>
     <div class="trade bank-trade">
       <input id="prod-${p.id}" type="number" value="${p.min}" step="10000" ${unlocked?"":"disabled"}>
-      <button class="buy" onclick="join('${p.id}')" ${unlocked?"":"disabled"}>가입</button>
+      <button class="buy" data-join="${p.id}" onclick="join('${p.id}')" ${unlocked?"":"disabled"}>가입</button>
       <button class="sell" onclick="leave('${p.id}')">해지</button>
     </div>
   </article>`;
@@ -845,11 +866,8 @@ function update(){
     if(le)le.textContent=p.rate>0 ? `연 ${(p.rate*100).toFixed(1)}%` : "미가입";
   });
 
-  // 등급이 바뀌면 해금 상태가 달라지므로, 등급 변화 시에만 금융상품 화면을 다시 그립니다.
-  if(activePage()==="banking"){
-    if(lastBankingGrade!==currentGrade()) banking();
-    else { let gb=$("gradeBanner"); if(gb) gb.innerHTML=gradeBannerHTML(); }
-  }
+  // 금융 화면에서는 배너·해금 상태만 갱신해 입력 중인 금액을 보존합니다.
+  if(activePage()==="banking") refreshBankingState();
 
   if(activePage()=="portfolio") portfolio();
 }
