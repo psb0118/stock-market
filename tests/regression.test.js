@@ -484,6 +484,12 @@ const RESET = total => `
   g.run('state.paused=true; const beforePause=state.marketSeconds; gameLoop(); state.paused=false; 1');
   check('일시정지 중 시간 정지', g.run('state.marketSeconds') === 10, g.run('state.marketSeconds'));
 
+  // 다중 탭 저장 충돌 가드
+  g.run('localStorage.setItem("money_playground_save","SENTINEL"); multiTab=false; handleExternalSave(); saveGame(); 1');
+  check('다른 탭 감지 시 저장 중단', g.run('localStorage.getItem("money_playground_save")') === 'SENTINEL', g.run('localStorage.getItem("money_playground_save")'));
+  check('다른 탭 감지 시 일시정지', g.run('multiTab') === true && g.run('state.paused') === true);
+  g.run('multiTab=false; state.paused=false; 1');
+
   // 오프라인 정산(최대 2시간)
   g.run(`
     products.forEach(p=>{p.amount=0;p.rate=0});
