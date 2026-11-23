@@ -265,7 +265,7 @@ const RESET = total => `
     payDividends();
     1;
   `);
-  check('배당금 지급', Math.round(g.run('state.cash')) === 4000, g.run('state.cash'));
+  check('배당금 지급', Math.round(g.run('state.cash')) === 1000, g.run('state.cash'));
 
   // 저장/불러오기 라운드트립
   g.run(`
@@ -377,7 +377,7 @@ const RESET = total => `
   check('자산 배분 비중 합 100%', Math.abs(alloc.parts.reduce((a, p) => a + p.pct, 0) - 100) < 1e-9);
   check('자산 배분 현금·주식 50%', Math.abs(alloc.parts[0].pct - 50) < 1e-6 && Math.abs(alloc.parts[2].pct - 50) < 1e-6, alloc.parts.map(p => p.pct.toFixed(1)).join('/'));
 
-  // 배당 예상: 국내 10주 × 10만원 × 0.4%
+  // 배당 예상: 국내 10주 × 10만원 × 0.1%
   g.run(RESET(0) + `
     state.cash = 0; state.usd = 0; state.loan = 0;
     stocks.forEach(s => { s.own = 0; });
@@ -385,7 +385,7 @@ const RESET = total => `
     state.marketSeconds = 30;
     1
   `);
-  check('예상 배당금 계산', Math.round(g.run('expectedDividend()')) === 4000, g.run('expectedDividend()'));
+  check('예상 배당금 계산', Math.round(g.run('expectedDividend()')) === 1000, g.run('expectedDividend()'));
   check('다음 배당까지 남은 시간', g.run('secondsToDividend()') === 90, g.run('secondsToDividend()'));
 
   // 전액 상환
@@ -631,7 +631,7 @@ const RESET = total => `
     tickAlt();
     1
   `);
-  const rentExpected = g.run('state.estate.apt.qty*estatePrice("apt")*(.0035-.0008)');
+  const rentExpected = g.run('state.estate.apt.qty*estatePrice("apt")*(.0007-.00016)');
   check('부동산 월세·유지비 정산', Math.abs(g.run('state.cash') - rentExpected) < 1, g.run('state.cash') + ' vs ' + rentExpected.toFixed(2));
 
   // 기업 배당 틱
@@ -664,6 +664,21 @@ const RESET = total => `
     1
   `);
   check('자동 배분 부동산 매수', g.run('Object.keys(state.estate).length') > 0, g.run('JSON.stringify(state.estate)'));
+
+  // 자동 매매(익절)와 알림 설정
+  g.run(`
+    state.marketOpen=true; state.cash=0; state.loan=0; state.realizedYTD=0; state.taxedProfit=0;
+    stocks.forEach(s=>{s.own=0;s.avgBuy=0;s.realizedProfit=0});
+    const s=stock('future_ai'); s.own=10; s.avgBuy=100000; s.price=130000;
+    state.auto={enabled:true,autoSell:true,takeProfit:20,stopLoss:10,stockPct:0,minCash:0,every:60};
+    autoSellRules();
+    1
+  `);
+  check('자동 매매 익절', g.run("stock('future_ai').own") === 0 && g.run('state.cash') > 0, Math.round(g.run('state.cash')));
+  g.run("setNotify('dividend',false); 1");
+  check('알림 설정 저장', g.run('state.notify.dividend') === false);
+  g.run("setNotify('dividend',true); setCloudApi(''); portfolio(); 1");
+  check('클라우드 미설정 시 UI 숨김', !g.run("document.getElementById('portfolio').innerHTML").includes('클라우드 저장·랭킹'));
 }
 
 const failed = results.filter(r => !r.pass);

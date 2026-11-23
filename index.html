@@ -128,7 +128,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 #bottomBar{display:none}
 @media(max-width:850px){
   main{padding-bottom:158px}
-  #bottomBar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:50;background:#17202bee;border-top:1px solid #2b3a4d;padding:6px 8px 8px;color:#e2e8f0}
+  #bottomBar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:50;background:#17202b;border-top:1px solid #2b3a4d;padding:6px 8px 8px;color:#e2e8f0}
   .bb-net{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:0 6px 6px;border-bottom:1px solid #2b3a4d}
   .bb-net b{font-size:15px;color:#f7c948}
   .bb-net button{min-height:26px;padding:0 8px;background:#2b3a4d;font-size:12px;color:#e2e8f0}
@@ -151,8 +151,8 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .app,main,.page,.panel,.section,.row{min-width:0}
 .row{overflow-wrap:anywhere}
 @media(max-width:1024px){.stats{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
-@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
+@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;padding:0 8px;font-size:12px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
+@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stats .box:last-child{grid-column:1/-1}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
@@ -251,7 +251,8 @@ const FEE_FX = 0.01;      // 환전 수수료 1%(브론즈 기준)
 const TAX_TRADE = 0.002;        // 매도 거래세 0.2%
 const TAX_GAINS_RATE = 0.22;    // 양도소득세율 22%
 const TAX_GAINS_FREE = 2500000; // 양도세 기본공제(연간 실현손익)
-const DIVIDEND_YIELD = 0.004;   // 배당수익률(보유 평가액 대비)
+const DIVIDEND_YIELD = 0.001;   // 배당수익률(보유 평가액 대비, 120초 주기)
+const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
 const DIVIDEND_EVERY = 120;     // 배당 지급 주기(초)
 const EARNINGS_EVERY = 180;     // 실적 발표 주기(초)
 const SAVE_KEY = "money_playground_save";
@@ -330,10 +331,10 @@ const BANKS=[
 ];
 // 부동산: 가격 변동 · 월세 수익 · 유지비
 const ESTATES=[
-{id:"apt",name:"도심 아파트",price:300000000,vol:.012,rent:.0035,upkeep:.0008,desc:"안정적인 임대 수요"},
-{id:"shop",name:"번화가 상가",price:180000000,vol:.015,rent:.0050,upkeep:.0012,desc:"높은 임대료, 높은 공실 위험"},
-{id:"office",name:"오피스 빌딩",price:600000000,vol:.009,rent:.0042,upkeep:.0010,desc:"큰 자본, 안정적 현금흐름"},
-{id:"land",name:"개발 예정지",price:120000000,vol:.020,rent:.0015,upkeep:.0004,desc:"시세 차익 기대, 임대 수익 낮음"}
+{id:"apt",name:"도심 아파트",price:300000000,vol:.012,rent:.0007,upkeep:.00016,desc:"안정적인 임대 수요"},
+{id:"shop",name:"번화가 상가",price:180000000,vol:.015,rent:.0010,upkeep:.00024,desc:"높은 임대료, 높은 공실 위험"},
+{id:"office",name:"오피스 빌딩",price:600000000,vol:.009,rent:.00084,upkeep:.00020,desc:"큰 자본, 안정적 현금흐름"},
+{id:"land",name:"개발 예정지",price:120000000,vol:.020,rent:.0003,upkeep:.00008,desc:"시세 차익 기대, 임대 수익 낮음"}
 ];
 // 실물자산(금·은)
 const METALS=[
@@ -404,7 +405,7 @@ const state={
   dividendTotal: 0, // 누적 배당 수령액
   feesTotal: 0,     // 누적 거래 수수료
   notify: {order:true, dividend:true, goal:true, grade:true, tax:true, sound:false, haptic:false},
-  auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0},
+  auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0, autoSell:false, takeProfit:20, stopLoss:10},
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
   seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈",
@@ -615,19 +616,50 @@ function bestProductForAuto(){
   return best;
 }
 function saveAutoSettings(){
-  const enabled=$("auto-enabled") ? $("auto-enabled").checked : true;
   const pct=+($("auto-pct")?$("auto-pct").value:60)||0;
   const min=+($("auto-min")?$("auto-min").value:0)||0;
   const goldPct=+($("auto-gold")?$("auto-gold").value:0)||0;
   const estatePct=+($("auto-estate")?$("auto-estate").value:0)||0;
-  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every:60});
+  const autoSell=$("auto-sell")?$("auto-sell").checked:false;
+  const takeProfit=Math.max(0,Math.min(200,+($("auto-tp")?$("auto-tp").value:20)||0));
+  const stopLoss=Math.max(0,Math.min(100,+($("auto-sl")?$("auto-sl").value:10)||0));
+  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every:60,autoSell,takeProfit,stopLoss});
   saveGame(); portfolio(); update();
-  notify("system","자동 적립",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)}로 켰습니다.`);
+  notify("system","자동 적립",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)}${state.auto.autoSell?` · 익절 ${state.auto.takeProfit}%/손절 ${state.auto.stopLoss}%`:''}로 켰습니다.`);
 }
 function disableAuto(){
   state.auto=Object.assign({},state.auto,{enabled:false});
   saveGame(); portfolio(); update();
   notify("system","자동 적립","규칙을 껐습니다.");
+}
+// 자동 매매: 보유 종목이 설정한 익절/손절선에 닿으면 전량 매도합니다.
+function autoSellRules(){
+  const a=state.auto||{};
+  if(!a.enabled || !a.autoSell || !state.marketOpen) return 0;
+  const tp=(a.takeProfit||0)/100, sl=(a.stopLoss||0)/100;
+  if(tp<=0 && sl<=0) return 0;
+  let sold=0;
+  stocks.forEach(s=>{
+    if(s.own<=0 || !s.avgBuy) return;
+    const roi=(s.price-s.avgBuy)/s.avgBuy;
+    if(!((tp>0&&roi>=tp)||(sl>0&&roi<=-sl))) return;
+    const foreign=isForeignStock(s), count=s.own;
+    const revenue=s.price*count*(1-FEE_STOCK-TAX_TRADE);
+    const profit=revenue-s.avgBuy*count;
+    const profitKRW=foreign?profit*fx.usd:profit;
+    if(foreign){ state.usd+=revenue; s.realizedProfit+=profitKRW; }
+    else { state.cash+=revenue; s.realizedProfit+=profit; }
+    s.own=0; s.avgBuy=0;
+    recordTrade(s,"sell",count,s.price,profitKRW);
+    settleTax(profitKRW);
+    addLog(`🤖 자동 매도: ${s.name} ${count}주 · ${pct(roi)}`);
+    sold++;
+  });
+  if(sold){
+    notify("order","자동 매매 실행",`${sold}종목을 익절/손절 규칙으로 매도했습니다.`);
+    saveGame(); update();
+  }
+  return sold;
 }
 function autoInvest(force){
   const a=state.auto||{};
@@ -774,7 +806,7 @@ function foundCompany(){
   const name=($("company-name")?$("company-name").value.trim():"")||"나의 기업";
   if(!confirmTrade("기업 설립",`${name} · ${won(def.cost)}`)) return;
   state.cash-=def.cost;
-  state.company={name,level:1,valuation:def.val,revenue:def.revenue,profit:def.profit,payout:.3};
+  state.company={name,level:1,valuation:def.val,book:def.val,revenue:def.revenue,profit:def.profit,payout:.3};
   markDex("company",true);
   addLog(`🏭 기업 설립: ${name} (${won(def.cost)})`);
   notify("system","기업 설립",`${name} 설립 완료`);
@@ -785,7 +817,7 @@ function expandCompany(){
   const def=COMPANY_LEVELS[c.level]; if(!def) return alert("최대 레벨입니다.");
   if(state.cash<def.cost) return alert(`확장 비용 ${won(def.cost)}이 부족합니다.`);
   if(!confirmTrade("사업 확장",`Lv.${c.level+1} · ${won(def.cost)}`)) return;
-  state.cash-=def.cost; c.level++; c.valuation+=def.val; c.revenue+=def.revenue; c.profit+=def.profit;
+  state.cash-=def.cost; c.level++; c.valuation+=def.val; c.book=(c.book||c.valuation-def.val)+def.val; c.revenue+=def.revenue; c.profit+=def.profit;
   addLog(`🏭 사업 확장: Lv.${c.level} (${won(def.cost)})`);
   saveGame(); portfolio(); update();
 }
@@ -794,7 +826,7 @@ function acquireRival(id){
   const r=RIVALS.find(x=>x.id===id); if(!r||c.acquired&&c.acquired[id]) return;
   if(state.cash<r.cost) return alert(`인수 비용 ${won(r.cost)}이 부족합니다.`);
   if(!confirmTrade("기업 인수",`${r.name} · ${won(r.cost)}`)) return;
-  state.cash-=r.cost; c.valuation+=r.boost; c.revenue+=Math.round(r.boost*.02); c.profit+=Math.round(r.boost*.006);
+  state.cash-=r.cost; c.valuation+=r.boost; c.book=(c.book||c.valuation-r.boost)+r.boost; c.revenue+=Math.round(r.boost*.02); c.profit+=Math.round(r.boost*.006);
   c.acquired=Object.assign({},c.acquired,{[id]:true});
   addLog(`🤝 기업 인수: ${r.name} (+${won(r.boost)})`);
   notify("system","인수합병",`${r.name} 인수 완료`);
@@ -820,7 +852,9 @@ function tickAlt(){
   const c=state.company;
   if(c){
     c.revenue=Math.max(0,Math.round(c.revenue*(0.99+Math.random()*.02)));
-    c.valuation=Math.max(10000000,Math.round(c.valuation*(0.997+Math.random()*.008)));
+    // 기업 가치는 장부가(설립·확장·인수 누계) 주변에서만 움직이게 해 무한 복리를 막습니다.
+    const book=Math.max(10000000,c.book||c.valuation);
+    c.valuation=Math.max(book*.8,Math.min(book*1.2,Math.round(c.valuation*(0.997+Math.random()*.006))));
     if(state.marketSeconds%30===0){ const pay=Math.round(c.profit*(c.payout==null?.3:c.payout)); state.cash+=pay; if(pay>0) addLog(`🏭 기업 배당 +${won(pay)}`); }
   }
   const eco=state.economy||(state.economy={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0});
@@ -894,7 +928,11 @@ function openSettings(){ openModal("게임 설정",`
   <div class="journal" style="margin-bottom:10px"><div><b>다크 테마</b><span></span></div><button class="ghost" onclick="setSetting('theme',state.settings.theme==='dark'?'light':'dark');closeModal();openSettings()">${state.settings.theme==="dark"?"라이트로":"다크로"}</button></div>
   <div class="journal" style="margin-bottom:10px"><div><b>거래 확인 창</b><span></span></div><button class="ghost" onclick="setSetting('confirmTrades',!state.settings.confirmTrades);closeModal();openSettings()">${state.settings.confirmTrades?"켜짐":"꺼짐"}</button></div>
   <div class="journal" style="margin-bottom:10px"><div><b>화면 애니메이션</b><span></span></div><button class="ghost" onclick="setSetting('animations',!state.settings.animations);closeModal();openSettings()">${state.settings.animations?"켜짐":"꺼짐"}</button></div>
-  <p style="font-size:12px;">설정은 저장 파일에 함께 보관됩니다. 거래 확인을 끄면 즉시 체결됩니다.</p>
+  <h3 style="margin:14px 0 8px;font-size:14px">알림</h3>
+  ${[["order","지정가 주문"],["dividend","배당금"],["goal","미션·목표"],["grade","등급 변동"],["tax","세금"]].map(([k,label])=>`<div class="journal" style="margin-bottom:8px"><div><b>${label}</b><span></span></div><button class="ghost" onclick="setNotify('${k}',!state.notify.${k});closeModal();openSettings()">${state.notify[k]?"켜짐":"꺼짐"}</button></div>`).join("")}
+  <div class="journal" style="margin-bottom:8px"><div><b>효과음</b><span></span></div><button class="ghost" onclick="setNotify('sound',!state.notify.sound);closeModal();openSettings()">${state.notify.sound?"켜짐":"꺼짐"}</button></div>
+  <div class="journal" style="margin-bottom:8px"><div><b>진동</b><span></span></div><button class="ghost" onclick="setNotify('haptic',!state.notify.haptic);closeModal();openSettings()">${state.notify.haptic?"켜짐":"꺼짐"}</button></div>
+  <p style="font-size:12px;">설정과 알림은 저장 파일에 함께 보관됩니다. 거래 확인을 끄면 즉시 체결됩니다.</p>
 `); }
 function openAssetDetail(kind,id){
   let html="";
@@ -1107,7 +1145,7 @@ function applyOfflineProgress(){
   products.forEach(p=>{
     if(p.amount<=0 || p.rate<=0) return;
     for(let i=0;i<periods;i++){
-      const eff=p.amount>30000000?30000000+(p.amount-30000000)*0.5:p.amount;
+      const eff=Math.min(MAX_EFFECTIVE_DEPOSIT,p.amount>30000000?30000000+(p.amount-30000000)*0.5:p.amount);
       const add=eff*(p.rate*0.015);
       p.amount+=add; interest+=add;
     }
@@ -1797,7 +1835,7 @@ function applySaveData(data) {
   ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
   const NOTIFY_DEFAULT={order:true,dividend:true,goal:true,grade:true,tax:true,sound:false,haptic:false};
   state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
-  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0};
+  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10};
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
   state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
   state.auto.estatePct=Math.max(0,Math.min(100,+state.auto.estatePct||0));
@@ -1836,6 +1874,7 @@ function applySaveData(data) {
   if(!state.dex||typeof state.dex!=="object") state.dex={stocks:{},products:{},estates:{},metals:{},company:false};
   ["stocks","products","estates","metals"].forEach(k=>{ if(!state.dex[k]||typeof state.dex[k]!=="object") state.dex[k]={}; });
   state.dex.company=!!state.dex.company;
+  if(state.company && !Number.isFinite(state.company.book)) state.company.book=state.company.valuation;
   const SETTINGS={theme:"light",confirmTrades:true,animations:true};
   state.settings=Object.assign({},SETTINGS,(state.settings&&typeof state.settings==="object")?state.settings:{});
   if(!state.journalFilter||typeof state.journalFilter!=="object") state.journalFilter={q:"",side:"all"};
@@ -1911,6 +1950,9 @@ function goPage(id){
   document.querySelectorAll(".page").forEach(x=>x.classList.toggle("on",x.id==id));
   document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("on",x.dataset.page==id));
   document.querySelectorAll(".bb-nav button").forEach(x=>x.classList.toggle("on",x.dataset.page==id));
+  // 모바일에서 활성 상단 탭이 가로 스크롤 밖에 숨지 않도록 중앙으로 맞춥니다.
+  const activeNav=document.querySelector(".nav button.on");
+  if(activeNav&&activeNav.parentElement){ const n=activeNav.parentElement; n.scrollLeft=Math.max(0,activeNav.offsetLeft-n.clientWidth/2+activeNav.offsetWidth/2); }
   if(id=="news")news();
   if(id=="portfolio")portfolio();
   if(id=="banking")refreshBankingState();
@@ -1960,7 +2002,7 @@ function card(s){
 }
 
 function banking(){
-  $("banking").innerHTML=`<div class="head"><div><h1>예금·적금</h1><p>현금을 안정적으로 굴리는 금융상품입니다. 15초마다 이자가 반영됩니다.</p></div></div><div class="notice" id="gradeBanner" style="background:#e0f2fe; border-color:#7dd3fc; color:#0369a1;">${gradeBannerHTML()}</div><div class="notice">⚠️ 효율 저하 시스템: 각 상품별 원금 가입액이 3,000만 원을 초과하면 초과분에 대해 이율이 50%로 감소합니다.</div><div class="products">${products.map(productCard).join("")}</div>`;
+  $("banking").innerHTML=`<div class="head"><div><h1>예금·적금</h1><p>현금을 안정적으로 굴리는 금융상품입니다. 15초마다 이자가 반영됩니다.</p></div></div><div class="notice" id="gradeBanner" style="background:#e0f2fe; border-color:#7dd3fc; color:#0369a1;">${gradeBannerHTML()}</div><div class="notice">⚠️ 효율 저하 시스템: 각 상품별 원금 가입액이 3,000만 원을 초과하면 초과분 이율이 50%로 감소하고, 이자 계산 기준 원금은 최대 3억 원입니다.</div><div class="products">${products.map(productCard).join("")}</div>`;
 }
 
 // 상품 카드의 부제(현재 등급 이율 또는 잠금 안내)
@@ -2166,11 +2208,14 @@ function portfolio(){
       <label>최소 보유 현금 (원)<input id="auto-min" type="number" min="0" step="100000" value="${autoState.minCash??1000000}"></label>
       <label>금 비중 (%)<input id="auto-gold" type="number" min="0" max="100" step="5" value="${autoState.goldPct??0}"></label>
       <label>부동산 비중 (%)<input id="auto-estate" type="number" min="0" max="100" step="5" value="${autoState.estatePct??0}"></label>
+      <label style="display:flex;align-items:center;gap:6px;"><input id="auto-sell" type="checkbox" ${autoState.autoSell?"checked":""} style="min-height:auto;width:auto;"> 자동 매매(익절/손절)</label>
+      <label>익절 (%)<input id="auto-tp" type="number" min="0" max="200" step="1" value="${autoState.takeProfit??20}"></label>
+      <label>손절 (%)<input id="auto-sl" type="number" min="0" max="100" step="1" value="${autoState.stopLoss??10}"></label>
       <label>&nbsp;<button class="buy" onclick="saveAutoSettings()">${autoState.enabled?"규칙 저장":"자동 적립 켜기"}</button></label>
       <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
       ${autoState.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 적립 끄기</button></label>':""}
     </div>
-    <p style="margin-top:8px;font-size:12px;">${autoState.enabled?`✅ 켜짐 · 60초마다 현금을 주식 ${autoState.stockPct}% / 예금으로 재투자합니다.`:"꺼짐 · 켜면 60초마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
+    <p style="margin-top:8px;font-size:12px;">${autoState.enabled?`✅ 켜짐 · 60초마다 현금을 주식 ${autoState.stockPct}% / 금 ${autoState.goldPct||0}% / 부동산 ${autoState.estatePct||0}% / 예금으로 재투자합니다.${autoState.autoSell?` 보유 종목이 익절 ${autoState.takeProfit}% 또는 손절 ${autoState.stopLoss}%에 닿으면 자동 매도합니다.`:''}`:"꺼짐 · 켜면 60초마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
 
   const orderRows = state.orders.length ? state.orders.map(o=>{
     const s=stock(o.stockId);
@@ -2251,7 +2296,7 @@ function portfolio(){
     <div class="inline-form" style="margin-top:8px"><label>내 자산 목표 (원)<input id="goal-target" type="number" min="1000000" step="10000000" value="${state.targetGoal||1000000000}" onchange="setTargetGoal(this.value)"></label></div>
     <div class="bar" style="margin-top:8px"><span style="width:${Math.min(100,(total/Math.max(1,state.targetGoal||1))*100).toFixed(1)}%"></span></div>
     <small>${won(total)} / ${won(state.targetGoal||1000000000)}</small>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="ghost" onclick="openGlobalRanking()">글로벌 랭킹</button><button class="ghost" onclick="openSettings()">게임 설정</button><button class="ghost" onclick="openRetire()">은퇴 설계</button></div></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${cloudConfigured()?'<button class="ghost" onclick="openGlobalRanking()">글로벌 랭킹</button>':''}<button class="ghost" onclick="openSettings()">게임 설정</button><button class="ghost" onclick="openRetire()">은퇴 설계</button></div></div></div>
 
     <div class="section"><h3>자동 적립</h3><div class="panel">${autoHtml}</div></div>
 
@@ -2308,7 +2353,7 @@ function portfolio(){
       <div class="hof">${hofRows}</div>
     </div></div>
 
-    <div class="section"><h3>클라우드 저장·랭킹</h3><div class="panel" id="cloud-panel">${cloudPanelHTML()}</div></div>
+    ${cloudConfigured()?`<div class="section"><h3>클라우드 저장·랭킹</h3><div class="panel" id="cloud-panel">${cloudPanelHTML()}</div></div>`:""}
 
     <h3 style="margin-top:25px;">최근 거래 로그 (최대 20개 기록)</h3>
     <div class="log-box">${logsHtml || '<div style="color:#aaa;">로그가 없습니다.</div>'}</div>
@@ -2588,9 +2633,9 @@ function tickSeconds() {
     checkAchievements();
     ensureDaily();
   }
-  // 자동 적립 규칙
+  // 자동 매매(익절/손절) → 매도가 없을 때만 자동 적립을 실행합니다.
   if(state.auto && state.auto.enabled && state.marketSeconds % Math.max(15,state.auto.every||60) === 0){
-    autoInvest();
+    if(!autoSellRules()) autoInvest();
   }
 }
 
@@ -2608,13 +2653,13 @@ function tickMarket(){
     }
     let noise=(Math.random()-.50)*s.vol;
     
-    // 기본 크래시 및 급등 확률 기본 밸런스 조정
-    let crash=Math.random()<.10 ? -(Math.random()*.10+.02) : 0;
-    let surge=Math.random()<.08 ? Math.random()*.09+.02 : 0;
+    // 기본 크래시 및 급등 확률: 5초 틱에서 기대 상승/하락을 서로 상쇄합니다.
+    let crash=Math.random()<.04 ? -(Math.random()*.04+.01) : 0;
+    let surge=Math.random()<.04 ? Math.random()*.04+.01 : 0;
     
-    // 장기 성장 유동성 바이어스
-    let longBias=.0015+Math.random()*.002;
-    let recovery=s.price<s.start ? .004 : 0;
+    // 장기 성장 유동성 바이어스(시간 압축 대비 완만하게)
+    let longBias=.0003+Math.random()*.0002;
+    let recovery=s.price<s.start ? .001 : 0;
     
     // [시장 대형 이벤트 시스템 반영]
     if(state.currentEvent === "AI_BOOM" && (s.theme.includes("AI") || s.theme.includes("반도체"))) {
@@ -2632,11 +2677,17 @@ function tickMarket(){
       longBias -= 0.02;
       noise *= 1.8; // 변동성 극한 확장
     }
+    // 시작가 대비 1.6배를 넘으면 차익 실현 압력으로 과열을 식힙니다.
+    if(s.price > s.start*1.6) longBias -= .002;
 
     let next=s.price*(1+noise+crash+surge+longBias+recovery);
+    // 한 종목이 몇 시간 만에 수십 배가 되는 것을 막는 상한(시작가 2.2배)입니다.
+    next=Math.min(next, s.start*2.2);
     
     // 연도 및 진행별 하방 지지선 하향 조정으로 무조건적인 우상향 제거, 리스크 강화
-    let softFloor=s.start*(0.4 + state.tick*.0002);
+    // 시간이 지날수록 하한선이 무한히 올라가 모든 종목을 강제로 상승시키던 문제를 막습니다.
+    // 시작가의 40%에서 출발해 최대 80%까지만 완만히 올라가고, 그 뒤로는 고정됩니다.
+    let softFloor=s.start*(0.4 + Math.min(0.4, state.tick*.0002));
     
     const isForeign = ["foreign","mega","special"].includes(s.group);
     if(isForeign){
@@ -2726,6 +2777,8 @@ function interest(){
         let excess = principal - 30000000;
         effectiveAmount = 30000000 + (excess * 0.5);
       }
+      // 3억원을 넘는 예금은 이자 계산 기준 원금을 3억원으로 제한합니다.
+      effectiveAmount = Math.min(MAX_EFFECTIVE_DEPOSIT, effectiveAmount);
       
       // 15초 단위 반영 스케일: 연이율 × 0.015 (예금 4.2% → 15초당 0.063%, 시간당 약 +16%)
       let calculatedInterest = effectiveAmount * (p.rate * 0.015); 
