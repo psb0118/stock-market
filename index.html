@@ -77,6 +77,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .dash-meta{display:flex;gap:6px;flex-wrap:wrap}
 .trend{height:118px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px}
 .trend svg{display:block;width:100%;height:100%}
+.trend-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:100%;color:#94a3b8;font-size:12px;text-align:center;line-height:1.4}
 .alloc-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#edf2f7}
 .alloc-bar span{display:block;height:100%}
 .alloc-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#475569}
@@ -285,8 +286,10 @@ function recordAssetHistory(){
 }
 
 function assetTrendSVG(){
-  const pts=assetHistory.points.length>1 ? assetHistory.points : [{v:START_CASH},{v:totalAssetsKRW()}];
-  const vals=pts.map(p=>p.v);
+  // 기록이 2개 미만이면 선을 그리지 않습니다.
+  // (시작 금액을 첫 점으로 끼워 넣으면 새로고침 직후 가짜 상승/하락 선이 보입니다.)
+  if(assetHistory.points.length<2) return "";
+  const vals=assetHistory.points.map(p=>p.v);
   const min=Math.min(...vals),max=Math.max(...vals),span=(max-min)||Math.max(1,Math.abs(max)*0.01);
   const w=600,h=120,step=w/Math.max(1,vals.length-1);
   const coords=vals.map((v,i)=>`${(i*step).toFixed(1)},${(h-((v-min)/span)*(h-6)-3).toFixed(1)}`).join(" ");
@@ -796,6 +799,7 @@ function portfolio(){
   const peak=Math.max(assetHistory.peak||0,total);
   const firstV=assetHistory.points.length?assetHistory.points[0].v:total;
   const changePct=firstV>0?(total-firstV)/firstV:0;
+  const hasTrend=assetHistory.points.length>=2;
   const expDiv=expectedDividend();
   const alloc=allocation();
   const allocBar=alloc.parts.map(p=>p.pct>0.4?`<span style="width:${p.pct.toFixed(2)}%;background:${p.color}" title="${p.label} ${p.pct.toFixed(1)}%"></span>`:"").join("");
@@ -842,11 +846,13 @@ function portfolio(){
       <div class="dash-top">
         <div><small>순자산 추이 (최근 45분)</small><b class="dash-total" title="${won(total)}">${wonShort(total)}</b></div>
         <div class="dash-meta">
-          <span class="pill">구간 수익률 <b class="${changePct>=0?"up":"down"}">${pct(changePct)}</b></span>
+          ${hasTrend
+            ? `<span class="pill">구간 수익률 <b class="${changePct>=0?"up":"down"}">${pct(changePct)}</b></span>`
+            : `<span class="pill">기록 수집 중</span>`}
           <span class="pill">고점 ${wonShort(peak)}</span>
         </div>
       </div>
-      <div class="trend">${assetTrendSVG()}</div>
+      <div class="trend">${assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 이곳에 그래프가 표시됩니다.</small></div>`}</div>
       <div class="alloc-bar" role="img" aria-label="자산 배분">${allocBar||'<span style="width:100%;background:#e7ebef"></span>'}</div>
       <div class="alloc-legend">${allocLegend}</div>
       <div class="dash-foot">

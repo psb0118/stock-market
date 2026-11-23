@@ -355,6 +355,16 @@ const RESET = total => `
   g.run('for(let i=0;i<300;i++){ state.cash += 1000; recordAssetHistory(); } 1');
   check('추이 기록은 180개로 제한', g.run('assetHistory.points.length') === 180, g.run('assetHistory.points.length'));
 
+  // 새로고침 직후처럼 기록이 1개뿐이면 시작 금액을 끼워 넣은 가짜 선을 그리지 않는다.
+  g.run('assetHistory.points = []; recordAssetHistory(); 1');
+  check('기록 1개면 추이선 없음', g.run('assetTrendSVG()') === '', g.run('assetTrendSVG()'));
+  g.run('portfolio(); 1');
+  const trendHtml = g.run("document.getElementById('portfolio').innerHTML");
+  check('기록 1개면 그래프 대신 안내', trendHtml.includes('자산 기록을 모으는 중') && !trendHtml.includes('<polyline'));
+  check('기록 1개면 구간 수익률 숨김', trendHtml.includes('기록 수집 중') && !trendHtml.includes('구간 수익률'));
+  g.run('state.cash += 1000000; recordAssetHistory(); 1');
+  check('기록 2개면 추이선 표시', g.run('assetTrendSVG()').includes('<polyline') === true);
+
   // 자산 배분: 현금 500만 + 주식 500만 → 각 50%
   g.run(RESET(5000000) + `
     state.loan = 0; state.usd = 0;
