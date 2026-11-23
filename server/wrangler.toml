@@ -1,0 +1,15 @@
+name = "mp-cloud"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+# 배포 전에 `wrangler d1 create mp-leaderboard`로 만든 database_id로 교체하세요.
+# 로컬(wrangler dev --local)에서는 이 값이 그대로 로컬 SQLite를 가리킵니다.
+[[d1_databases]]
+binding = "DB"
+database_name = "mp-leaderboard"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+# GitHub Pages + 로컬 정적 서버만 허용합니다. 배포 후 실제 주소로 바꾸세요.
+ALLOWED_ORIGINS = "https://psb0118.github.io,http://127.0.0.1:3000,http://localhost:3000"

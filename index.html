@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <meta name="theme-color" content="#17202b" />
+<!-- 클라우드 저장·리더보드 Worker 주소. 비워 두면 기능이 꺼집니다. -->
+<meta name="cloud-api" content="" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <title>머니 플레이그라운드</title>
@@ -154,6 +156,11 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
+.cloud-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.rank{display:grid;gap:6px;margin-top:8px}
+.rank-row{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center;padding:7px 9px;border-radius:7px;background:#f5f8fa;font-size:13px}
+.rank-row.me{background:#e7f5ef;font-weight:700}
+.rank-row b{color:#0f766e}
 </style>
 </head>
 <body>
@@ -334,7 +341,8 @@ const state={
   auto: {enabled:false, stockPct:60, minCash:1000000, every:60},
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
-  seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈"
+  seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈",
+  cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""}
 };
 
 // anchor는 아주 천천히 움직이는 환율 추세선입니다(완만한 추세용).
@@ -1018,6 +1026,212 @@ function seasonReset(){
   portfolio();
 }
 
+// ── 클라우드 저장·월간 리더보드 ─────────────────────────────────
+const CLOUD_CREDS_KEY="mp_cloud_creds";
+let CLOUD_API="";
+try{
+  const cm=document.querySelector('meta[name="cloud-api"]');
+  CLOUD_API=(cm && cm.getAttribute ? (cm.getAttribute("content")||"") : "").trim().replace(/\/+$/,"");
+}catch(e){ CLOUD_API=""; }
+let cloudBoard=null, cloudBusy=false;
+
+function cloudConfigured(){ return !!CLOUD_API; }
+function setCloudApi(url){ CLOUD_API=String(url||"").trim().replace(/\/+$/,""); try{ portfolio(); }catch(e){} }
+function cloudCreds(){
+  try{ const v=JSON.parse(localStorage.getItem(CLOUD_CREDS_KEY)||"null"); return v&&v.playerId&&v.token?v:null; }catch(e){ return null; }
+}
+function setCloudCreds(v){
+  try{ if(v) localStorage.setItem(CLOUD_CREDS_KEY,JSON.stringify(v)); else localStorage.removeItem(CLOUD_CREDS_KEY); }catch(e){}
+}
+function seasonKey(){ return new Date().toISOString().slice(0,7); }
+function cloudErr(e){
+  const map={no_api:"서버 주소가 설정되지 않았습니다.",unauthorized:"연결이 만료되었습니다. 다시 연결해 주세요.",nickname_taken:"이미 사용 중인 닉네임입니다.",rate_limited:"요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",bad_nickname:"닉네임은 한글/영문/숫자 2~16자입니다.",conflict:"서버에 더 최신 저장이 있습니다.",too_large:"저장 파일이 너무 큽니다.",bad_save:"서버가 저장 데이터를 거부했습니다.",bad_json:"요청 형식이 올바르지 않았습니다.",no_save:"서버에 저장된 진행이 없습니다."};
+  if(e&&e.status===429) return map.rate_limited;
+  if(e&&(map[e.code]||map[e.message])) return map[e.code]||map[e.message];
+  return "네트워크 오류가 발생했습니다. 연결을 확인해 주세요.";
+}
+
+async function cloudCall(path,{method="GET",body,auth=true,timeout=8000}={}){
+  if(!CLOUD_API) throw Object.assign(new Error("no_api"),{code:"no_api"});
+  const creds=cloudCreds();
+  const headers={"content-type":"application/json"};
+  if(auth && creds) headers.authorization="Bearer "+creds.token;
+  const ctrl=typeof AbortController!=="undefined"?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeout):0;
+  try{
+    const res=await fetch(CLOUD_API+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:ctrl?ctrl.signal:undefined});
+    const txt=await res.text();
+    let data=null; try{ data=txt?JSON.parse(txt):null; }catch(e){}
+    if(!res.ok){
+      const err=new Error((data&&data.error)||("http_"+res.status));
+      err.code=data&&data.error; err.status=res.status; err.data=data;
+      throw err;
+    }
+    return data;
+  } finally { if(timer) clearTimeout(timer); }
+}
+
+async function cloudRegister(){
+  if(!CLOUD_API){ notify("system","클라우드","서버 주소가 설정되지 않았습니다."); return; }
+  const input=document.getElementById("cloud-name");
+  const nickname=String(input&&input.value||"").trim();
+  if(!/^[\p{L}\p{N} ._-]{2,16}$/u.test(nickname)){ alert("닉네임은 한글/영문/숫자 2~16자로 입력해 주세요."); return; }
+  if(cloudBusy) return;
+  cloudBusy=true; cloudRenderPanel("연결 중…");
+  try{
+    const out=await cloudCall("/api/register",{method:"POST",auth:false,body:{nickname}});
+    setCloudCreds({playerId:out.playerId,token:out.token,nickname:out.nickname});
+    state.cloud=Object.assign({},state.cloud,{nickname:out.nickname,revision:0,lastSync:0});
+    saveGame();
+    cloudBusy=false;
+    notify("system","클라우드 연결",`${out.nickname} 님으로 연결했습니다.`);
+    await cloudUpload(false);
+    await cloudRefreshBoard();
+  }catch(e){
+    cloudBusy=false;
+    alert("연결하지 못했습니다: "+cloudErr(e));
+    cloudRenderPanel();
+  }
+}
+
+async function cloudUpload(force){
+  if(!CLOUD_API){ notify("system","클라우드","서버 주소가 설정되지 않았습니다."); return; }
+  if(!cloudCreds()){ notify("system","클라우드","먼저 닉네임으로 연결해 주세요."); return; }
+  if(cloudBusy) return;
+  cloudBusy=true; cloudRenderPanel("동기화 중…");
+  try{
+    const data=buildSaveData();
+    const out=await cloudCall("/api/save",{method:"PUT",body:{data,revision:state.cloud.revision||0,force:!!force}});
+    state.cloud=Object.assign({},state.cloud,{revision:out.revision,lastSync:Date.now()});
+    saveGame();
+    let extra="";
+    try{ const s=await cloudSubmitScore(); if(s&&s.rank) extra=` · 순위 ${s.rank}위`; }catch(e){}
+    cloudBusy=false;
+    notify("system","클라우드 저장",`서버에 저장했습니다.${extra}`);
+    await cloudRefreshBoard();
+  }catch(e){
+    cloudBusy=false;
+    if(e.status===409){
+      if(confirm("서버에 이 기기보다 최신 저장이 있습니다.\n확인을 누르면 이 기기 것으로 덮어쓰고, 취소하면 서버 저장을 내려받습니다.")) return cloudUpload(true);
+      return cloudDownload();
+    }
+    notify("system","클라우드 저장 실패",cloudErr(e));
+    cloudRenderPanel(cloudErr(e));
+  }
+}
+
+async function cloudSubmitScore(){
+  const out=await cloudCall("/api/score",{method:"POST",body:{season:seasonKey(),score:Math.round(totalAssetsKRW())}});
+  state.cloud=Object.assign({},state.cloud,{rank:out.rank,best:out.best,season:out.season});
+  saveGame();
+  return out;
+}
+
+async function cloudDownload(){
+  if(!CLOUD_API||!cloudCreds()||cloudBusy) return;
+  if(!confirm("서버에 저장된 진행으로 이 기기를 덮어쓸까요?\n현재 진행은 사라집니다.")) return;
+  cloudBusy=true; cloudRenderPanel("내려받는 중…");
+  try{
+    const out=await cloudCall("/api/save");
+    if(!out||!out.data) throw Object.assign(new Error("no_save"),{code:"no_save"});
+    applySaveData(out.data);
+    state.cloud=Object.assign({},state.cloud,{revision:out.revision,lastSync:Date.now()});
+    saveGame(); banking(); fxPage(); news(); portfolio(); update(); updateBell(); updateSpeedUI();
+    cloudBusy=false;
+    notify("system","클라우드 복원","서버 저장을 불러왔습니다.");
+    await cloudRefreshBoard();
+  }catch(e){
+    cloudBusy=false;
+    alert(e.code==="no_save"||e.status===404?"서버에 저장된 진행이 아직 없습니다.":"내려받지 못했습니다: "+cloudErr(e));
+    cloudRenderPanel();
+  }
+}
+
+async function cloudRefreshBoard(){
+  if(!CLOUD_API||cloudBusy) return;
+  try{
+    const q=`/api/leaderboard?season=${encodeURIComponent(seasonKey())}&limit=10`;
+    cloudBoard=await cloudCall(q,{auth:!!cloudCreds()});
+    if(cloudBoard&&cloudBoard.me) state.cloud=Object.assign({},state.cloud,{rank:cloudBoard.me.rank,best:cloudBoard.me.score});
+    cloudRenderPanel();
+  }catch(e){ cloudRenderPanel(cloudErr(e)); }
+}
+
+function cloudSetAuto(on){
+  state.cloud=Object.assign({},state.cloud,{auto:!!on});
+  saveGame();
+  if(on) cloudAutoTick(true);
+  cloudRenderPanel();
+}
+
+function cloudUnlink(){
+  if(!confirm("이 기기에서 클라우드 연결을 해제할까요?\n서버에 저장된 데이터는 남습니다.")) return;
+  setCloudCreds(null);
+  state.cloud=Object.assign({},state.cloud,{nickname:"",auto:false,revision:0,lastSync:0,rank:0,best:0});
+  cloudBoard=null;
+  saveGame();
+  cloudRenderPanel();
+}
+
+function cloudAutoTick(force){
+  if(!CLOUD_API||cloudBusy) return;
+  if(!cloudCreds()) return;
+  if(!force && !(state.cloud&&state.cloud.auto)) return;
+  if(!force && Date.now()-(state.cloud.lastSync||0)<60000) return;
+  if(typeof navigator!=="undefined" && navigator.onLine===false) return;
+  cloudUpload(false);
+}
+
+function cloudBoot(){
+  if(CLOUD_API && cloudCreds()) cloudRefreshBoard();
+}
+
+function escHtml(s){
+  return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function cloudPanelHTML(msg){
+  if(!CLOUD_API){
+    return `<p style="font-size:13px;">클라우드 저장과 월간 리더보드는 아직 꺼져 있습니다. <code>meta[name=cloud-api]</code>에 Worker 주소를 넣으면 켜집니다.</p>`;
+  }
+  const creds=cloudCreds();
+  if(!creds){
+    return `<div class="inline-form">
+      <label>닉네임<input id="cloud-name" maxlength="16" placeholder="2~16자"></label>
+      <label>&nbsp;<button class="buy" onclick="cloudRegister()">연결하기</button></label>
+    </div>
+    <p style="font-size:12px;margin-top:8px;">닉네임과 순자산 순위가 공개됩니다. 비밀번호는 없고, 이 기기에만 저장되는 열쇠로 저장/복원합니다.</p>
+    ${msg?`<p style="font-size:12px;color:#b54708;">${escHtml(msg)}</p>`:""}`;
+  }
+  const c=state.cloud||{};
+  const last=c.lastSync?new Date(c.lastSync).toLocaleTimeString("ko-KR"):"아직 없음";
+  const rows=((cloudBoard&&cloudBoard.entries)||[]).map(e=>`<div class="rank-row${e.playerId===creds.playerId?" me":""}"><b>${e.rank}</b><span>${escHtml(e.nickname)}</span><span>${won(e.score)}</span></div>`).join("");
+  const me=(cloudBoard&&cloudBoard.me)||(c.rank?{rank:c.rank,score:c.best}:null);
+  return `<div class="cloud-head">
+      <div><b>${escHtml(creds.nickname)}</b> <span class="pill">연결됨</span></div>
+      <div style="font-size:12px;">마지막 동기화 ${last} · 서버 저장 #${c.revision||0}</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+      <button class="buy" onclick="cloudUpload(false)">지금 올리기</button>
+      <button class="ghost" onclick="cloudDownload()">서버에서 내려받기</button>
+      <button class="ghost" onclick="cloudRefreshBoard()">순위 새로고침</button>
+      <button class="sell" onclick="cloudUnlink()">연결 해제</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;">
+      <input type="checkbox" ${c.auto?"checked":""} onchange="cloudSetAuto(this.checked)"> 60초마다 자동으로 서버에 저장
+    </label>
+    ${msg?`<p style="font-size:12px;color:#b54708;">${escHtml(msg)}</p>`:""}
+    <h3 style="margin:16px 0 8px;font-size:15px;">월간 리더보드 · ${seasonKey()}</h3>
+    ${me?`<p style="font-size:13px;">내 순위 <b>${me.rank}위</b> · ${won(me.score)}</p>`:`<p style="font-size:12px;">순위를 불러오는 중입니다.</p>`}
+    <div class="rank">${rows||`<div style="font-size:12px;">아직 등록된 순위가 없습니다.</div>`}</div>
+    <p style="font-size:11px;color:#667085;margin-top:8px;">서버는 클라이언트가 보낸 순자산을 그대로 기록하므로 100% 위조 방지는 아닙니다. 시즌은 매월 1일(UTC)에 바뀝니다.</p>`;
+}
+
+function cloudRenderPanel(msg){
+  const el=document.getElementById("cloud-panel");
+  if(el) el.innerHTML=cloudPanelHTML(msg);
+}
+
 function init(){
   nav();
   stockPage("domestic","국내 주식","한국 시장 대표 종목입니다. 원화(KRW)로 거래됩니다.");
@@ -1032,7 +1246,7 @@ function init(){
   banking();fxPage();news();portfolio();
   update();
   recordAssetHistory();
-  ensureDaily(); checkAchievements(); updateSpeedUI(); updateBell();
+  ensureDaily(); checkAchievements(); updateSpeedUI(); updateBell(); cloudBoot();
 
   // 1초 드라이버: 배속(1x/3x/10x)·일시정지를 한곳에서 처리합니다.
   setInterval(gameLoop,1000);
@@ -1047,6 +1261,7 @@ function init(){
 }
 
 function gameLoop(){
+  cloudAutoTick();
   if(state.paused){ updateSpeedUI(); return; }
   const n=Math.max(1,Math.min(10,state.speed||1));
   for(let i=0;i<n;i++){
@@ -1152,6 +1367,9 @@ function applySaveData(data) {
   if(typeof state.paused!=="boolean") state.paused=false;
   if(!Number.isFinite(state.seasonBase) || state.seasonBase<=0) state.seasonBase=totalAssetsKRW();
   if(!Number.isFinite(state.seasonBaseIndex) || state.seasonBaseIndex<=0) state.seasonBaseIndex=marketIndex();
+  const CLOUD_DEFAULT={nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""};
+  state.cloud=Object.assign({},CLOUD_DEFAULT,(state.cloud&&typeof state.cloud==="object")?state.cloud:{});
+  delete state.cloud.token; // 기기 토큰은 localStorage에만 둠(내보내기 파일에 포함 금지)
   state.lastGrade=currentGrade();
 }
 
@@ -1531,6 +1749,8 @@ function portfolio(){
       <h3 style="margin:16px 0 8px;font-size:16px;">명예의 전당 (최근 시즌)</h3>
       <div class="hof">${hofRows}</div>
     </div></div>
+
+    <div class="section"><h3>클라우드 저장·랭킹</h3><div class="panel" id="cloud-panel">${cloudPanelHTML()}</div></div>
 
     <h3 style="margin-top:25px;">최근 거래 로그 (최대 20개 기록)</h3>
     <div class="log-box">${logsHtml || '<div style="color:#aaa;">로그가 없습니다.</div>'}</div>

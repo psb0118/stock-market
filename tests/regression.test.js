@@ -526,9 +526,37 @@ const RESET = total => `
   const root = path.join(__dirname, '..');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
   check('PWA 매니페스트', manifest.name.includes('머니') && manifest.display === 'standalone');
-  check('PWA 서비스워커 파일', fs.readFileSync(path.join(root, 'sw.js'), 'utf8').includes('addEventListener("fetch"'));
+  const swSource = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  check('PWA 서비스워커 파일', swSource.includes('addEventListener("fetch"'));
+  check('서비스워커는 API 응답을 캐시하지 않음', swSource.includes('url.pathname.includes("/api/")') && swSource.includes('url.origin !== self.location.origin'));
   check('PWA 아이콘', fs.existsSync(path.join(root, 'icon.svg')));
   check('index.html PWA 연결', html.includes('rel="manifest"') && html.includes('serviceWorker'));
+}
+
+// ── 9. 클라우드 저장·리더보드 ──────────────────
+{
+  const g = createGame();
+  check('클라우드 기본 비활성', g.run('cloudConfigured()') === false);
+  g.run('setCloudApi("http://127.0.0.1:8787/")');
+  check('서버 주소 설정(끝 슬래시 제거)', g.run('cloudConfigured()') === true && g.run('CLOUD_API') === 'http://127.0.0.1:8787', g.run('CLOUD_API'));
+  check('시즌 키 YYYY-MM', /^\d{4}-\d{2}$/.test(g.run('seasonKey()')), g.run('seasonKey()'));
+  g.run('setCloudCreds({playerId:"p1",token:"a".repeat(64),nickname:"테스터"}); 1');
+  check('연결 정보 저장', g.run('cloudCreds().nickname') === '테스터');
+  check('내보내기 데이터에 토큰 없음', !g.run('JSON.stringify(buildSaveData())').includes('a'.repeat(64)));
+  g.run('setCloudCreds(null); 1');
+  check('연결 해제', g.run('cloudCreds()') === null);
+  g.run('applySaveData({state:{cash:1000000},stocks:[],products:[]}); 1');
+  check('구버전 세이브에 클라우드 기본값', g.run('state.cloud.auto===false && state.cloud.revision===0'));
+  g.run('state.cloud={nickname:"x",auto:true,revision:4}; saveGame(); state.cloud={}; loadGame(); 1');
+  check('클라우드 설정 저장/복원', g.run('state.cloud.nickname') === 'x' && g.run('state.cloud.revision') === 4);
+  g.run('setCloudApi(""); 1');
+  check('클라우드 패널: 서버 미설정 안내', g.run('cloudPanelHTML()').includes('꺼져'));
+  g.run('setCloudApi("http://127.0.0.1:8787"); 1');
+  check('클라우드 패널: 연결 폼', g.run('cloudPanelHTML()').includes('cloud-name'));
+  g.run('setCloudCreds({playerId:"p1",token:"a".repeat(64),nickname:"테스터"}); state.cloud={nickname:"테스터",auto:false,revision:2,lastSync:0}; 1');
+  const panel = g.run('cloudPanelHTML()');
+  check('클라우드 패널: 연결됨·순위', panel.includes('지금 올리기') && panel.includes('월간 리더보드'));
+  check('클라우드 패널: 닉네임 이스케이프', g.run('escHtml("<b>x</b>")') === '&lt;b&gt;x&lt;/b&gt;');
 }
 
 const failed = results.filter(r => !r.pass);

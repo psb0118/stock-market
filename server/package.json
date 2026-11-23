@@ -1,0 +1,15 @@
+{
+  "name": "mp-cloud",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "db:local": "wrangler d1 execute mp-leaderboard --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute mp-leaderboard --remote --file=./schema.sql",
+    "smoke": "node smoke.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,99 @@
+# 클라우드 세이브 · 리더보드 백엔드 (Cloudflare Workers + D1)
+
+정적 GitHub Pages 게임에 **기기 단위 클라우드 저장**과 **월간 순자산 리더보드**를 붙이는 서버입니다.
+배포하지 않은 상태이며, 로컬(Wrangler/workerd + 로컬 D1)에서 전부 검증할 수 있습니다.
+
+## 구성
+
+| 파일 | 역할 |
+|---|---|
+| `src/index.js` | Worker API (CORS, 토큰 인증, 저장/복원, 점수, 순위, 레이트 리밋) |
+| `schema.sql` | D1 테이블 4개(`players`, `saves`, `scores`, `rate`) |
+| `wrangler.toml` | 로컬 개발 설정. `database_id`는 배포 시 교체 |
+| `smoke.mjs` | 로컬 서버용 API 통합 테스트 30여 건 |
+| `package.json` | `npm run dev` / `db:local` / `smoke` / `deploy` |
+
+## API
+
+| 메서드 | 경로 | 인증 | 설명 |
+|---|---|---|---|
+| GET | `/api/health` | - | 상태 확인 |
+| POST | `/api/register` | - | 닉네임으로 플레이어 생성 → `playerId`, `token`(1회) |
+| PUT | `/api/profile` | Bearer | 닉네임 변경 |
+| GET | `/api/save` | Bearer | 클라우드 저장 조회 |
+| PUT | `/api/save` | Bearer | 저장 업로드 (`revision` 충돌 시 409, `force:true`로 덮어쓰기) |
+| POST | `/api/score` | Bearer | 시즌 최고 순자산 등록(최댓값 유지) |
+| GET | `/api/leaderboard?season=YYYY-MM&limit=10` | 선택 | 상위 순위 + (토큰 있으면) 내 순위 |
+
+- 인증은 **서버가 발급한 64자 hex 기기 토큰**입니다. 비밀번호·이메일·쿠키가 없습니다.
+- 서버에는 토큰의 SHA-256만 저장합니다. 토큰은 가입 응답에서 한 번만 내려갑니다.
+- 저장 본문 상한 320KB(직렬화 300KB), 점수 상한 1e15, 닉네임 2~16자(한글/영문/숫자/공백/`._-`).
+- **닉네임은 중복될 수 있습니다.** 계정·비밀번호가 없어 이름을 선점하면 연결을 해제한 뒤 같은 이름으로 시작할 수 없기 때문입니다. 신원은 기기 토큰입니다.
+- 레이트 리밋: IP당 가입 10회/시간, 리더보드 120회/분, 플레이어당 저장 30회/분·점수 10회/분.
+
+## 로컬 실행
+
+```bash
+cd server
+npm install                 # wrangler 설치
+npm run db:local            # 로컬 D1에 schema.sql 적용
+npm run dev                 # http://127.0.0.1:8787 (workerd)
+# 다른 터미널에서
+npm run smoke               # API 통합 테스트
+```
+
+로컬 D1 데이터는 `server/.wrangler/state`에 남습니다. 초기화하려면 그 폴더를 지우고 `db:local`을 다시 실행하세요.
+
+## 게임 연결
+
+`index.html`의 `<head>`에 있는 `meta[name="cloud-api"]` 값을 Worker 주소로 바꾸면 클라우드 섹션이 켜집니다.
+
+```html
+<meta name="cloud-api" content="https://mp-cloud.<계정>.workers.dev">
+```
+
+비워 두면(현재 상태) 클라우드 기능은 꺼져 있고 기존 게임은 그대로 동작합니다.
+로컬 테스트에서는 페이지에서 `setCloudApi("http://127.0.0.1:8787")`를 호출하면 됩니다.
+
+## 배포 절차 (승인 후)
+
+```bash
+cd server
+npx wrangler login                          # 브라우저 로그인(대화형)
+npx wrangler d1 create mp-leaderboard       # 출력된 database_id 복사
+# wrangler.toml의 database_id를 위 값으로 교체
+npm run db:remote                           # 원격 D1에 스키마 적용
+npx wrangler deploy                         # 예: https://mp-cloud.<계정>.workers.dev
+```
+
+배포 후:
+1. `wrangler.toml`의 `ALLOWED_ORIGINS`를 실제 게임 주소로 확인/수정
+   (기본값 `https://psb0118.github.io,http://127.0.0.1:3000,http://localhost:3000`).
+   커스텀 도메인을 쓰면 그 도메인도 추가하고 다시 `wrangler deploy`.
+2. `index.html`의 `meta[name="cloud-api"]`에 Worker URL 입력 → 커밋/푸시.
+3. 배포된 게임에서 닉네임 연결 → 올리기 → 다른 브라우저/시크릿 창에서 내려받기로 복원 확인.
+
+## 승인이 필요한 것
+
+- Cloudflare 계정 로그인/약관 동의 (`wrangler login`)
+- D1 데이터베이스 생성(무료 한도 내)
+- Worker를 **공개 URL**로 배포 (누구나 접근 가능한 API가 됩니다)
+- 리더보드에 **닉네임과 순자산이 공개**된다는 점
+- 게임 페이지(`psb0118.github.io`)를 CORS 허용 오리진으로 등록
+- 기기 토큰 분실 시 복구 수단이 없다는 점(서버에 평문 토큰 없음)
+
+## 보안/한계 (반드시 인지)
+
+- **점수는 클라이언트가 보낸 값을 그대로 저장합니다.** 순자산 위조가 가능하므로 "친선 리더보드"로만 신뢰하세요. 진짜 경쟁 랭킹은 서버가 게임을 재실행/검증해야 합니다.
+- 기기 토큰을 가진 사람은 그 플레이어의 저장을 읽고 덮어쓸 수 있습니다. 토큰은 `localStorage`에만 두고, 내보내기 파일에는 포함하지 않습니다.
+- 닉네임이 중복될 수 있으므로 순위표에서 같은 이름이 보일 수 있습니다(내 행은 기기 id로 구분해 강조).
+- 서버는 저장 데이터의 형식만 검사하고 내용(현금·주식 수)은 검증하지 않습니다.
+- 시즌은 UTC 기준 매월 1일에 바뀝니다. 게임 내 수동 "시즌 종료"와는 별개입니다.
+- 무료 한도(Worker 요청/일, D1 저장/읽기) 안에서 운영하세요. 저장은 1인 1행(최대 300KB)입니다.
+- `rate` 테이블은 계속 쌓입니다. 가끔 `DELETE FROM rate WHERE window_start < unixepoch() - 86400;`로 정리하세요.
+
+## 테스트 범위
+
+`smoke.mjs`가 확인하는 것: health, CORS 허용/차단, 닉네임 검증·중복 허용, 인증 401, 저장 없음 404,
+업로드 revision 증가, 충돌 409, force 덮어쓰기, 잘못된 저장 400, 과대 저장 413,
+시즌/점수 검증, 점수 등록·최고 기록 유지, 리더보드 정렬·내 순위·limit·총원, 닉네임 변경/중복.
