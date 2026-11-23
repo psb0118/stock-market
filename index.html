@@ -232,6 +232,7 @@ function addLog(text) {
 
 function saveGame() {
   const saveData = {
+    costBasisIncludesFee: true, // 평단가가 매수 수수료를 포함한 취득원가 형식인지 표시(구버전 데이터 마이그레이션용)
     state: state,
     fx: fx,
     stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove})),
@@ -254,6 +255,8 @@ function loadGame() {
           s.own = ls.own || 0;
           s.price = ls.price || s.start;
           s.avgBuy = ls.avgBuy || 0;
+          // 구버전 저장 데이터의 평단가에는 매수 수수료가 빠져 있으므로 취득원가로 한 번만 환산
+          if(data.costBasisIncludesFee !== true && s.avgBuy > 0) s.avgBuy *= (1 + FEE_STOCK);
           s.realizedProfit = ls.realizedProfit || 0;
           s.lastMove = ls.lastMove || 0;
         }
@@ -327,7 +330,7 @@ function card(s){
     <p data-change="${s.id}">시작가 대비 +0.00%</p>
     <div class="spark"><span data-spark="${s.id}"></span></div>
     <div style="margin-top:8px; font-size:12px; color:#475569;">
-      평단가: <span data-avg="${s.id}">-</span> | 수익률: <span data-roipct="${s.id}">0%</span>
+      평단(수수료포함): <span data-avg="${s.id}">-</span> | 수익률: <span data-roipct="${s.id}">0%</span>
     </div>
     <div class="mini">
       <div><small>보유</small><b data-own="${s.id}">0주</b></div>
@@ -392,7 +395,7 @@ function portfolio(){
     
     return `<div class="row" style="padding:10px 0; border-bottom:1px solid #edf2f7;">
       <b>${s.name}</b>
-      <span>${s.own}주 (평단:${avgPrice})</span>
+      <span>${s.own}주 (평단(수수료포함):${avgPrice})</span>
       <span>현재:${unitPrice}</span>
       <span class="${profitPct>=0?"up":"down"}">수익률: ${pct(profitPct)}</span>
       <span style="font-size:12px; color:#667085;">실현손익: ${won(s.realizedProfit)}</span>
@@ -413,7 +416,7 @@ function portfolio(){
     </div>
     
     <div class="portfolio">
-      <h3>주식 투자 현황 (수수료 0.15% 차감 반영)</h3>
+      <h3>주식 투자 현황 (평단·수익률·실현손익 모두 매수 수수료 0.15% 포함 기준)</h3>
       ${stockRows}
       <h3 style="margin-top:20px;">금융상품 가입 현황</h3>
       ${prodRows||'<div class="row"><b>가입된 상품 없음</b></div>'}
@@ -502,14 +505,14 @@ function buy(id){
     let cost = s.price * (1 + FEE_STOCK);
     if(state.usd < cost) return alert("수수료 포함 달러(USD) 잔고가 부족합니다.");
     state.usd -= cost;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * 1)) / (s.own + 1);
+    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + FEE_STOCK))) / (s.own + 1);
     s.own += 1;
     addLog(`${s.name} 1주 매수 (${usdStr(s.price)}, 수수료 포함)`);
   }else{
     let cost = s.price * (1 + FEE_STOCK);
     if(state.cash < cost) return alert("수수료 포함 원화 현금이 부족합니다.");
     state.cash -= cost;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * 1)) / (s.own + 1);
+    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + FEE_STOCK))) / (s.own + 1);
     s.own += 1;
     addLog(`${s.name} 1주 매수 (${won(s.price)}, 수수료 포함)`);
   }
@@ -524,7 +527,8 @@ function sell(id){
   const isForeign = ["foreign","mega","special"].includes(s.group);
   
   let revenue = s.price * (1 - FEE_STOCK);
-  let profit = (s.price - s.avgBuy) - (s.price * FEE_STOCK) - (s.avgBuy * FEE_STOCK);
+  // 평단가가 매수 수수료를 포함한 취득원가이므로 실현손익 = 순수취금액 - 취득원가
+  let profit = revenue - s.avgBuy;
   
   if(isForeign) {
     state.usd += revenue;
@@ -552,7 +556,7 @@ function fullBuy(id){
     let count = Math.floor(state.usd / singleCost);
     if(count<=0) return alert("달러(USD) 잔고가 부족합니다.");
     state.usd -= singleCost * count;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * count)) / (s.own + count);
+    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + FEE_STOCK)) * count) / (s.own + count);
     s.own += count;
     addLog(`${s.name} ${count}주 풀매수`);
   }else{
@@ -560,7 +564,7 @@ function fullBuy(id){
     let count = Math.floor(state.cash / singleCost);
     if(count<=0) return alert("원화 현금이 부족합니다.");
     state.cash -= singleCost * count;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * count)) / (s.own + count);
+    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + FEE_STOCK)) * count) / (s.own + count);
     s.own += count;
     addLog(`${s.name} ${count}주 풀매수`);
   }
@@ -576,7 +580,8 @@ function fullSell(id){
   
   let count = s.own;
   let revenue = (s.price * count) * (1 - FEE_STOCK);
-  let profitTotal = ((s.price - s.avgBuy) * count) - ((s.price * count) * FEE_STOCK) - ((s.avgBuy * count) * FEE_STOCK);
+  // 취득원가(매수 수수료 포함) 기준으로 실현손익 계산
+  let profitTotal = revenue - (s.avgBuy * count);
   
   if(isForeign){
     state.usd += revenue;
