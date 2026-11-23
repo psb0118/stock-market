@@ -202,6 +202,96 @@ const RESET = total => `
   check('동일 등급 반복 갱신에서도 재렌더 없음', g.dom.renderCount === rendersBefore, rendersBefore + ' → ' + g.dom.renderCount);
 }
 
+// ── 4. 순자산·대출·세금·예약주문·목표·배당·저장 ─────────────────────
+{
+  const g = createGame();
+  g.run(RESET(10000000) + `
+    state.loan = 0; state.loanRate = 0; state.orders = []; state.goals = {};
+    state.realizedYTD = 0; state.taxedProfit = 0; state.taxPaid = 0;
+    1;
+  `);
+
+  g.run('state.loan = 2000000; state.loanRate = 0.12; 1');
+  check('순자산은 대출 잔액을 차감', Math.round(g.run('totalAssetsKRW()')) === 8000000, g.run('totalAssetsKRW()'));
+
+  // 대출 실행: 현금 증가, 부채 증가, 순자산 불변
+  g.run("state.loan = 0; state.cash = 30000000; document.getElementById('loan-amt').value = '5000000'; borrowLoan(); 1");
+  const loan = g.run('({cash: state.cash, loan: state.loan, rate: state.loanRate, total: totalAssetsKRW()})');
+  check('대출 실행 시 현금 증가', loan.cash === 35000000, loan.cash);
+  check('대출 잔액·금리 기록', loan.loan === 5000000 && loan.rate === 0.12, loan.loan + '/' + loan.rate);
+  check('대출은 순자산을 바꾸지 않음', Math.round(loan.total) === 30000000, loan.total);
+
+  // 대출 이자: 현금이 없으면 잔액에 가산
+  g.run('state.cash = 0; state.loan = 1000000; state.loanRate = 0.12; interest(); 1');
+  check('대출 이자가 잔액에 가산', Math.abs(g.run('state.loan') - 1001800) < 1e-6, g.run('state.loan'));
+
+  // 거래세: 즉시 매도 손실 = 매수 수수료 + 매도 수수료 + 거래세
+  g.run(RESET(10000000) + 'state.loan = 0; 1');
+  g.run("stock('future_ai').price = 100000; stock('future_ai').start = 100000; buy('future_ai'); sell('future_ai'); 1");
+  check('매도 시 거래세 0.2% 반영', g.run("stock('future_ai').realizedProfit") === -500, g.run("stock('future_ai').realizedProfit"));
+  check('거래세 반영 후 현금', Math.round(g.run('state.cash')) === 9999500, g.run('state.cash'));
+
+  // 양도세: 연 250만원 공제 후 22% 원천징수
+  g.run('state.cash = 10000000; state.realizedYTD = 0; state.taxedProfit = 0; state.taxPaid = 0; settleTax(3000000); 1');
+  const tax1 = g.run('({cash: state.cash, paid: state.taxPaid, taxed: state.taxedProfit})');
+  check('양도세 공제 초과분 22% 징수', Math.round(tax1.paid) === 110000, tax1.paid);
+  check('양도세 납부 후 현금', Math.round(tax1.cash) === 9890000, tax1.cash);
+  g.run('settleTax(1000000); 1');
+  check('연간 누적 과세', Math.round(g.run('state.taxPaid')) === 330000, g.run('state.taxPaid'));
+
+  // 예약 주문
+  g.run(RESET(10000000) + `
+    state.orders = []; state.marketOpen = true; state.loan = 0;
+    stock('future_ai').price = 50000; stock('future_ai').own = 0; stock('future_ai').avgBuy = 0;
+    state.orders.push({id:'o1', stockId:'future_ai', side:'buy', qty:2, limit:60000});
+    state.orders.push({id:'o2', stockId:'future_ai', side:'buy', qty:1, limit:40000});
+    processOrders();
+    1;
+  `);
+  check('지정가 도달 주문 체결', g.run("stock('future_ai').own") === 2, g.run("stock('future_ai').own"));
+  check('미도달 주문은 대기', g.run('state.orders.length') === 1 && g.run("state.orders[0].id") === 'o2', g.run('state.orders.length'));
+
+  // 목표 달성
+  g.run(RESET(30000000) + 'state.goals = {}; checkGoals(); 1');
+  check('목표 달성 보상 지급', g.run('state.cash') === 30500000 && g.run('!!state.goals.m30') === true, g.run('state.cash'));
+  g.run('checkGoals(); 1');
+  check('목표 보상은 한 번만 지급', g.run('state.cash') === 30500000, g.run('state.cash'));
+
+  // 배당
+  g.run(RESET(0) + `
+    state.cash = 0; state.usd = 0; state.loan = 0;
+    stock('future_ai').own = 10; stock('future_ai').price = 100000; stock('future_ai').avgBuy = 100000;
+    payDividends();
+    1;
+  `);
+  check('배당금 지급', Math.round(g.run('state.cash')) === 4000, g.run('state.cash'));
+
+  // 저장/불러오기 라운드트립
+  g.run(`
+    state.loan = 1500000; state.loanRate = 0.09; state.realizedYTD = 1234567;
+    state.orders = [{id:'x', stockId:'future_ai', side:'sell', qty:3, limit:120000}];
+    state.goals = {m30:true};
+    saveGame();
+    state.loan = 0; state.orders = []; state.goals = {}; state.realizedYTD = 0;
+    loadGame();
+    1;
+  `);
+  const rt = g.run('({loan: state.loan, rate: state.loanRate, orders: state.orders.length, goal: !!state.goals.m30, ytd: state.realizedYTD})');
+  check('저장/불러오기: 대출 복원', rt.loan === 1500000 && rt.rate === 0.09, rt.loan);
+  check('저장/불러오기: 주문·목표 복원', rt.orders === 1 && rt.goal === true, rt.orders);
+  check('저장/불러오기: 실현손익 복원', rt.ytd === 1234567, rt.ytd);
+
+  // 등급별 환전 수수료 우대
+  g.run(RESET(100000000) + 'state.loan = 0; state.loanRate = 0; 1');
+  check('골드 환전 수수료 0.7%', Math.abs(g.run('fxFeeRate()') - 0.007) < 1e-9, g.run('fxFeeRate()'));
+  g.run(RESET(1000000) + '1');
+  check('브론즈 환전 수수료 1%', Math.abs(g.run('fxFeeRate()') - 0.01) < 1e-9, g.run('fxFeeRate()'));
+
+  // 차트 데이터
+  check('스파크라인 좌표 생성', g.run("sparklineSVG(stock('future_ai')).includes('<polyline')") === true);
+  check('가격 히스토리 기록', g.run("stock('future_ai').hist.push(1); stock('future_ai').hist.length > 1") === true);
+}
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n== ${results.length - failed.length}/${results.length} passed ==`);
 if (failed.length) process.exit(1);

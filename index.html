@@ -42,8 +42,20 @@ p{margin:0;color:#667085;line-height:1.45}
 .bank-trade{grid-template-columns:1fr 1fr}
 .bank-trade input{grid-column:1 / -1}
 .buy{background:#0f766e}.sell{background:#b42318}.ghost{background:#e7ebef;color:#18212f}
-.spark{height:7px;background:#e7ebef;border-radius:999px;overflow:hidden;margin-top:10px}
-.spark span{display:block;height:100%;background:#0f766e;width:50%}
+.spark{height:28px;margin-top:10px}
+.spark svg{display:block;width:100%;height:28px}
+.section{margin-top:22px}
+.section h3{margin:0 0 10px}
+.panel{background:#fffdf8;border:1px solid #d8ded4;border-radius:8px;padding:14px;box-shadow:0 10px 28px #0001}
+.field{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.field label{display:grid;gap:4px;font-size:12px;color:#667085}
+select{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-height:38px;background:white}
+.goal{display:grid;gap:6px;margin-bottom:10px}
+.goal small{color:#667085}
+.bar{height:8px;background:#e7ebef;border-radius:999px;overflow:hidden}
+.bar span{display:block;height:100%;background:#0f766e}
+.hof{display:grid;gap:6px;font-size:13px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #f7c948;outline-offset:2px}
 .products{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .product-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
 input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-height:38px}
@@ -58,7 +70,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .log-box{margin-top:20px;max-height:200px;overflow-y:auto;background:#fafafa;padding:10px;border:1px solid #d8ded4;border-radius:8px;}
 .log-item{font-size:13px;color:#475569;margin-bottom:4px;font-family:monospace;}
 @media(max-width:1024px){.stats{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:850px){.app{grid-template-columns:1fr}.side{height:auto;position:static}.stats{grid-template-columns:1fr 1fr}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}}
+@media(max-width:850px){.app{grid-template-columns:1fr}.side{height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;background:#22303f}.stats{grid-template-columns:1fr 1fr}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
 @media(max-width:540px){main{padding:14px}.stats{grid-template-columns:1fr}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
 </style>
 </head>
@@ -70,14 +82,14 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
     <div class="nav" id="nav"></div>
   </aside>
   <main>
-    <div id="breaking" class="breaking"></div>
+    <div id="breaking" class="breaking" role="status" aria-live="polite"></div>
 
     <section class="stats">
       <div class="box"><small>현금 (원화)</small><b id="cash"></b></div>
       <div class="box"><small>보유 달러 (USD)</small><b id="usdCash"></b></div>
       <div class="box"><small>주식 평가액</small><b id="stockValue"></b></div>
       <div class="box"><small>금융상품 평가액</small><b id="productValue"></b></div>
-      <div class="box"><small>총 자산 (원화 환산)</small><b id="totalValue"></b></div>
+      <div class="box"><small>순자산 (대출 차감)</small><b id="totalValue"></b></div>
     </section>
 
     <div class="notice" id="marketTimeBar" style="background:#e0f2fe; border-color:#7dd3fc; color:#0369a1; font-weight:bold;">
@@ -98,7 +110,32 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 <script>
 const START_FX=1390, START_CASH=10000000;
 const FEE_STOCK = 0.0015; // 주식 수수료 0.15%
-const FEE_FX = 0.01;      // 환전 수수료 1%
+const FEE_FX = 0.01;      // 환전 수수료 1%(브론즈 기준)
+const TAX_TRADE = 0.002;        // 매도 거래세 0.2%
+const TAX_GAINS_RATE = 0.22;    // 양도소득세율 22%
+const TAX_GAINS_FREE = 2500000; // 양도세 기본공제(연간 실현손익)
+const DIVIDEND_YIELD = 0.004;   // 배당수익률(보유 평가액 대비)
+const DIVIDEND_EVERY = 120;     // 배당 지급 주기(초)
+const EARNINGS_EVERY = 180;     // 실적 발표 주기(초)
+const SAVE_KEY = "money_playground_save";
+const HOF_KEY = "money_playground_hof";
+// 달성 목표(총자산 기준)와 일시금 보상
+const MILESTONES = [
+  {id:"m30", target:30000000, reward:500000, label:"총자산 3,000만원 달성"},
+  {id:"m100", target:100000000, reward:2000000, label:"총자산 1억원 달성"},
+  {id:"m200", target:200000000, reward:5000000, label:"총자산 2억원 달성"},
+  {id:"m500", target:500000000, reward:15000000, label:"총자산 5억원 달성"}
+];
+// 등급별 신용 대출 한도·금리(연). 브론즈는 대출 불가
+const LOAN_POLICY = {
+  브론즈:{limit:0, rate:0},
+  실버:{limit:10000000, rate:0.12},
+  골드:{limit:30000000, rate:0.09},
+  플래티넘:{limit:100000000, rate:0.06}
+};
+// 등급별 환전 수수료 우대
+const GRADE_FX_FEE = {브론즈:0.010, 실버:0.009, 골드:0.007, 플래티넘:0.005};
+const fxFeeRate = () => (GRADE_FX_FEE[currentGrade()] != null ? GRADE_FX_FEE[currentGrade()] : FEE_FX);
 const pages=[["domestic","국내 주식"],["foreign","해외 주식"],["mega","초대형주"],["special","특별 주식"],["banking","예금·적금"],["fx","환율"],["news","뉴스 속보"],["portfolio","내 자산"]];
 
 // 전면 교체된 주식 종목 데이터 리스트
@@ -125,7 +162,7 @@ const stockDefinitions = [
 let stocks = stockDefinitions.map(x=>{
   const isForeign = ["foreign","mega","special"].includes(x[4]);
   let initPrice = isForeign ? Math.round(x[5]/START_FX) : Math.round(x[5]/100)*100;
-  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0};
+  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice]};
 });
 
 // 가입 금액(amount)과 별개로, 가입 당시 확정된 연이율(rate)을 함께 보관합니다.
@@ -168,7 +205,14 @@ const state={
   marketSeconds: 0, // 시장 시간관리를 위한 초단위 세컨즈
   marketOpen: true,
   currentEvent: null,
-  eventTimer: 0
+  eventTimer: 0,
+  loan: 0,          // 신용 대출 잔액(원화)
+  loanRate: 0,      // 대출 실행 시점 금리(연)
+  orders: [],       // 예약(지정가) 주문
+  goals: {},        // 달성한 목표 id
+  realizedYTD: 0,   // 연간 실현손익 누계(양도세 계산)
+  taxedProfit: 0,   // 이미 과세된 누적 실현손익
+  taxPaid: 0        // 누적 납부 세금
 };
 
 // anchor는 아주 천천히 움직이는 환율 추세선입니다(완만한 추세용).
@@ -183,8 +227,8 @@ function stockValueKRW(){
   return stocks.reduce((sum,s)=>sum + (isForeignStock(s) ? s.price*s.own*fx.usd : s.price*s.own), 0);
 }
 function productValueKRW(){ return products.reduce((a,p)=>a+p.amount, 0); }
-// 총자산 = 현금 + 달러 환산액 + 주식 평가액 + 금융상품 평가액
-function totalAssetsKRW(){ return state.cash + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW(); }
+// 순자산 = 현금 + 달러 환산액 + 주식 평가액 + 금융상품 평가액 - 대출 잔액
+function totalAssetsKRW(){ return state.cash + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW() - (state.loan||0); }
 function currentGrade(){
   const total=totalAssetsKRW();
   if(total >= GRADE_FLOORS["플래티넘"]) return "플래티넘";
@@ -197,6 +241,199 @@ function nextGradeInfo(){
   if(i>=GRADES.length-1) return null;
   const next=GRADES[i+1];
   return {grade:next, remain:Math.max(0, GRADE_FLOORS[next]-totalAssetsKRW())};
+}
+
+// ── 목표 달성 보상 ──────────────────────────────────
+function checkGoals(){
+  const total = totalAssetsKRW();
+  MILESTONES.forEach(m => {
+    if(state.goals[m.id] || total < m.target) return;
+    state.goals[m.id] = true;
+    state.cash += m.reward;
+    addLog(`🎯 목표 달성: ${m.label} (보상 ${won(m.reward)})`);
+    publishBreakingNews("🎯 목표 달성", `${m.label}! 보상 ${won(m.reward)}이 지급되었습니다.`);
+  });
+}
+
+// ── 가격 차트(최근 60틱 스파크라인) ───────────────────────
+function sparklineSVG(s){
+  const data = (s.hist && s.hist.length > 1) ? s.hist : [s.start, s.price];
+  const min = Math.min(...data), max = Math.max(...data), span = (max - min) || 1;
+  const w = 100, h = 28, step = w / Math.max(1, data.length - 1);
+  const points = data.map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(" ");
+  const up = data[data.length - 1] >= data[0];
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="${up ? "#0f766e" : "#b42318"}" stroke-width="1.6"/></svg>`;
+}
+
+// ── 예약(지정가) 주문 ────────────────────────────────
+function placeOrder(){
+  const stockId = $("order-stock") ? $("order-stock").value : "";
+  const side = $("order-side") ? $("order-side").value : "buy";
+  const qty = Math.floor(+($("order-qty") ? $("order-qty").value : 0) || 0);
+  const limit = +($("order-limit") ? $("order-limit").value : 0) || 0;
+  const s = stock(stockId);
+  if(!s) return alert("예약할 종목을 선택해 주세요.");
+  if(qty <= 0 || limit <= 0) return alert("수량과 지정가를 올바르게 입력해 주세요.");
+  if(side === "sell" && s.own < qty) return alert("보유 수량이 부족합니다.");
+  state.orders.push({id:`o${Date.now()}${Math.floor(Math.random()*1000)}`, stockId, side, qty, limit});
+  addLog(`예약 주문: ${s.name} ${side === "buy" ? "매수" : "매도"} ${qty}주 @ ${isForeignStock(s) ? usdStr(limit) : won(limit)}`);
+  saveGame(); portfolio(); update();
+}
+
+function cancelOrder(oid){
+  const before = state.orders.length;
+  state.orders = state.orders.filter(o => o.id !== oid);
+  if(state.orders.length !== before) addLog("예약 주문을 취소했습니다.");
+  saveGame(); portfolio();
+}
+
+// 가격이 지정가에 도달한 주문을 체결합니다(휴장 중에는 대기).
+function processOrders(){
+  if(!state.marketOpen || !state.orders.length) return;
+  const remain = [];
+  state.orders.forEach(o => {
+    const s = stock(o.stockId);
+    if(!s) return;
+    const hit = o.side === "buy" ? s.price <= o.limit : s.price >= o.limit;
+    if(!hit){ remain.push(o); return; }
+    const foreign = isForeignStock(s);
+    if(o.side === "buy"){
+      const cost = s.price * (1 + FEE_STOCK) * o.qty;
+      if(foreign ? state.usd < cost : state.cash < cost){ remain.push(o); return; } // 잔고 부족 시 다음 틱 재시도
+      if(foreign) state.usd -= cost; else state.cash -= cost;
+      s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + FEE_STOCK)) * o.qty) / (s.own + o.qty);
+      s.own += o.qty;
+      addLog(`⏱ 예약 매수 체결: ${s.name} ${o.qty}주 @ ${foreign ? usdStr(s.price) : won(s.price)}`);
+    } else {
+      if(s.own < o.qty){ remain.push(o); return; }
+      const revenue = s.price * (1 - FEE_STOCK - TAX_TRADE) * o.qty;
+      const profitTotal = revenue - (s.avgBuy * o.qty);
+      const profitKRW = foreign ? profitTotal * fx.usd : profitTotal;
+      if(foreign){ state.usd += revenue; s.realizedProfit += profitKRW; }
+      else { state.cash += revenue; s.realizedProfit += profitTotal; }
+      s.own -= o.qty;
+      if(s.own === 0) s.avgBuy = 0;
+      addLog(`⏱ 예약 매도 체결: ${s.name} ${o.qty}주 @ ${foreign ? usdStr(s.price) : won(s.price)}`);
+      settleTax(profitKRW);
+    }
+  });
+  state.orders = remain;
+}
+
+// ── 세금 ────────────────────────────────────────
+// 양도소득세: 연간 실현손익 2,500만원 공제 후 22%를 매도 시점에 원천징수합니다.
+function settleTax(profitKRW){
+  if(!(profitKRW > 0)) return 0;
+  state.realizedYTD = (state.realizedYTD || 0) + profitKRW;
+  const taxable = Math.max(0, state.realizedYTD - TAX_GAINS_FREE) - (state.taxedProfit || 0);
+  if(taxable <= 0) return 0;
+  const tax = taxable * TAX_GAINS_RATE;
+  state.taxedProfit = (state.taxedProfit || 0) + taxable;
+  state.taxPaid = (state.taxPaid || 0) + tax;
+  if(state.cash >= tax){ state.cash -= tax; }
+  else { state.loan = (state.loan || 0) + (tax - state.cash); state.cash = 0; } // 현금 부족분은 대출로 전환
+  addLog(`양도세 원천징수: ${won(tax)} (연 누적 실현손익 ${won(state.realizedYTD)})`);
+  return tax;
+}
+
+// ── 신용 대출 ───────────────────────────────────
+function loanPolicy(){ return LOAN_POLICY[currentGrade()] || LOAN_POLICY["브론즈"]; }
+
+function borrowLoan(){
+  const pol = loanPolicy();
+  if(pol.limit <= 0) return alert("대출은 실버 등급부터 이용할 수 있습니다.");
+  const avail = Math.max(0, pol.limit - (state.loan || 0));
+  const amt = Math.floor((+($("loan-amt") ? $("loan-amt").value : 0) || 0) / 10000) * 10000;
+  if(amt <= 0) return alert("대출 금액을 입력해 주세요.");
+  if(amt > avail) return alert(`대출 한도를 초과했습니다. (가능 ${won(avail)})`);
+  state.loan = (state.loan || 0) + amt;
+  state.loanRate = pol.rate;
+  state.cash += amt;
+  addLog(`신용 대출 실행: ${won(amt)} (연 ${(pol.rate * 100).toFixed(1)}%)`);
+  saveGame(); portfolio(); update();
+}
+
+function repayLoan(){
+  const loan = state.loan || 0;
+  if(loan <= 0) return alert("상환할 대출이 없습니다.");
+  let amt = Math.floor((+($("loan-amt") ? $("loan-amt").value : 0) || 0) / 10000) * 10000;
+  amt = Math.min(amt || loan, loan, Math.floor(state.cash));
+  if(amt <= 0) return alert("상환할 현금이 부족합니다.");
+  state.loan = loan - amt;
+  state.cash -= amt;
+  if(state.loan <= 0){ state.loan = 0; state.loanRate = 0; }
+  addLog(`대출 상환: ${won(amt)} (남은 잔액 ${won(state.loan)})`);
+  saveGame(); portfolio(); update();
+}
+
+// ── 배당·실적 발표 ───────────────────────────────
+function applyShock(s, move){
+  const next = s.price * (1 + move);
+  s.price = isForeignStock(s) ? Math.max(1, Math.round(next * 100) / 100) : Math.max(100, Math.round(next / 100) * 100);
+  s.lastMove = move;
+}
+
+function payDividends(){
+  let totalKRW = 0;
+  stocks.forEach(s => {
+    if(s.own <= 0) return;
+    const amount = s.price * s.own * DIVIDEND_YIELD;
+    if(isForeignStock(s)){ state.usd += amount; totalKRW += amount * fx.usd; }
+    else { state.cash += amount; totalKRW += amount; }
+  });
+  if(totalKRW <= 0) return;
+  addLog(`💰 배당금 지급: ${won(totalKRW)}`);
+  publishBreakingNews("💰 배당 지급", `보유 주식 배당금 ${won(totalKRW)}이 지급되었습니다.`);
+}
+
+function earningsSurprise(){
+  if(!stocks.length) return;
+  const s = stocks[Math.floor(Math.random() * stocks.length)];
+  const beat = Math.random() < 0.5;
+  const move = (beat ? 1 : -1) * (0.05 + Math.random() * 0.10);
+  applyShock(s, move);
+  publishBreakingNews("📊 실적 발표", `${s.name} ${beat ? "어닝 서프라이즈" : "어닝 쇼크"}! 주가가 발표 직후 ${pct(move)} 변동했습니다.`);
+}
+
+// ── 저장·시즌 ───────────────────────────────────
+function exportSave(){
+  const blob = new Blob([JSON.stringify(buildSaveData(), null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `money-playground-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  addLog("저장 파일을 내보냈습니다.");
+}
+
+function handleImport(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      applySaveData(JSON.parse(String(reader.result)));
+      saveGame(); banking(); fxPage(); portfolio(); update();
+      addLog("저장 파일을 불러왔습니다.");
+      alert("저장 파일을 불러왔습니다.");
+    } catch(e) {
+      alert("저장 파일을 읽을 수 없습니다. 형식을 확인해 주세요.");
+    }
+  };
+  reader.readAsText(file);
+  ev.target.value = "";
+}
+
+function seasonReset(){
+  if(!confirm("이번 시즌을 종료하고 명예의 전당에 기록한 뒤 초기화할까요?")) return;
+  const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
+  hof.unshift({at:new Date().toISOString(), total:Math.round(totalAssetsKRW()), grade:currentGrade()});
+  localStorage.setItem(HOF_KEY, JSON.stringify(hof.slice(0, 10)));
+  clearGame(true);
+  addLog("시즌을 종료하고 새 시즌을 시작했습니다.");
+  portfolio();
 }
 
 function init(){
@@ -230,58 +467,71 @@ function addLog(text) {
   saveGame();
 }
 
-function saveGame() {
-  const saveData = {
+function buildSaveData() {
+  return {
     costBasisIncludesFee: true, // 평단가가 매수 수수료를 포함한 취득원가 형식인지 표시(구버전 데이터 마이그레이션용)
     state: state,
     fx: fx,
     stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove})),
     products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate}))
   };
-  localStorage.setItem("money_playground_save", JSON.stringify(saveData));
+}
+
+function saveGame() {
+  localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveData()));
 }
 
 function loadGame() {
-  const raw = localStorage.getItem("money_playground_save");
+  const raw = localStorage.getItem(SAVE_KEY);
   if(!raw) return;
   try {
-    const data = JSON.parse(raw);
-    Object.assign(state, data.state);
-    Object.assign(fx, data.fx);
-    if(data.stocks) {
-      data.stocks.forEach(ls => {
-        let s = stocks.find(x => x.id === ls.id);
-        if(s) {
-          s.own = ls.own || 0;
-          s.price = ls.price || s.start;
-          s.avgBuy = ls.avgBuy || 0;
-          // 구버전 저장 데이터의 평단가에는 매수 수수료가 빠져 있으므로 취득원가로 한 번만 환산
-          if(data.costBasisIncludesFee !== true && s.avgBuy > 0) s.avgBuy *= (1 + FEE_STOCK);
-          s.realizedProfit = ls.realizedProfit || 0;
-          s.lastMove = ls.lastMove || 0;
-        }
-      });
-    }
-    if(data.products) {
-      data.products.forEach(lp => {
-        let p = products.find(x => x.id === lp.id);
-        if(!p) return;
-        p.amount = lp.amount || 0;
-        // 구버전 저장 데이터에는 rate가 없으므로, 가입 중이면 현재 등급 이율로 확정해 줍니다.
-        // 현재 등급이 해당 상품을 열 수 없으면 그 상품의 해금 등급 이율로 확정해 이자가 0이 되지 않도록 함
-        p.rate = (Number.isFinite(lp.rate) && lp.rate > 0) ? lp.rate
-          : (p.amount > 0 ? (gradeRateFor(p.id, currentGrade()) || gradeRateFor(p.id, PRODUCT_UNLOCK[p.id])) : 0);
-      });
-    }
-    if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
+    applySaveData(JSON.parse(raw));
   } catch(e) {
     console.error("저장 데이터 로드 실패", e);
   }
 }
 
-function clearGame() {
-  if(!confirm("정말로 모든 게임 데이터를 삭제하고 처음부터 시작하시겠습니까?")) return;
-  localStorage.removeItem("money_playground_save");
+// localStorage와 파일 불러오기가 같은 경로를 쓰도록 저장 데이터 적용을 한 곳에 모읍니다.
+function applySaveData(data) {
+  if(!data || typeof data !== "object") throw new Error("잘못된 저장 데이터");
+  if(data.state) Object.assign(state, data.state);
+  if(data.fx) Object.assign(fx, data.fx);
+  if(data.stocks) {
+    data.stocks.forEach(ls => {
+      let s = stocks.find(x => x.id === ls.id);
+      if(!s) return;
+      s.own = ls.own || 0;
+      s.price = ls.price || s.start;
+      s.avgBuy = ls.avgBuy || 0;
+      // 구버전 저장 데이터의 평단가에는 매수 수수료가 빠져 있으므로 취득원가로 한 번만 환산
+      if(data.costBasisIncludesFee !== true && s.avgBuy > 0) s.avgBuy *= (1 + FEE_STOCK);
+      s.realizedProfit = ls.realizedProfit || 0;
+      s.lastMove = ls.lastMove || 0;
+    });
+  }
+  if(data.products) {
+    data.products.forEach(lp => {
+      let p = products.find(x => x.id === lp.id);
+      if(!p) return;
+      p.amount = lp.amount || 0;
+      // 구버전 저장 데이터에는 rate가 없으므로, 가입 중이면 현재 등급 이율로 확정해 줍니다.
+      // 현재 등급이 해당 상품을 열 수 없으면 그 상품의 해금 등급 이율로 확정해 이자가 0이 되지 않도록 함
+      p.rate = (Number.isFinite(lp.rate) && lp.rate > 0) ? lp.rate
+        : (p.amount > 0 ? (gradeRateFor(p.id, currentGrade()) || gradeRateFor(p.id, PRODUCT_UNLOCK[p.id])) : 0);
+    });
+  }
+  // 새 기능 필드 기본값 보정(구버전 세이브 대응)
+  if(!Array.isArray(state.orders)) state.orders = [];
+  if(!state.goals || typeof state.goals !== "object") state.goals = {};
+  ["loan","loanRate","realizedYTD","taxedProfit","taxPaid"].forEach(k => {
+    if(!Number.isFinite(state[k])) state[k] = 0;
+  });
+  if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
+}
+
+function clearGame(skipConfirm) {
+  if(!skipConfirm && !confirm("정말로 모든 게임 데이터를 삭제하고 처음부터 시작하시겠습니까?")) return;
+  localStorage.removeItem(SAVE_KEY);
   state.cash = START_CASH;
   state.usd = 0;
   state.tick = 0;
@@ -291,6 +541,13 @@ function clearGame() {
   state.marketOpen = true;
   state.currentEvent = null;
   state.eventTimer = 0;
+  state.loan = 0;
+  state.loanRate = 0;
+  state.orders = [];
+  state.goals = {};
+  state.realizedYTD = 0;
+  state.taxedProfit = 0;
+  state.taxPaid = 0;
   fx.usd = START_FX;
   fx.anchor = START_FX;
   stocks.forEach(s=>{
@@ -299,6 +556,7 @@ function clearGame() {
     s.lastMove = 0;
     s.avgBuy = 0;
     s.realizedProfit = 0;
+    s.hist = [s.start];
   });
   products.forEach(p => { p.amount = 0; p.rate = 0; });
   addLog("게임 초기화가 수행되었습니다.");
@@ -331,7 +589,7 @@ function card(s){
     <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><span class="pill">${s.market}</span></div>
     <div class="price" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
     <p data-change="${s.id}">시작가 대비 +0.00%</p>
-    <div class="spark"><span data-spark="${s.id}"></span></div>
+    <div class="spark" data-spark="${s.id}"></div>
     <div style="margin-top:8px; font-size:12px; color:#475569;">
       평단(수수료포함): <span data-avg="${s.id}">-</span> | 수익률: <span data-roipct="${s.id}">0%</span>
     </div>
@@ -412,6 +670,13 @@ function news(){
 }
 
 function portfolio(){
+  // 5초마다 다시 그려지므로 입력 중인 값을 스냅샷해 두었다가 복원합니다.
+  const keep={};
+  ["order-stock","order-side","order-qty","order-limit","loan-amt"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) keep[id]=el.value;
+  });
+
   let hs=stocks.filter(s=>s.own>0 || s.realizedProfit!==0),hp=products.filter(p=>p.amount>0);
   let stockRows = hs.length?hs.map(s=>{
     const isForeign = ["foreign","mega","special"].includes(s.group);
@@ -434,13 +699,43 @@ function portfolio(){
 
   let logsHtml = state.logs.map(l => `<div class="log-item">${l}</div>`).join("");
 
+  const total=totalAssetsKRW();
+  const goalsHtml=MILESTONES.map(m=>{
+    const done=!!state.goals[m.id];
+    const p=Math.min(1, Math.max(0, m.target>0 ? total/m.target : 0));
+    return `<div class="goal">
+      <div><b>${done?"✅":"▫️"} ${m.label}</b> <small>보상 ${won(m.reward)}</small></div>
+      <div class="bar"><span style="width:${(p*100).toFixed(1)}%"></span></div>
+      <small>${won(Math.min(total, m.target))} / ${won(m.target)}${done?" · 달성 완료":""}</small>
+    </div>`;
+  }).join("");
+
+  const orderRows = state.orders.length ? state.orders.map(o=>{
+    const s=stock(o.stockId);
+    if(!s) return "";
+    const foreign=isForeignStock(s);
+    return `<div class="row" style="grid-template-columns:1fr repeat(3,auto)">
+      <b>${s.name}</b>
+      <span>${o.side==="buy"?"매수":"매도"} ${o.qty}주</span>
+      <span>지정가 ${foreign?usdStr(o.limit):won(o.limit)}</span>
+      <span>현재 ${foreign?usdStr(s.price):won(s.price)}</span>
+      <button class="ghost" onclick="cancelOrder('${o.id}')">취소</button>
+    </div>`;
+  }).join("") : `<div class="row"><b>예약 주문 없음</b><span>지정가에 도달하면 자동으로 체결됩니다.</span></div>`;
+
+  const pol=loanPolicy(), loan=state.loan||0;
+  const loanInfo = pol.limit>0
+    ? `한도 ${won(pol.limit)}`
+    : "실버 등급부터 이용할 수 있습니다";
+
+  let hof=[];
+  try { hof=JSON.parse(localStorage.getItem(HOF_KEY)||"[]")||[]; } catch(e){ hof=[]; }
+  const hofRows = hof.length ? hof.map((h,i)=>`<div>${i+1}. ${won(h.total)} · ${h.grade} · ${new Date(h.at).toLocaleDateString("ko-KR")}</div>`).join("")
+    : `<div style="color:#667085;font-size:13px;">아직 기록이 없습니다. 시즌을 종료하면 최종 순자산이 기록됩니다.</div>`;
+
   $("portfolio").innerHTML=`
     <div class="head">
       <div><h1>내 자산 및 시스템 관리</h1><p>보유 자산 명세서와 최근 시스템 실시간 거래 기록입니다.</p></div>
-      <div style="display:flex; gap:8px;">
-        <button class="buy" onclick="saveGame()">수동 저장</button>
-        <button class="sell" onclick="clearGame()">전체 초기화</button>
-      </div>
     </div>
     
     <div class="portfolio">
@@ -450,13 +745,70 @@ function portfolio(){
       ${prodRows||'<div class="row"><b>가입된 상품 없음</b></div>'}
     </div>
 
+    <div class="section"><h3>목표·미션</h3><div class="panel">${goalsHtml}</div></div>
+
+    <div class="section"><h3>예약 주문 (지정가)</h3><div class="panel">
+      <div class="field">
+        <label>종목<select id="order-stock">${stocks.map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></label>
+        <label>구분<select id="order-side"><option value="buy">매수</option><option value="sell">매도</option></select></label>
+        <label>수량<input id="order-qty" type="number" min="1" step="1" value="1"></label>
+        <label>지정가 (원/달러)<input id="order-limit" type="number" min="1" step="1" placeholder="가격 입력"></label>
+      </div>
+      <button class="buy" onclick="placeOrder()" style="margin-top:8px;width:100%;">예약 주문 등록</button>
+      <div style="margin-top:12px; display:grid; gap:8px;">${orderRows}</div>
+    </div></div>
+
+    <div class="section"><h3>신용 대출</h3><div class="panel">
+      <div class="row" style="grid-template-columns:1fr repeat(3,auto)">
+        <b>대출 잔액</b>
+        <span>${won(loan)}</span>
+        <span>금리 연 ${((state.loanRate||0)*100).toFixed(1)}%</span>
+        <span>${loanInfo}</span>
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>금액 (1만원 단위)<input id="loan-amt" type="number" min="10000" step="10000" placeholder="예: 5000000"></label>
+        <label>&nbsp;<span style="font-size:12px;color:#667085;">대출 이자는 15초마다 잔액에 부과되고 순자산에서 차감됩니다.</span></label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="buy" onclick="borrowLoan()">대출 받기</button>
+        <button class="ghost" onclick="repayLoan()">상환하기</button>
+      </div>
+    </div></div>
+
+    <div class="section"><h3>세금</h3><div class="panel">
+      <div class="row" style="grid-template-columns:1fr repeat(3,auto)">
+        <b>올해 실현손익</b>
+        <span>${won(state.realizedYTD||0)}</span>
+        <span>기본공제 ${won(TAX_GAINS_FREE)}</span>
+        <span>납부 세금 ${won(state.taxPaid||0)}</span>
+      </div>
+      <p style="margin-top:8px;font-size:12px;">매도 시 거래세 0.2%가 적용되고, 연간 공제를 넘는 실현손익에는 22% 양도세가 원천징수됩니다.</p>
+    </div></div>
+
+    <div class="section"><h3>저장·시즌</h3><div class="panel">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="buy" onclick="saveGame()">수동 저장</button>
+        <button class="ghost" onclick="exportSave()">파일로 내보내기</button>
+        <label class="ghost" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border-radius:7px;background:#e7ebef;color:#18212f;cursor:pointer;font-size:13px;">파일 불러오기<input type="file" accept="application/json" onchange="handleImport(event)" style="display:none"></label>
+        <button class="sell" onclick="seasonReset()">시즌 종료</button>
+        <button class="sell" onclick="clearGame()">전체 초기화</button>
+      </div>
+      <h3 style="margin:16px 0 8px;font-size:16px;">명예의 전당 (최근 시즌)</h3>
+      <div class="hof">${hofRows}</div>
+    </div></div>
+
     <h3 style="margin-top:25px;">최근 거래 로그 (최대 20개 기록)</h3>
     <div class="log-box">${logsHtml || '<div style="color:#aaa;">로그가 없습니다.</div>'}</div>
   `;
+
+  Object.keys(keep).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.value=keep[id];
+  });
 }
 
 function fxPage(){
-  $("fx").innerHTML=`<div class="head"><div><h1>환율 거래소</h1><p>원화와 달러를 환전할 수 있습니다. 환전 시 1%의 환전 수수료가 적용됩니다.</p></div></div>
+  $("fx").innerHTML=`<div class="head"><div><h1>환율 거래소</h1><p>원화와 달러를 환전할 수 있습니다. <span id="fxFeeDesc">환전 시 ${(fxFeeRate()*100).toFixed(1)}%의 환전 수수료가 적용됩니다.</span></p></div></div>
   <div class="product">
   <div class="price" id="fxPrice"></div>
   <p style="margin-bottom:15px; color:#b42318;">※ 환전 버튼 클릭 시 현재 환율에 수수료가 적용되어 즉시 처리됩니다.</p>
@@ -484,18 +836,20 @@ function updateFX(){
   
   let e=document.getElementById("fxPrice");
   if(e) e.textContent="1 USD = "+fx.usd.toLocaleString()+"원";
+  let fd=document.getElementById("fxFeeDesc");
+  if(fd) fd.textContent=`환전 시 ${(fxFeeRate()*100).toFixed(1)}%의 환전 수수료가 적용됩니다(${currentGrade()} 등급 우대).`;
 }
 
 function toUSD(){
   let v=+($("krw").value||0);
   if(v<=0||v>state.cash)return alert("원화 현금이 부족하거나 잘못된 액수입니다.");
   
-  let dynamicFx = fx.usd * (1 + FEE_FX); // 수수료 적용하여 달러를 비싸게 삼
+  let dynamicFx = fx.usd * (1 + fxFeeRate()); // 등급별 우대 수수료 적용(달러를 비싸게 삼)
   let netUsd = v / dynamicFx;
   
   state.cash-=v; 
   state.usd+=netUsd; 
-  addLog(`달러 환전: 원화 ${won(v)} -> ${usdStr(netUsd)} (환율: ${fx.usd}원, 수수료 적용)`);
+  addLog(`달러 환전: 원화 ${won(v)} -> ${usdStr(netUsd)} (환율: ${fx.usd}원, 수수료 ${(fxFeeRate()*100).toFixed(1)}%)`);
   update();
 }
 
@@ -503,12 +857,12 @@ function toKRW(){
   let v=+($("usd").value||0);
   if(v<=0||v>state.usd)return alert("달러 잔고가 부족하거나 잘못된 액수입니다.");
   
-  let dynamicFx = fx.usd * (1 - FEE_FX); // 수수료 적용하여 원화를 적게 받음
+  let dynamicFx = fx.usd * (1 - fxFeeRate()); // 등급별 우대 수수료 적용(원화를 적게 받음)
   let netKrw = v * dynamicFx;
   
   state.usd-=v; 
   state.cash+=netKrw; 
-  addLog(`원화 환전: 달러 ${usdStr(v)} -> ${won(netKrw)} (환율: ${fx.usd}원, 수수료 적용)`);
+  addLog(`원화 환전: 달러 ${usdStr(v)} -> ${won(netKrw)} (환율: ${fx.usd}원, 수수료 ${(fxFeeRate()*100).toFixed(1)}%)`);
   update();
 }
 
@@ -554,9 +908,10 @@ function sell(id){
   if(s.own<=0)return alert("보유 주식이 없습니다.");
   const isForeign = ["foreign","mega","special"].includes(s.group);
   
-  let revenue = s.price * (1 - FEE_STOCK);
+  let revenue = s.price * (1 - FEE_STOCK - TAX_TRADE); // 수수료 0.15% + 거래세 0.2%
   // 평단가가 매수 수수료를 포함한 취득원가이므로 실현손익 = 순수취금액 - 취득원가
   let profit = revenue - s.avgBuy;
+  const profitKRW = isForeign ? profit * fx.usd : profit;
   
   if(isForeign) {
     state.usd += revenue;
@@ -567,6 +922,7 @@ function sell(id){
     s.realizedProfit += profit;
     addLog(`${s.name} 1주 매도 (${won(s.price)}, 실현손익: ${won(profit)})`);
   }
+  settleTax(profitKRW);
   
   s.own -= 1;
   if(s.own === 0) s.avgBuy = 0;
@@ -607,9 +963,10 @@ function fullSell(id){
   const isForeign = ["foreign","mega","special"].includes(s.group);
   
   let count = s.own;
-  let revenue = (s.price * count) * (1 - FEE_STOCK);
+  let revenue = (s.price * count) * (1 - FEE_STOCK - TAX_TRADE); // 수수료 + 거래세
   // 취득원가(매수 수수료 포함) 기준으로 실현손익 계산
   let profitTotal = revenue - (s.avgBuy * count);
+  const profitKRW = isForeign ? profitTotal * fx.usd : profitTotal;
   
   if(isForeign){
     state.usd += revenue;
@@ -620,6 +977,7 @@ function fullSell(id){
     s.realizedProfit += profitTotal;
     addLog(`${s.name} ${count}주 풀매도 (${won(s.price)}, 실현손익: ${won(profitTotal)})`);
   }
+  settleTax(profitKRW);
   s.own=0;
   s.avgBuy=0;
   saveGame();
@@ -683,8 +1041,13 @@ function tickSeconds() {
     }
   }
 
+  // 배당 지급·실적 발표·목표 판정
+  if(state.marketSeconds % DIVIDEND_EVERY === 0) payDividends();
+  if(state.marketSeconds % EARNINGS_EVERY === 0) earningsSurprise();
+
   // 5초마다 내부 백그라운드 자동 저장 연동
   if(state.marketSeconds % 5 === 0) {
+    checkGoals();
     saveGame();
   }
 }
@@ -732,7 +1095,10 @@ function tickMarket(){
       s.price=Math.max(100,Math.round(Math.max(next,softFloor)/100)*100);
     }
     s.lastMove=(s.price-old)/old;
+    s.hist.push(s.price);
+    if(s.hist.length > 60) s.hist.shift();
   });
+  processOrders();
   update();
 }
 
@@ -751,6 +1117,20 @@ function marketEventsAndNews() {
     if(state.currentEvent === "BUBBLE_SHOCK") evText = "⚠️ 고점 과열 지적에 따른 차익 실현 버블 조정 구간 진입. 시장 변동성이 극대화됩니다.";
     
     publishBreakingNews("🌟 대형 경제 기류 발생", evText);
+
+    // 속보 내용이 실제 가격에 반영되도록 관련 종목에 즉시 충격을 줍니다.
+    if(state.currentEvent === "SEMI_STRONG"){
+      stocks.filter(s=>s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.03+Math.random()*0.05));
+    }
+    if(state.currentEvent === "AI_BOOM"){
+      stocks.filter(s=>s.theme.includes("AI")||s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.03+Math.random()*0.05));
+    }
+    if(state.currentEvent === "MARKET_CRASH" || state.currentEvent === "BUBBLE_SHOCK"){
+      stocks.forEach(s=>applyShock(s, -(0.03+Math.random()*0.06)));
+    }
+    if(state.currentEvent === "FX_SURGE"){
+      fx.usd = Math.round(fx.usd * 1.03);
+    }
     return;
   }
 
@@ -761,6 +1141,8 @@ function marketEventsAndNews() {
   if(!s) return;
   let up=s.lastMove>=0;
   let reasons=up?["공격적인 분기 실적 기대감이 커지며","해외 기관들의 대규모 순매수세가 포착되며","신규 특허 취득 및 상용화 파트너십 소식에","장기 공급 계약 모멘텀이 시장에서 조명받으며"]:["고점 돌파 실패에 따른 실망 매물이 가중되며","단기 변동성 오버슈팅에 의한 매도세 유출로","일부 루머성 악재 지적에 거래 심리가 냉각되며","해외 거시 리스크 부담이 반영되며"];
+  // 속보 내용이 실제 가격에도 반영되도록 같은 방향으로 소폭 충격을 가합니다.
+  applyShock(s, (up?1:-1) * (0.004 + Math.random()*0.012));
   let text=`${s.name} (${s.ticker}) 측은 ${reasons[Math.floor(Math.random()*reasons.length)]} 전일 대비 ${pct(s.lastMove)} ${up?"상승":"하락"} 흐름을 연출 중입니다.`;
   publishBreakingNews("시황 속보", text);
 }
@@ -802,6 +1184,13 @@ function interest(){
   if(state.cash > 500000) {
     let parkingBonus = state.cash * 0.00002;
     state.cash += parkingBonus;
+  }
+
+  // 대출 이자(15초 단위): 연이율 × 0.015, 현금이 부족하면 대출 잔액에 가산
+  if(state.loan > 0) {
+    let loanInterest = state.loan * ((state.loanRate || 0) * 0.015);
+    if(state.cash >= loanInterest) state.cash -= loanInterest;
+    else { state.loan += loanInterest - state.cash; state.cash = 0; }
   }
   
   update();
@@ -856,7 +1245,7 @@ function update(){
       mb.textContent=isForeign ? Math.floor(state.usd/singleCost)+"주" : Math.floor(state.cash/singleCost)+"주";
     }
     if(ms)ms.textContent=s.own+"주";
-    if(sp)sp.style.width=Math.max(8,Math.min(100,50+c*280))+"%";
+    if(sp)sp.innerHTML=sparklineSVG(s);
   });
 
   products.forEach(p=>{
