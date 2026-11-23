@@ -51,6 +51,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .feed,.portfolio,.info-list{display:grid;gap:10px}
 .news.locked{background:#fffaf0;border-color:#e7c066}
 .product.locked{opacity:.62;background:#f6f7f9}
+.product.locked.holding{opacity:1;background:#fffdf8}
 .news.good{border-color:#0f766e;background:#f0fdf4}
 .news-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .row{display:grid;grid-template-columns:1fr repeat(4,auto);gap:10px;align-items:center}
@@ -205,9 +206,9 @@ function init(){
   stockPage("foreign","해외 주식","해외 유명 종목을 달러(USD) 기준으로 거래합니다.");
   stockPage("mega","초대형주","세계 시장 영향력이 큰 종목입니다. 달러(USD)로 거래됩니다.");
   stockPage("special","특별 주식","변동성이 높고 성장이 기대되는 테마 종목입니다. 달러(USD)로 거래됩니다.");
-  banking();fxPage();news();portfolio();
-  
+  // 저장 데이터를 먼저 불러온 뒤 화면을 그려야 잠금 상태·보유 현황·등급이 올바르게 표시됩니다.
   loadGame();
+  banking();fxPage();news();portfolio();
   update();
   
   // 메인 마켓 틱 (5초 주기 -> 실제 속도감 향상 위해 내부 로직 연동)
@@ -268,7 +269,9 @@ function loadGame() {
         if(!p) return;
         p.amount = lp.amount || 0;
         // 구버전 저장 데이터에는 rate가 없으므로, 가입 중이면 현재 등급 이율로 확정해 줍니다.
-        p.rate = (Number.isFinite(lp.rate) && lp.rate > 0) ? lp.rate : (p.amount > 0 ? gradeRateFor(p.id, currentGrade()) : 0);
+        // 현재 등급이 해당 상품을 열 수 없으면 그 상품의 해금 등급 이율로 확정해 이자가 0이 되지 않도록 함
+        p.rate = (Number.isFinite(lp.rate) && lp.rate > 0) ? lp.rate
+          : (p.amount > 0 ? (gradeRateFor(p.id, currentGrade()) || gradeRateFor(p.id, PRODUCT_UNLOCK[p.id])) : 0);
       });
     }
     if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
@@ -316,6 +319,7 @@ function show(id,btn){
   btn.classList.add("on");
   if(id=="news")news();
   if(id=="portfolio")portfolio();
+  if(id=="banking")banking(); // 등급·보유 현황이 바뀌었을 수 있으므로 금융 화면 전환 시 갱신
 }
 
 function stockPage(group,title,desc){
@@ -362,9 +366,12 @@ function gradeBannerHTML(){
 // 상품 카드: 현재 등급 이율과 가입 당시 확정 이율을 함께 보여줍니다.
 function productCard(p){
   const unlocked=canJoin(p.id);
-  return `<article class="product${unlocked?"":" locked"}">
+  const held=p.amount>0;
+  // 보유 중인 상품은 등급이 내려가도 이자가 계속 되므로 흐리게 처리하지 않습니다.
+  const stateClass=unlocked ? "" : (held ? " locked holding" : " locked");
+  return `<article class="product${stateClass}">
     <h2>${p.name}</h2>
-    <p>${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}`}</p>
+    <p>${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}${held?" · 보유 중(이자는 확정 이율로 유지)":""}`}</p>
     <div class="product-grid">
       <div><small>가입액</small><b data-prod="${p.id}">${won(p.amount)}</b></div>
       <div><small>최소 금액</small><b>${won(p.min)}</b></div>
