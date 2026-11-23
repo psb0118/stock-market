@@ -988,8 +988,10 @@ function join(id){
   if(!canJoin(id)) return alert(`${unlockLabel(id)}합니다. (현재 등급: ${currentGrade()})`);
   let p=product(id),v=Math.max(p.min,Math.floor((+$("prod-"+id).value||p.min)/10000)*10000);
   if(v>state.cash)return alert("현금이 부족합니다.");
+  // 가입 시점 이율은 현금을 빼기 전 등급으로 확정합니다.
+  // 현금을 먼저 빼면 총자산이 줄어 등급이 내려가고, 상위 등급 전용 상품(채권·ETF·연금)은 이율이 0으로 굳습니다.
+  if(p.amount===0) p.rate=gradeRateFor(id, currentGrade());
   state.cash-=v;
-  if(p.amount===0) p.rate=gradeRateFor(id, currentGrade()); // 가입 시점 이율 확정
   p.amount+=v;
   addLog(`${p.name} 가입: ${won(v)} (확정 연 ${(p.rate*100).toFixed(1)}%)`);
   saveGame();

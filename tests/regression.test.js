@@ -292,6 +292,48 @@ const RESET = total => `
   check('가격 히스토리 기록', g.run("stock('future_ai').hist.push(1); stock('future_ai').hist.length > 1") === true);
 }
 
+// ── 5. 상위 등급 전용 상품에 전액 가입해도 가입 시점 이율이 확정되는지 ──────
+// 현금을 먼저 차감하면 총자산이 줄어 등급이 내려가고, 플래티넘 전용 상품은
+// 이율이 0으로 굳어 이자가 영원히 지급되지 않는 버그가 있었다.
+{
+  const g = createGame();
+  g.run(RESET(300000000) + `
+    state.loan = 0; state.loanRate = 0;
+    product('etf').amount = 0; product('etf').rate = 0;
+    document.getElementById('prod-etf').value = String(state.cash);
+    join('etf');
+    1;
+  `);
+  const after = g.run("({amount: product('etf').amount, rate: product('etf').rate, cash: state.cash, grade: currentGrade()})");
+  check('전액 가입해도 가입 등급 이율 확정(ETF 8.5%)', Math.abs(after.rate - 0.085) < 1e-12, after.rate);
+  check('전액 가입 후 현금 0·예금 전액 반영', after.cash === 0 && after.amount === 300000000, after.cash + '/' + after.amount);
+
+  g.run('interest(); 1');
+  const gained = g.run("product('etf').amount") - after.amount;
+  check('전액 가입 후에도 이자 지급', gained > 0, gained.toFixed(2));
+
+  // 골드 등급에서 채권 전액 가입도 가입 시점 이율(4%)로 고정
+  const g2 = createGame();
+  g2.run(RESET(100000000) + `
+    state.loan = 0;
+    product('bond').amount = 0; product('bond').rate = 0;
+    document.getElementById('prod-bond').value = String(state.cash);
+    join('bond');
+    1;
+  `);
+  check('골드 채권 전액 가입 이율 확정(4%)', Math.abs(g2.run("product('bond').rate") - 0.04) < 1e-12, g2.run("product('bond').rate"));
+
+  // 브론즈 사용자는 상위 상품 가입 불가(기존 동작 유지)
+  const g3 = createGame();
+  g3.run(RESET(10000000) + `
+    product('etf').amount = 0; product('etf').rate = 0;
+    document.getElementById('prod-etf').value = '1000000';
+    join('etf');
+    1;
+  `);
+  check('브론즈는 ETF 가입 차단', g3.run("product('etf').amount") === 0 && g3.alerts.length > 0, g3.run("product('etf').amount"));
+}
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n== ${results.length - failed.length}/${results.length} passed ==`);
 if (failed.length) process.exit(1);
