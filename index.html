@@ -69,9 +69,29 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .row{display:grid;grid-template-columns:1fr repeat(4,auto);gap:10px;align-items:center}
 .log-box{margin-top:20px;max-height:200px;overflow-y:auto;background:#fafafa;padding:10px;border:1px solid #d8ded4;border-radius:8px;}
 .log-item{font-size:13px;color:#475569;margin-bottom:4px;font-family:monospace;}
+/* 자산 대시보드 */
+.dash{display:grid;gap:12px}
+.dash-top{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.dash-top small{color:#667085}
+.dash-total{display:block;font-size:clamp(22px,5vw,28px);line-height:1.25;margin-top:4px;overflow-wrap:anywhere}
+.dash-meta{display:flex;gap:6px;flex-wrap:wrap}
+.trend{height:118px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px}
+.trend svg{display:block;width:100%;height:100%}
+.alloc-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#edf2f7}
+.alloc-bar span{display:block;height:100%}
+.alloc-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#475569}
+.alloc-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.dash-foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:#475569;border-top:1px dashed #e2e8f0;padding-top:10px}
+.kv-row{grid-template-columns:1fr repeat(3,auto)}
+.order-row{grid-template-columns:1fr repeat(3,auto)}
+.app,main,.page,.panel,.section,.row{min-width:0}
+.row{overflow-wrap:anywhere}
 @media(max-width:1024px){.stats{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:850px){.app{grid-template-columns:1fr}.side{height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;background:#22303f}.stats{grid-template-columns:1fr 1fr}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
-@media(max-width:540px){main{padding:14px}.stats{grid-template-columns:1fr}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
+@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.nav button{white-space:nowrap;min-height:34px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
+@media(max-width:540px){main{padding:14px}.stats{grid-template-columns:minmax(0,1fr)}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
+/* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
+@media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
+@media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
 </style>
 </head>
 <body>
@@ -219,6 +239,14 @@ const state={
 const fx={usd:START_FX, anchor:START_FX};
 const $=id=>document.getElementById(id);
 const won=n=>Math.round(n).toLocaleString("ko-KR")+"원";
+// 큰 금액을 좁은 화면에서도 읽히게 요약합니다(1.2억원 · 3.4조원).
+const wonShort=n=>{
+  const a=Math.abs(n);
+  if(a>=1e12) return (n/1e12).toFixed(2).replace(/\.?0+$/,"")+"조원";
+  if(a>=1e8) return (n/1e8).toFixed(a>=1e10?0:1).replace(/\.0$/,"")+"억원";
+  if(a>=1e4) return Math.round(n/1e4).toLocaleString("ko-KR")+"만원";
+  return won(n);
+};
 const usdStr=n=>n.toFixed(2)+" USD";
 const pct=n=>(n>=0?"+":"")+(n*100).toFixed(2)+"%";
 
@@ -241,6 +269,53 @@ function nextGradeInfo(){
   if(i>=GRADES.length-1) return null;
   const next=GRADES[i+1];
   return {grade:next, remain:Math.max(0, GRADE_FLOORS[next]-totalAssetsKRW())};
+}
+
+// ── 자산 추이·배분 ──────────────────────────────────
+// 추이 데이터는 저장 파일에 넣지 않고 메모리에만 쌓습니다(저장/불러오기 호환 유지).
+const assetHistory={points:[],peak:0};
+
+function recordAssetHistory(){
+  const v=totalAssetsKRW();
+  const last=assetHistory.points[assetHistory.points.length-1];
+  if(last && Math.abs(last.v-v)<1) last.t=state.marketSeconds;
+  else assetHistory.points.push({t:state.marketSeconds,v});
+  if(assetHistory.points.length>180) assetHistory.points.shift(); // 15초 간격 45분
+  assetHistory.peak=Math.max(assetHistory.peak,v);
+}
+
+function assetTrendSVG(){
+  const pts=assetHistory.points.length>1 ? assetHistory.points : [{v:START_CASH},{v:totalAssetsKRW()}];
+  const vals=pts.map(p=>p.v);
+  const min=Math.min(...vals),max=Math.max(...vals),span=(max-min)||Math.max(1,Math.abs(max)*0.01);
+  const w=600,h=120,step=w/Math.max(1,vals.length-1);
+  const coords=vals.map((v,i)=>`${(i*step).toFixed(1)},${(h-((v-min)/span)*(h-6)-3).toFixed(1)}`).join(" ");
+  const up=vals[vals.length-1]>=vals[0];
+  const color=up?"#0f766e":"#b42318";
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,${h} ${coords} ${w},${h}" fill="${color}" opacity=".10"/><polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+// 자산 배분(현금·달러·주식·금융상품). 부채는 별도 표기합니다.
+function allocation(){
+  const parts=[
+    {label:"현금",value:Math.max(0,state.cash),color:"#0f766e"},
+    {label:"달러",value:Math.max(0,(state.usd||0)*fx.usd),color:"#0369a1"},
+    {label:"주식",value:Math.max(0,stockValueKRW()),color:"#b45309"},
+    {label:"금융상품",value:Math.max(0,productValueKRW()),color:"#6d28d9"}
+  ];
+  const gross=parts.reduce((a,p)=>a+p.value,0);
+  parts.forEach(p=>{ p.pct=gross>0?(p.value/gross)*100:0; });
+  return {parts,gross};
+}
+
+// 다음 배당까지 남은 초와 예상 배당금(원화 환산)
+function secondsToDividend(){ return DIVIDEND_EVERY-(state.marketSeconds%DIVIDEND_EVERY); }
+function expectedDividend(){
+  return stocks.reduce((sum,s)=>{
+    if(s.own<=0) return sum;
+    const amount=s.price*s.own*DIVIDEND_YIELD;
+    return sum+(isForeignStock(s)?amount*fx.usd:amount);
+  },0);
 }
 
 // ── 목표 달성 보상 ──────────────────────────────────
@@ -366,6 +441,19 @@ function repayLoan(){
   saveGame(); portfolio(); update();
 }
 
+// 대출 전액 상환: 입력값과 무관하게 보유 현금으로 최대한 갚습니다.
+function repayLoanFull(){
+  const loan=state.loan||0;
+  if(loan<=0) return alert("상환할 대출이 없습니다.");
+  const amt=Math.min(loan,Math.floor(state.cash));
+  if(amt<=0) return alert("상환할 현금이 부족합니다.");
+  state.loan=loan-amt;
+  state.cash-=amt;
+  if(state.loan<=0){ state.loan=0; state.loanRate=0; }
+  addLog(`대출 전액 상환: ${won(amt)} (남은 잔액 ${won(state.loan)})`);
+  saveGame(); portfolio(); update();
+}
+
 // ── 배당·실적 발표 ───────────────────────────────
 function applyShock(s, move){
   const next = s.price * (1 + move);
@@ -446,6 +534,7 @@ function init(){
   loadGame();
   banking();fxPage();news();portfolio();
   update();
+  recordAssetHistory();
   
   // 메인 마켓 틱 (5초 주기 -> 실제 속도감 향상 위해 내부 로직 연동)
   setInterval(tickMarket,5000);
@@ -559,6 +648,9 @@ function clearGame(skipConfirm) {
     s.hist = [s.start];
   });
   products.forEach(p => { p.amount = 0; p.rate = 0; });
+  assetHistory.points=[];
+  assetHistory.peak=0;
+  recordAssetHistory();
   addLog("게임 초기화가 수행되었습니다.");
   news();
   banking();
@@ -700,6 +792,14 @@ function portfolio(){
   let logsHtml = state.logs.map(l => `<div class="log-item">${l}</div>`).join("");
 
   const total=totalAssetsKRW();
+  const debt=state.loan||0;
+  const peak=Math.max(assetHistory.peak||0,total);
+  const firstV=assetHistory.points.length?assetHistory.points[0].v:total;
+  const changePct=firstV>0?(total-firstV)/firstV:0;
+  const expDiv=expectedDividend();
+  const alloc=allocation();
+  const allocBar=alloc.parts.map(p=>p.pct>0.4?`<span style="width:${p.pct.toFixed(2)}%;background:${p.color}" title="${p.label} ${p.pct.toFixed(1)}%"></span>`:"").join("");
+  const allocLegend=alloc.parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} ${p.pct.toFixed(1)}%</span>`).join("");
   const goalsHtml=MILESTONES.map(m=>{
     const done=!!state.goals[m.id];
     const p=Math.min(1, Math.max(0, m.target>0 ? total/m.target : 0));
@@ -714,7 +814,7 @@ function portfolio(){
     const s=stock(o.stockId);
     if(!s) return "";
     const foreign=isForeignStock(s);
-    return `<div class="row" style="grid-template-columns:1fr repeat(3,auto)">
+    return `<div class="row order-row">
       <b>${s.name}</b>
       <span>${o.side==="buy"?"매수":"매도"} ${o.qty}주</span>
       <span>지정가 ${foreign?usdStr(o.limit):won(o.limit)}</span>
@@ -737,7 +837,24 @@ function portfolio(){
     <div class="head">
       <div><h1>내 자산 및 시스템 관리</h1><p>보유 자산 명세서와 최근 시스템 실시간 거래 기록입니다.</p></div>
     </div>
-    
+
+    <div class="panel dash">
+      <div class="dash-top">
+        <div><small>순자산 추이 (최근 45분)</small><b class="dash-total" title="${won(total)}">${wonShort(total)}</b></div>
+        <div class="dash-meta">
+          <span class="pill">구간 수익률 <b class="${changePct>=0?"up":"down"}">${pct(changePct)}</b></span>
+          <span class="pill">고점 ${wonShort(peak)}</span>
+        </div>
+      </div>
+      <div class="trend">${assetTrendSVG()}</div>
+      <div class="alloc-bar" role="img" aria-label="자산 배분">${allocBar||'<span style="width:100%;background:#e7ebef"></span>'}</div>
+      <div class="alloc-legend">${allocLegend}</div>
+      <div class="dash-foot">
+        <span>다음 배당 <b>${secondsToDividend()}초</b> 후 · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b></span>
+        <span>총부채 <b>${debt>0?won(debt):"없음"}</b></span>
+      </div>
+    </div>
+
     <div class="portfolio">
       <h3>주식 투자 현황 (평단·수익률·실현손익 모두 매수 수수료 0.15% 포함 기준)</h3>
       ${stockRows}
@@ -759,7 +876,7 @@ function portfolio(){
     </div></div>
 
     <div class="section"><h3>신용 대출</h3><div class="panel">
-      <div class="row" style="grid-template-columns:1fr repeat(3,auto)">
+      <div class="row kv-row">
         <b>대출 잔액</b>
         <span>${won(loan)}</span>
         <span>금리 연 ${((state.loanRate||0)*100).toFixed(1)}%</span>
@@ -772,11 +889,12 @@ function portfolio(){
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="buy" onclick="borrowLoan()">대출 받기</button>
         <button class="ghost" onclick="repayLoan()">상환하기</button>
+        <button class="ghost" onclick="repayLoanFull()">전액 상환</button>
       </div>
     </div></div>
 
     <div class="section"><h3>세금</h3><div class="panel">
-      <div class="row" style="grid-template-columns:1fr repeat(3,auto)">
+      <div class="row kv-row">
         <b>올해 실현손익</b>
         <span>${won(state.realizedYTD||0)}</span>
         <span>기본공제 ${won(TAX_GAINS_FREE)}</span>
@@ -1046,6 +1164,9 @@ function tickSeconds() {
   // 배당 지급·실적 발표·목표 판정
   if(state.marketSeconds % DIVIDEND_EVERY === 0) payDividends();
   if(state.marketSeconds % EARNINGS_EVERY === 0) earningsSurprise();
+
+  // 자산 추이 기록(15초 간격, 최근 45분)
+  if(state.marketSeconds % 15 === 0) recordAssetHistory();
 
   // 5초마다 내부 백그라운드 자동 저장 연동
   if(state.marketSeconds % 5 === 0) {

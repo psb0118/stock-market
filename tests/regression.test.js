@@ -334,6 +334,76 @@ const RESET = total => `
   check('브론즈는 ETF 가입 차단', g3.run("product('etf').amount") === 0 && g3.alerts.length > 0, g3.run("product('etf').amount"));
 }
 
+// ── 6. 자산 대시보드·전액 상환·금액 요약 ─────────────────────────
+{
+  const g = createGame();
+  g.run(RESET(10000000) + `
+    state.loan = 0; state.loanRate = 0; state.usd = 0;
+    state.marketSeconds = 0;
+    assetHistory.points = []; assetHistory.peak = 0;
+    1;
+  `);
+
+  check('금액 요약: 1.2억원', g.run('wonShort(123456789)') === '1.2억원', g.run('wonShort(123456789)'));
+  check('금액 요약: 1.2조원', g.run('wonShort(1200000000000)') === '1.2조원', g.run('wonShort(1200000000000)'));
+  check('금액 요약: 만원 단위', g.run('wonShort(12345678)') === '1,235만원', g.run('wonShort(12345678)'));
+
+  g.run('recordAssetHistory(); state.cash = 20000000; recordAssetHistory(); 1');
+  check('자산 추이 기록', g.run('assetHistory.points.length') === 2, g.run('assetHistory.points.length'));
+  check('자산 고점 갱신', g.run('assetHistory.peak') === 20000000, g.run('assetHistory.peak'));
+  check('추이 차트 SVG 생성', g.run('assetTrendSVG()').includes('<polygon') === true);
+  g.run('for(let i=0;i<300;i++){ state.cash += 1000; recordAssetHistory(); } 1');
+  check('추이 기록은 180개로 제한', g.run('assetHistory.points.length') === 180, g.run('assetHistory.points.length'));
+
+  // 자산 배분: 현금 500만 + 주식 500만 → 각 50%
+  g.run(RESET(5000000) + `
+    state.loan = 0; state.usd = 0;
+    stock('future_ai').own = 10; stock('future_ai').price = 500000;
+    stock('future_ai').avgBuy = 500000;
+    1;
+  `);
+  const alloc = g.run('allocation()');
+  check('자산 배분 비중 합 100%', Math.abs(alloc.parts.reduce((a, p) => a + p.pct, 0) - 100) < 1e-9);
+  check('자산 배분 현금·주식 50%', Math.abs(alloc.parts[0].pct - 50) < 1e-6 && Math.abs(alloc.parts[2].pct - 50) < 1e-6, alloc.parts.map(p => p.pct.toFixed(1)).join('/'));
+
+  // 배당 예상: 국내 10주 × 10만원 × 0.4%
+  g.run(RESET(0) + `
+    state.cash = 0; state.usd = 0; state.loan = 0;
+    stocks.forEach(s => { s.own = 0; });
+    stock('future_ai').own = 10; stock('future_ai').price = 100000;
+    state.marketSeconds = 30;
+    1
+  `);
+  check('예상 배당금 계산', Math.round(g.run('expectedDividend()')) === 4000, g.run('expectedDividend()'));
+  check('다음 배당까지 남은 시간', g.run('secondsToDividend()') === 90, g.run('secondsToDividend()'));
+
+  // 전액 상환
+  g.run(RESET(10000000) + `
+    state.loan = 3000000; state.loanRate = 0.09;
+    repayLoanFull();
+    1
+  `);
+  const repaid = g.run('({loan: state.loan, rate: state.loanRate, cash: state.cash})');
+  check('전액 상환 후 대출 0', repaid.loan === 0 && repaid.rate === 0, repaid.loan);
+  check('전액 상환 후 현금 차감', Math.round(repaid.cash) === 7000000, repaid.cash);
+
+  // 대시보드 렌더
+  g.run(RESET(10000000) + 'state.loan = 0; portfolio(); 1');
+  const html = g.run("document.getElementById('portfolio').innerHTML");
+  check('내 자산 대시보드 렌더', html.includes('순자산 추이') && html.includes('다음 배당') && html.includes('alloc-bar'));
+  check('전액 상환 버튼 렌더', html.includes('repayLoanFull()'));
+
+  // clearGame이 추이 기록을 초기화
+  g.run(RESET(10000000) + 'recordAssetHistory(); state.cash = 50000000; recordAssetHistory(); clearGame(true); 1');
+  check('초기화 시 추이 기록 리셋', g.run('assetHistory.points.length') === 1, g.run('assetHistory.points.length'));
+
+  // 자산이 0인 상태에서도 NaN 없이 대시보드가 그려지는지
+  g.run('state.cash = 0; state.usd = 0; state.loan = 0; products.forEach(p => { p.amount = 0; p.rate = 0; }); stocks.forEach(s => { s.own = 0; s.avgBuy = 0; }); assetHistory.points = []; assetHistory.peak = 0; portfolio(); 1');
+  const emptyHtml = g.run("document.getElementById('portfolio').innerHTML");
+  check('자산 0원 대시보드에 NaN 없음', !emptyHtml.includes('NaN'), (emptyHtml.match(/NaN/g) || []).length);
+  check('자산 0원 배분 비중 0%', g.run('allocation().parts.every(p => p.pct === 0)') === true);
+}
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n== ${results.length - failed.length}/${results.length} passed ==`);
 if (failed.length) process.exit(1);
