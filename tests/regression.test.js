@@ -399,10 +399,11 @@ const RESET = total => `
   check('전액 상환 후 현금 차감', Math.round(repaid.cash) === 7000000, repaid.cash);
 
   // 대시보드 렌더
-  g.run(RESET(10000000) + 'state.loan = 0; portfolio(); 1');
+  g.run(RESET(10000000) + 'state.loan = 0; portfolio(); loanPage(); 1');
   const html = g.run("document.getElementById('portfolio').innerHTML");
-  check('내 자산 대시보드 렌더', html.includes('순자산 추이') && html.includes('다음 배당') && html.includes('alloc-bar'));
-  check('전액 상환 버튼 렌더', html.includes('repayLoanFull()'));
+  check('내 자산 대시보드 렌더', html.includes('순자산') && html.includes('다음 배당') && html.includes('alloc-bar'));
+  const loanHtml = g.run("document.getElementById('loan').innerHTML");
+  check('전액 상환 버튼 렌더', loanHtml.includes('repayLoanFull()'));
 
   // clearGame이 추이 기록을 초기화
   g.run(RESET(10000000) + 'recordAssetHistory(); state.cash = 50000000; recordAssetHistory(); clearGame(true); 1');
@@ -479,10 +480,11 @@ const RESET = total => `
   check('업적 달성 처리', g.run('!!state.achievements.first_trade') === true);
 
   // 속도·일시정지
-  g.run('state.speed=10; state.paused=false; state.marketSeconds=0; gameLoop(); 1');
-  check('10x에서 10초 진행', g.run('state.marketSeconds') === 10, g.run('state.marketSeconds'));
+  g.run('setSpeed(10); state.paused=false; state.marketSeconds=0; gameLoop(); 1');
+  check('속도는 최대 5배속으로 제한', g.run('speedNow()') === 5 && g.run('state.speed') === 5, g.run('state.speed'));
+  check('5배속에서 게임 시간 5초 진행', g.run('state.marketSeconds') === 5, g.run('state.marketSeconds'));
   g.run('state.paused=true; const beforePause=state.marketSeconds; gameLoop(); state.paused=false; 1');
-  check('일시정지 중 시간 정지', g.run('state.marketSeconds') === 10, g.run('state.marketSeconds'));
+  check('일시정지 중 시간 정지', g.run('state.marketSeconds') === 5, g.run('state.marketSeconds'));
 
   // 배속에서도 화면 카운트다운은 실제 시간 기준으로 1초씩 줄어야 합니다.
   g.run('state.speed=3; state.paused=false; state.marketSeconds=0; state.marketOpen=true; tickSeconds(); tickSeconds(); tickSeconds(); 1');
@@ -490,9 +492,9 @@ const RESET = total => `
   check('3배속 장중 카운트다운 실제 초', bar3.includes('실제 59초') && bar3.includes('3x'), bar3);
   check('게임 시간→실제 초 환산', g.run('realSeconds(179)') === 60 && g.run('realSeconds(90)') === 30 && g.run('realSeconds(0)') === 0, g.run('realSeconds(179)'));
 
-  g.run('state.speed=10; state.marketSeconds=180; tickSeconds(); 1');
+  g.run('setSpeed(5); state.marketSeconds=180; tickSeconds(); 1');
   const bar10 = g.run("document.getElementById('marketTimeBar').textContent");
-  check('10배속 휴장 카운트다운 실제 초', bar10.includes('실제 6초') && bar10.includes('10x'), bar10);
+  check('5배속 휴장 카운트다운 실제 초', bar10.includes('실제 12초') && bar10.includes('5x'), bar10);
   g.run('state.speed=3; state.marketSeconds=300; product("deposit").amount=1000000; product("deposit").startedAt=0; product("deposit").term=600; product("deposit").matured=false; 1');
   check('상품 만기 카운트다운 실제 초', g.run('productMaturityText(product("deposit"))') === '실제 100초 남음', g.run('productMaturityText(product("deposit"))'));
 
@@ -780,6 +782,13 @@ const RESET = total => `
   check('전부 실패하면 일당·경력 없음', gf.run('state.cash') === 0 && gf.run('state.labor.shifts') === 0, gf.run('state.cash'));
   check('실패 후 쿨다운 없이 재도전', gf.run("laborRemaining(laborJob('convenience'))") === 0 && gf.run("workLabor('convenience')") === true);
 
+  // 표시선이 중앙에서 시작하면 열자마자 3연타로 만점이 나왔으므로 왼쪽 끝에서 출발합니다.
+  check('노동 시작 위치는 왼쪽 끝', gf.run('laborSession.pos') === 0 && gf.run("laborRoundResult(laborJob('convenience'),laborSession.pos).grade") === 'miss', gf.run('laborSession.pos'));
+  gf.run('laborStop(); laborStop(); laborStop(); 1');
+  check('시작 직후 연타는 일당 0원', gf.run('state.cash') === 0 && gf.run('state.labor.shifts') === 0, gf.run('state.cash'));
+  gf.run("workLabor('convenience'); laborStopAt(.5); 1");
+  check('판정 후 표시선을 다시 왼쪽 끝으로', gf.run('laborSession.pos') === 0 && gf.run('laborSession.results[0].grade') === 'perfect', gf.run('laborSession.pos'));
+
   // 경력이 쌓이면 고소득 노동이 열립니다.
   g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
   check('경력 10회에 긴급 외주 해금', g.run('state.cash') === 490000 && g.run('state.labor.shifts') === 11, g.run('state.cash'));
@@ -860,10 +869,116 @@ const RESET = total => `
   `);
   check('거래 10회 업적', g.run('state.achievements.trade_10') === true);
   check('투자 성향: 장기 보유형', g.run('investmentStyle().style') === '장기 보유형', g.run('investmentStyle().style'));
-  g.run("portfolio(); 1");
+  g.run("portfolio(); economyPage(); 1");
   const portfolioHtml = g.run("document.getElementById('portfolio').innerHTML");
+  const economyHtml = g.run("document.getElementById('economy').innerHTML");
   check('포트폴리오에 투자 성향 분석', portfolioHtml.includes('투자 성향 분석') && portfolioHtml.includes('장기 보유형'));
-  check('경제 화면에 물가·실업률 지표', portfolioHtml.includes('물가 상승률') && portfolioHtml.includes('실업률') && portfolioHtml.includes('GDP 성장률'));
+  check('경제 화면에 물가·실업률 지표', economyHtml.includes('물가 상승률') && economyHtml.includes('실업률') && economyHtml.includes('GDP 성장률'));
+}
+
+// ── 13. 경제·설정·속도·환생 통합 ────────────────────────────
+{
+  const g = createGame();
+  g.run(`
+    clearGame(true);
+    state.cash = START_CASH; state.usd = 0; state.loan = 0; state.paused = false;
+    state.auto.enabled = false;
+    state.achievements = Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, true]));
+    state.goals = Object.fromEntries(MILESTONES.map(m => [m.id, true]));
+    state.special = Object.fromEntries(SPECIAL_MISSIONS.map(m => [m.id, true]));
+    state.rewardedGrade = gradeIndex(currentGrade());
+    state.notifySeen = {};
+    1;
+  `);
+  g.run('for(let i=0;i<120;i++) gameLoop(); 1');
+  check('신규 게임 120초 무활동 현금 불변', g.run('state.cash') === g.run('START_CASH'), g.run('state.cash'));
+  check('무활동 상태에서 총자산 불변', g.run('grossAssetsKRW()') === g.run('START_CASH'), g.run('grossAssetsKRW()'));
+
+  // 총자산·순자산 공식
+  g.run(`
+    state.cash = 10000000; state.loan = 3000000; state.usd = 1000; fx.usd = 1000;
+    stocks.forEach(s => { s.own = 0; });
+    stock('future_ai').own = 10; stock('future_ai').price = 100000;
+    products.forEach(p => { p.amount = 0; }); product('deposit').amount = 5000000;
+    state.estate = { apt: { qty: 1, avgBuy: 90000000 } };
+    state.metals = { gold: { qty: 10, avg: 100000 }, silver: { qty: 0, avg: 0 } };
+    state.altPrices = { apt: 100000000, gold: 200000 };
+    state.company = { name: 't', level: 1, valuation: 20000000, book: 20000000, revenue: 0, profit: 0, payout: 0.3 };
+    1;
+  `);
+  const formula = g.run('({gross:grossAssetsKRW(), net:netAssetsKRW(), cash:state.cash, stock:stockValueKRW(), product:productValueKRW(), estate:estateValue(), metal:metalValue(), company:companyValue()})');
+  const expectedGross = formula.cash + 1000000 + formula.stock + formula.product + formula.estate + formula.metal + formula.company;
+  check('총자산 = 현금+주식+금융+부동산+실물+기업', Math.round(formula.gross) === Math.round(expectedGross), formula.gross);
+  check('순자산 = 총자산 - 부채', Math.round(formula.net) === Math.round(formula.gross - 3000000), formula.net);
+
+  const cashBefore = g.run('state.cash');
+  g.run(`stock('future_ai').price = 150000; 1`);
+  check('미실현 평가익은 현금에 반영되지 않음', g.run('state.cash') === cashBefore, g.run('state.cash') - cashBefore);
+  check('미실현 평가익은 총자산에 반영', Math.round(g.run('grossAssetsKRW()')) === Math.round(expectedGross + 500000), g.run('grossAssetsKRW()'));
+
+  // 속도 저장·복원·클램프
+  g.run('setSpeed(4); 1');
+  check('속도 설정 즉시 반영', g.run('state.speed') === 4 && g.run('state.settings.speed') === 4);
+  const savedSpeed = g.run('JSON.parse(JSON.stringify(buildSaveData()))');
+  g.run('setSpeed(1); 1');
+  g.run(`applySaveData(${JSON.stringify(savedSpeed)}); 1`);
+  check('새로고침 후 속도 유지', g.run('state.speed') === 4, g.run('state.speed'));
+  g.run(`
+    const bad = JSON.parse(JSON.stringify(buildSaveData()));
+    bad.state.speed = 99; bad.state.settings.speed = -3;
+    bad.state.settings.numberFormat = 'weird'; bad.state.settings.theme = 'neon';
+    applySaveData(bad);
+    1;
+  `);
+  check('잘못된 속도는 1~5로 보정', g.run('state.speed') === 5 && g.run('state.settings.speed') === 5, g.run('state.speed'));
+  check('잘못된 설정값 보정', g.run("state.settings.numberFormat === 'full' && state.settings.theme === 'light'"), g.run('state.settings.numberFormat'));
+
+  // 알림 개별 토글·중복 억제
+  g.run('state.notify.dividend = false; state.alerts = []; state.notifySeen = {}; notify("dividend","배당","테스트"); 1');
+  check('알림 끄면 기록되지 않음', g.run('state.alerts.length') === 0, g.run('state.alerts.length'));
+  g.run('state.notify.dividend = true; notify("dividend","배당","테스트"); notify("dividend","배당","테스트"); 1');
+  check('동일 알림 중복 억제', g.run('state.alerts.filter(a=>a.kind==="dividend").length') === 1, g.run('state.alerts.length'));
+
+  // 환생: 조건·포인트·업그레이드·데이터 보존
+  g.run(`
+    state.cash = 200000000; state.usd = 0; state.loan = 0;
+    stocks.forEach(s => { s.own = 0; s.avgBuy = 0; });
+    products.forEach(p => { p.amount = 0; });
+    state.estate = {}; state.company = null;
+    state.metals = { gold: { qty: 0, avg: 0 }, silver: { qty: 0, avg: 0 } };
+    state.altPrices = {}; state.paused = false;
+    state.rebirth = { count: 0, points: 0, spent: 0, upgrades: {}, bestNet: 0, history: [], notified: false };
+    ensureRebirth();
+    1;
+  `);
+  check('환생 조건 순자산 1억', g.run('canRebirth()') === true);
+  check('환생 포인트 계산', g.run('rebirthPointsFor(200000000)') === 4, g.run('rebirthPointsFor(200000000)'));
+  g.run('ensureRebirth().points = 20; 1');
+  const upgradeCost = g.run("rebirthCost('start')");
+  g.run("buyRebirthUpgrade('start'); 1");
+  check('영구 업그레이드 구매·포인트 차감', g.run("rebirthLevel('start')") === 1 && g.run('ensureRebirth().points') === 20 - upgradeCost, g.run('ensureRebirth().points'));
+  check('시작 자금 업그레이드 반영', g.run('rebirthStartCash()') === g.run('START_CASH + 2000000'), g.run('rebirthStartCash()'));
+  g.run('setSetting("theme","dark"); setSetting("numberFormat","short"); state.achievements={first_trade:true}; 1');
+  const pointsBefore = g.run('ensureRebirth().points');
+  const startCash = g.run('rebirthStartCash()');
+  g.run('rebirthNow(true); 1');
+  const afterRebirth = g.run('({count:ensureRebirth().count,cash:state.cash,loan:state.loan,stock:stockValueKRW(),product:productValueKRW(),history:ensureRebirth().history.length,points:ensureRebirth().points,theme:state.settings.theme,format:state.settings.numberFormat,ach:!!state.achievements.first_trade,can:canRebirth()})');
+  check('환생 실행·횟수·기록', afterRebirth.count === 1 && afterRebirth.history === 1, afterRebirth.count);
+  check('환생 후 시작 자금 지급', Math.round(afterRebirth.cash) === Math.round(startCash), afterRebirth.cash);
+  check('환생 후 진행 자산 초기화', afterRebirth.loan === 0 && afterRebirth.stock === 0 && afterRebirth.product === 0);
+  check('환생 포인트 누적 지급', afterRebirth.points === pointsBefore + 4, afterRebirth.points);
+  check('환생 후 설정·업적 보존', afterRebirth.theme === 'dark' && afterRebirth.format === 'short' && afterRebirth.ach === true);
+  check('환생 직후 재환생 불가', afterRebirth.can === false);
+
+  g.run("ensureRebirth().upgrades.fee = 5; ensureRebirth().upgrades.offline = 1; 1");
+  check('거래 수수료 업그레이드 50% 감소', Math.abs(g.run('stockFeeRate()') - g.run('FEE_STOCK*0.5')) < 1e-12, g.run('stockFeeRate()'));
+  check('오프라인 정산 상한 증가', g.run('offlineMaxSeconds()') === 4 * 3600, g.run('offlineMaxSeconds()'));
+
+  // 새 페이지 렌더
+  g.run('dashboardPage(); portfolio(); settingsPage(); rebirthPage(); realestatePage(); companyPage(); economyPage(); loanPage(); taxPage(); ordersPage(); 1');
+  const pageText = g.run('["dashboard","portfolio","settings","rebirth","realestate","company","economy","loan","tax","orders"].map(id=>document.getElementById(id).innerHTML).join("")');
+  check('새 페이지 렌더에 NaN·undefined 없음', !pageText.includes('NaN') && !pageText.includes('undefined'), (pageText.match(/NaN|undefined/g) || []).length);
+  check('설정 페이지에 속도·알림·환생 안내', pageText.includes('게임 속도') && pageText.includes('알림') && pageText.includes('설정만 초기화'));
 }
 
 const failed = results.filter(r => !r.pass);
