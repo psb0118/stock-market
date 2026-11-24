@@ -779,6 +779,73 @@ const RESET = total => `
   check('구버전 저장 노동 기본값 보정', g3.run('state.labor.shifts') === 0 && g3.run('state.labor.earned') === 0 && !!g3.run('state.labor.lastAt'));
 }
 
+// ── 13. 경제 지표·기업 등급·실적·투자 성향 ───────────────────
+{
+  const g = createGame();
+  g.run('clearGame(true); 1');
+  check('경제 지표 기본값', g.run('state.economy.inflation') === 0.025 && g.run('state.economy.unemployment') === 0.035 && g.run('state.economy.gdpGrowth') === 0.02);
+  check('기업 등급: 스타트업', g.run('companyGradeInfo({valuation:50000000}).name') === '스타트업');
+  check('기업 등급: 성장기업', g.run('companyGradeInfo({valuation:200000000}).name') === '성장기업');
+  check('기업 등급: 최고 등급 도달 가능', g.run('companyGradeInfo({valuation:3000000000}).name') === '초우량 기업');
+
+  g.run(`
+    state.company={name:'테스트기업',level:1,valuation:50000000,book:50000000,revenue:2000000,profit:600000,payout:.3};
+    state.cash=1000000000; state.achievements={}; acquireRival('r1');
+    1
+  `);
+  check('기업 인수 비용·가치 반영', g.run('state.company.acquired.r1') === true && g.run('state.company.valuation') === 200000000, g.run('state.company.valuation'));
+  check('인수 후 기업 등급 상승', g.run('companyGradeInfo().name') === '성장기업', g.run('companyGradeInfo().name'));
+  check('첫 기업 인수 업적', g.run('state.achievements.first_acquisition') === true);
+
+  const originalRandom = Math.random;
+  g.run(`
+    state.news=[]; stocks.forEach(s=>{s.own=0;s.price=s.start});
+    Math.random=()=>0.5; earningsSurprise();
+    1
+  `);
+  const earningsNews = g.run('state.news[0]');
+  check('실적 발표에 매출·영업이익 포함', typeof earningsNews === 'string' && earningsNews.includes('매출') && earningsNews.includes('영업이익') && earningsNews.includes('주가'), earningsNews);
+  check('실적 발표가 주가에 반영', g.run('stocks.some(s=>s.id!=="market_etf"&&Number.isFinite(s.lastMove)&&s.lastMove!==0)') === true);
+  Math.random = originalRandom;
+
+  try {
+    g.run(`
+      state.news=[]; state.company=null; state.cash=1000000;
+      state.economy=Object.assign({},ECON_DEFAULT,{cycleLeft:15,phase:'중립',gdpGrowth:.02,unemployment:.035,inflation:.025});
+      Math.random=()=>0; tickAlt();
+      1
+    `);
+    check('경기 호황 이벤트 발생', g.run('state.news.some(n=>n.includes("경기 호황"))') === true, g.run('state.news[0]'));
+    check('호황에 성장률·물가 상승', g.run('state.economy.gdpGrowth') > 0.02 && g.run('state.economy.inflation') > 0.025, g.run('state.economy.gdpGrowth') + '/' + g.run('state.economy.inflation'));
+
+    g.run(`
+      state.news=[];
+      state.economy=Object.assign({},ECON_DEFAULT,{cycleLeft:15,phase:'호황',gdpGrowth:.02,unemployment:.035,inflation:.025});
+      Math.random=()=>0.99; tickAlt();
+      1
+    `);
+    check('금융 위기·경기 침체 이벤트 발생', g.run('state.news.some(n=>n.includes("금융 위기")&&n.includes("경기 침체"))') === true, g.run('state.news[0]'));
+    check('불황에 실업률 상승·주가 하락', g.run('state.economy.unemployment') > 0.035 && g.run('stocks.some(s=>s.lastMove<0)') === true, g.run('state.economy.unemployment'));
+  } finally {
+    Math.random = originalRandom;
+  }
+
+  g.run(`
+    state.journal=[]; state.cash=10000000; state.usd=0; state.loan=0;
+    state.estate={}; state.company=null; products.forEach(p=>p.amount=0);
+    stocks.forEach(s=>s.own=0);
+    state.achievements={}; state.journal=Array.from({length:10},(_,i)=>({side:'buy',name:'x',qty:1,valueKRW:1,profit:0}));
+    checkAchievements();
+    1
+  `);
+  check('거래 10회 업적', g.run('state.achievements.trade_10') === true);
+  check('투자 성향: 장기 보유형', g.run('investmentStyle().style') === '장기 보유형', g.run('investmentStyle().style'));
+  g.run("portfolio(); 1");
+  const portfolioHtml = g.run("document.getElementById('portfolio').innerHTML");
+  check('포트폴리오에 투자 성향 분석', portfolioHtml.includes('투자 성향 분석') && portfolioHtml.includes('장기 보유형'));
+  check('경제 화면에 물가·실업률 지표', portfolioHtml.includes('물가 상승률') && portfolioHtml.includes('실업률') && portfolioHtml.includes('GDP 성장률'));
+}
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n== ${results.length - failed.length}/${results.length} passed ==`);
 if (failed.length) process.exit(1);

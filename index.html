@@ -180,8 +180,9 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .labor-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}
 .labor-card button{min-height:34px;font-size:12px}
 .labor-note{font-size:11px;color:#667085;margin-top:8px}
-#laborFab{position:fixed;right:16px;bottom:18px;z-index:55;display:inline-flex;align-items:center;gap:6px;min-height:42px;padding:0 15px;border-radius:999px;background:#f7c948;color:#17202b;font-weight:800;font-size:13px;box-shadow:0 6px 20px #0003;border:1px solid #d9a900}
+#laborFab{position:fixed;left:236px;right:auto;bottom:18px;z-index:55;display:inline-flex;align-items:center;gap:6px;min-height:42px;padding:0 15px;border-radius:999px;background:#f7c948;color:#17202b;font-weight:800;font-size:13px;box-shadow:0 6px 20px #0003;border:1px solid #d9a900}
 #laborFab.urgent{background:#fee2e2;color:#991b1b;border-color:#fca5a5;box-shadow:0 0 0 4px #f7c94855,0 6px 20px #0003}
+/* 노동 버튼은 화면 왼쪽 아래(데스크톱은 사이드바 오른쪽)에 둡니다. 오른쪽 아래 알림 토스트가 버튼을 가리지 않도록 합니다. */
 @media(max-width:850px){#laborFab{left:12px;right:auto;bottom:104px;min-height:40px;padding:0 13px}#labor-section{scroll-margin-top:220px}}
 .alt-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px}
 .alt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:8px;font-size:12px}
@@ -330,7 +331,8 @@ const stockDefinitions = [
 let stocks = stockDefinitions.map(x=>{
   const isForeign = ["foreign","mega","special"].includes(x[4]);
   let initPrice = isForeign ? Math.round(x[5]/START_FX) : Math.round(x[5]/100)*100;
-  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice]};
+  const baseRevenue=Math.max(100000000,Math.round(initPrice*10000));
+  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice],revenue:baseRevenue,opProfit:Math.round(baseRevenue*.12)};
 });
 
 // 가입 금액(amount)과 별개로, 가입 당시 확정된 연이율(rate)을 함께 보관합니다.
@@ -388,6 +390,16 @@ const RIVALS=[
 {id:"r2",name:"경쟁사 베타",cost:300000000,boost:400000000},
 {id:"r3",name:"경쟁사 감마",cost:800000000,boost:1200000000}
 ];
+// 기업 가치에 따른 기업 등급. 인수·확장으로 가치가 커지면 자동으로 바뀝니다.
+const COMPANY_GRADES=[
+{min:0,name:"스타트업",color:"#64748b"},
+{min:150000000,name:"성장기업",color:"#0f766e"},
+{min:400000000,name:"중견기업",color:"#0369a1"},
+{min:1000000000,name:"대기업",color:"#6d28d9"},
+{min:2000000000,name:"글로벌 기업",color:"#b45309"},
+{min:2800000000,name:"초우량 기업",color:"#be123c"}
+];
+const ECON_DEFAULT={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0,inflation:.025,unemployment:.035,gdpGrowth:.02};
 
 // ── 자산 등급 시스템 ───────────────────────────────────────────
 // 등급은 총자산(현금 + 달러 환산액 + 주식 평가액 + 금융상품)으로 결정됩니다.
@@ -447,7 +459,7 @@ const state={
   cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""},
   // ── 확장 자산·성장 시스템 ──
   estate:{}, metals:{gold:{qty:0,avg:0},silver:{qty:0,avg:0}}, altPrices:{}, company:null,
-  economy:{phase:"중립", baseRate:.03, cycleLeft:90, rateAdj:0},
+  economy:Object.assign({},ECON_DEFAULT),
   weekly:{key:"", counts:{}, claimed:{}}, special:{},
   streak:{days:1, last:"", best:1},
   dex:{stocks:{},products:{},estates:{},metals:{}},
@@ -914,6 +926,15 @@ function sellMetal(id){
   addLog(`🪙 ${m.name} ${qty}${m.unit} 매도 (${won(net)})`);
   saveGame(); portfolio(); update();
 }
+function companyGradeInfo(c=state.company){
+  if(!c) return {name:"미설립",index:-1,next:null,progress:0,color:"#64748b"};
+  const value=Math.max(0,+c.valuation||0);
+  let index=0;
+  COMPANY_GRADES.forEach((g,i)=>{ if(value>=g.min) index=i; });
+  const grade=COMPANY_GRADES[index], next=COMPANY_GRADES[index+1]||null;
+  const progress=next?Math.max(0,Math.min(1,(value-grade.min)/(next.min-grade.min))):1;
+  return {name:grade.name,index,next,progress,color:grade.color,value};
+}
 function foundCompany(){
   if(state.company) return alert("이미 기업을 운영 중입니다.");
   const def=COMPANY_LEVELS[0];
@@ -945,6 +966,7 @@ function acquireRival(id){
   c.acquired=Object.assign({},c.acquired,{[id]:true});
   addLog(`🤝 기업 인수: ${r.name} (+${won(r.boost)})`);
   notify("system","인수합병",`${r.name} 인수 완료`);
+  checkAchievements();
   saveGame(); portfolio(); update();
 }
 function setCompanyPayout(v){ if(!state.company) return; state.company.payout=Math.max(0,Math.min(1,(+v||0)/100)); saveGame(); portfolio(); }
@@ -972,7 +994,7 @@ function tickAlt(){
     c.valuation=Math.max(book*.8,Math.min(book*1.2,Math.round(c.valuation*(0.997+Math.random()*.006))));
     if(state.marketSeconds%30===0){ const pay=Math.round(c.profit*(c.payout==null?.3:c.payout)); state.cash+=pay; if(pay>0) addLog(`🏭 기업 배당 +${won(pay)}`); }
   }
-  const eco=state.economy||(state.economy={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0});
+  const eco=state.economy||(state.economy=Object.assign({},ECON_DEFAULT));
   // tickAlt는 15게임초마다 실행되므로 남은 시간도 15초씩 줄여야 합니다.
   // (기존에는 1씩 줄어 90초 표시가 실제로는 1,350초가 되는 버그가 있었습니다.)
   eco.cycleLeft=(eco.cycleLeft||0)-15;
@@ -983,8 +1005,23 @@ function tickAlt(){
     eco.rateAdj=eco.phase==="호황"?.004:eco.phase==="불황"?-.004:0;
     const dir=Math.random()<.5?-1:1;
     eco.baseRate=Math.max(.01,Math.min(.08,(eco.baseRate||.03)+dir*.0025));
-    publishBreakingNews("🏦 기준금리", `기준금리 ${(eco.baseRate*100).toFixed(2)}% · 경기 ${eco.phase} 국면이 시작되었습니다.`);
-    notify("system","경제 지표",`경기 ${eco.phase} · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+    // 경기 국면에 따라 물가·실업률·성장률이 움직이고, 이는 시장 방향에도 반영됩니다.
+    const phaseBias=eco.phase==="호황"?1:eco.phase==="불황"?-1:0;
+    eco.inflation=Math.max(.005,Math.min(.08,(+eco.inflation||.025)+phaseBias*.003+(Math.random()-.5)*.002));
+    eco.unemployment=Math.max(.015,Math.min(.15,(+eco.unemployment||.035)-phaseBias*.004+(Math.random()-.5)*.0015));
+    eco.gdpGrowth=Math.max(-.06,Math.min(.08,(+eco.gdpGrowth||.02)+phaseBias*.007+(Math.random()-.5)*.003));
+    if(eco.phase==="불황"){
+      stocks.forEach(s=>applyShock(s,-(0.01+Math.random()*.025)));
+      publishBreakingNews("📉 금융 위기 · 경기 침체", `경기 침체가 시작되었습니다. 물가 ${(eco.inflation*100).toFixed(1)}% · 실업률 ${(eco.unemployment*100).toFixed(1)}% · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+      notify("system","경제 위기",`금융 위기 · 실업률 ${(eco.unemployment*100).toFixed(1)}%`);
+    } else if(eco.phase==="호황"){
+      stocks.forEach(s=>applyShock(s,0.008+Math.random()*.02));
+      publishBreakingNews("🚀 경기 호황", `소비와 투자가 살아납니다. 물가 ${(eco.inflation*100).toFixed(1)}% · 실업률 ${(eco.unemployment*100).toFixed(1)}% · 성장률 ${(eco.gdpGrowth*100).toFixed(1)}%`);
+      notify("system","경기 호황",`성장률 ${(eco.gdpGrowth*100).toFixed(1)}% · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+    } else {
+      publishBreakingNews("🏦 기준금리", `기준금리 ${(eco.baseRate*100).toFixed(2)}% · 경기 ${eco.phase} 국면이 시작되었습니다.`);
+      notify("system","경제 지표",`경기 ${eco.phase} · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+    }
   }
   if(state.marketSeconds%180===0 && Math.random()<.5){
     const sector=["AI","반도체","배터리","우주","디지털 자산"][Math.floor(Math.random()*5)];
@@ -1064,7 +1101,9 @@ function openAssetDetail(kind,id){
     html=`<div class="kpis"><div class="kpi"><small>현재가</small><b>${isForeignStock(s)?usdStr(s.price):won(s.price)}</b></div><div class="kpi"><small>보유</small><b>${s.own}주</b></div><div class="kpi"><small>평단(수수료 포함)</small><b>${isForeignStock(s)?usdStr(s.avgBuy):won(s.avgBuy)}</b></div><div class="kpi"><small>평가손익</small><b class="${s.price>=s.avgBuy?"up":"down"}">${won((s.price-s.avgBuy)*s.own*(isForeignStock(s)?fx.usd:1))}</b></div><div class="kpi"><small>실현손익</small><b>${won(s.realizedProfit)}</b></div><div class="kpi"><small>테마</small><b style="font-size:13px">${s.theme}</b></div></div>`;
   } else if(kind==="company"){
     const c=state.company; if(!c) return;
-    html=`<div class="kpis"><div class="kpi"><small>기업명</small><b>${c.name}</b></div><div class="kpi"><small>레벨</small><b>Lv.${c.level}</b></div><div class="kpi"><small>기업 가치</small><b>${won(c.valuation)}</b></div><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div></div>`;
+    const cg=companyGradeInfo(c);
+    html=`<div class="kpis"><div class="kpi"><small>기업명</small><b>${c.name}</b></div><div class="kpi"><small>기업 등급</small><b style="color:${cg.color}">${cg.name}</b></div><div class="kpi"><small>레벨</small><b>Lv.${c.level}</b></div><div class="kpi"><small>기업 가치</small><b>${won(c.valuation)}</b></div><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>인수 기업</small><b>${Object.keys(c.acquired||{}).length}개</b></div></div>
+    <div style="margin-top:10px"><div class="mission-top"><small>다음 등급 ${cg.next?cg.next.name:"최고 등급"}</small><small>${cg.next?`${Math.round(cg.progress*100)}%`:"MAX"}</small></div><div class="bar"><span style="width:${(cg.progress*100).toFixed(0)}%"></span></div></div>`;
   }
   openModal("자산 상세",html||"<p>정보가 없습니다.</p>");
 }
@@ -1198,8 +1237,21 @@ function claimDaily(id){
   notify("goal","미션 보상",`${m.label} 완료! ${won(m.reward)} 지급`);
   saveGame(); portfolio(); update();
 }
+function bestRoi(){
+  const open=[...stockReturnRows(),...altReturnRows()].reduce((best,r)=>Math.max(best,+r.roi||0),0);
+  const closed=(state.journal||[]).reduce((best,x)=>{
+    if(x.side!=="sell"||!(+x.valueKRW>0)) return best;
+    return Math.max(best,(+x.profit||0)/+x.valueKRW);
+  },0);
+  return Math.max(open,closed);
+}
 const ACHIEVEMENTS=[
   {id:"first_trade",label:"첫 거래",reward:100000,done:()=>(state.journal||[]).length>0},
+  {id:"trade_10",label:"거래 10회",reward:300000,done:()=>(state.journal||[]).length>=10},
+  {id:"trade_50",label:"거래 50회",reward:1000000,done:()=>(state.journal||[]).length>=50},
+  {id:"asset_100m",label:"순자산 1억",reward:300000,done:()=>totalAssetsKRW()>=100000000},
+  {id:"roi_10",label:"수익률 10% 달성",reward:500000,done:()=>bestRoi()>=.10},
+  {id:"roi_50",label:"수익률 50% 달성",reward:1500000,done:()=>bestRoi()>=.50},
   {id:"first_div",label:"첫 배당 수령",reward:100000,done:()=>(state.dividendTotal||0)>0},
   {id:"ten_stocks",label:"10종목 동시 보유",reward:500000,done:()=>stocks.filter(s=>s.own>0).length>=10},
   {id:"no_debt",label:"대출 전액 상환",reward:200000,done:()=>(state.loanTotal||0)>0 && (state.loan||0)===0},
@@ -1209,6 +1261,7 @@ const ACHIEVEMENTS=[
   {id:"billion",label:"순자산 10억",reward:2000000,done:()=>totalAssetsKRW()>=1000000000},
   {id:"first_estate",label:"첫 부동산 구매",reward:1000000,done:()=>Object.values(state.estate||{}).some(h=>h.qty>0)},
   {id:"first_company",label:"첫 기업 설립",reward:1500000,done:()=>!!state.company},
+  {id:"first_acquisition",label:"첫 기업 인수",reward:2000000,done:()=>Object.keys((state.company&&state.company.acquired)||{}).length>0},
   {id:"gold_holder",label:"금 보유",reward:500000,done:()=>((state.metals&&state.metals.gold)?state.metals.gold.qty:0)>0},
   {id:"diamond",label:"다이아몬드 등급",reward:3000000,done:()=>gradeIndex(currentGrade())>=4},
   {id:"legend",label:"레전드 등급",reward:10000000,done:()=>gradeIndex(currentGrade())>=7}
@@ -1408,6 +1461,33 @@ function allocation(){
   return {parts,gross};
 }
 
+// 거래 저널과 자산 배분을 함께 읽어 투자 스타일을 진단합니다.
+function investmentStyle(){
+  const journal=Array.isArray(state.journal)?state.journal:[];
+  const buys=journal.filter(x=>x.side==="buy").length;
+  const sells=journal.filter(x=>x.side==="sell").length;
+  const wins=journal.filter(x=>x.side==="sell"&&(+x.profit||0)>0).length;
+  const realized=journal.reduce((a,x)=>a+(x.side==="sell"?(+x.profit||0):0),0);
+  const winRate=sells?wins/sells:0;
+  const alloc=allocation();
+  const stockPct=(alloc.parts.find(p=>p.label==="주식")||{pct:0}).pct;
+  const safePct=alloc.parts.filter(p=>["현금","금융상품"].includes(p.label)).reduce((a,p)=>a+p.pct,0);
+  const top=stockReturnRows()[0]||null;
+  let style="관망형",desc="아직 거래 기록이 적어 성향을 판단하는 중입니다.",advice="소액으로 분산 매수해 자신의 위험 감도를 확인해 보세요.";
+  if(journal.length>=3 && sells>=3 && sells/(buys+sells)>=.45 && winRate>=.5){
+    style="스윙 트레이더"; desc="짧은 변동을 매매로 잡아내며 매도 승률이 높은 편입니다."; advice="수수료와 세금을 감안해 기대 수익이 충분한 거래만 남기세요.";
+  } else if(journal.length>=3 && buys>=Math.max(2,sells*2)){
+    style="장기 보유형"; desc="매수 후 보유 비중이 높아 기업 가치와 배당을 중시합니다."; advice="보유 종목의 실적과 배당 성장을 분기마다 점검하세요.";
+  } else if(stockPct>=60){
+    style="공격 성장형"; desc="주식 비중이 높아 시장 상승을 적극적으로 추종합니다."; advice="하락장을 대비해 현금·금융상품 완충을 남겨 두세요.";
+  } else if(safePct>=60){
+    style="안정 추구형"; desc="현금과 금융상품 비중이 높아 원금 보존을 우선합니다."; advice="물가 상승률보다 높은 금리의 상품으로 실질 수익을 지키세요.";
+  } else if(journal.length>=3){
+    style="균형형"; desc="주식과 안전자산을 함께 보유해 변동성을 분산하고 있습니다."; advice="자산 비중이 목표에서 벗어나면 정기적으로 리밸런싱하세요.";
+  }
+  return {style,desc,advice,buys,sells,winRate,realized,stockPct,safePct,top};
+}
+
 // 다음 배당까지 남은 초와 예상 배당금(원화 환산)
 function secondsToDividend(){ return DIVIDEND_EVERY-(state.marketSeconds%DIVIDEND_EVERY); }
 function expectedDividend(){
@@ -1587,13 +1667,30 @@ function payDividends(){
   notify("dividend","배당금 지급",`${won(totalKRW)}`);
 }
 
+function ensureStockFundamentals(s){
+  if(!s) return;
+  if(!Number.isFinite(+s.revenue)||+s.revenue<=0) s.revenue=Math.max(100000000,Math.round((+s.start||s.price||1000)*10000));
+  if(!Number.isFinite(+s.opProfit)||+s.opProfit<0) s.opProfit=Math.round(s.revenue*.12);
+}
 function earningsSurprise(){
   if(!stocks.length) return;
-  const s = stocks[Math.floor(Math.random() * stocks.length)];
-  const beat = Math.random() < 0.5;
-  const move = (beat ? 1 : -1) * (0.05 + Math.random() * 0.10);
+  const pool=stocks.filter(s=>s.id!=="market_etf");
+  const s = pool[Math.floor(Math.random() * pool.length)];
+  if(!s) return;
+  ensureStockFundamentals(s);
+  // 매출 성장률과 영업이익률 변화가 함께 주가 방향을 결정합니다.
+  const revGrowth=(Math.random()-.45)*.18;
+  const marginBefore=s.opProfit/Math.max(1,s.revenue);
+  const marginAfter=Math.max(.005,Math.min(.45,marginBefore+(Math.random()-.5)*.06));
+  const revenue=Math.max(100000000,Math.round(s.revenue*(1+revGrowth)));
+  const opProfit=Math.max(0,Math.round(revenue*marginAfter));
+  const opGrowth=(opProfit-s.opProfit)/Math.max(1,s.opProfit);
+  const score=revGrowth*.55+opGrowth*.45;
+  const beat=score>=0;
+  s.revenue=revenue; s.opProfit=opProfit;
+  const move=Math.max(-.15,Math.min(.15,score*.7+(beat?.005:-.005)));
   applyShock(s, move);
-  publishBreakingNews("📊 실적 발표", `${s.name} ${beat ? "어닝 서프라이즈" : "어닝 쇼크"}! 주가가 발표 직후 ${pct(move)} 변동했습니다.`);
+  publishBreakingNews("📊 실적 발표", `${s.name} ${beat?"어닝 서프라이즈":"어닝 쇼크"}! 매출 ${won(revenue)} (${pct(revGrowth)}) · 영업이익 ${won(opProfit)} (${pct(opGrowth)}) · 주가 ${pct(move)}`);
 }
 
 // ── 저장·시즌 ───────────────────────────────────
@@ -1901,7 +1998,7 @@ function buildSaveData() {
     costBasisIncludesFee: true, // 평단가가 매수 수수료를 포함한 취득원가 형식인지 표시(구버전 데이터 마이그레이션용)
     state: state,
     fx: fx,
-    stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove})),
+    stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove, revenue:s.revenue, opProfit:s.opProfit})),
     products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate, bank:p.bank||null, startedAt:Number.isFinite(p.startedAt)?p.startedAt:null, matured:!!p.matured}))
   };
 }
@@ -1947,6 +2044,8 @@ function applySaveData(data) {
       if(data.costBasisIncludesFee !== true && s.avgBuy > 0) s.avgBuy *= (1 + FEE_STOCK);
       s.realizedProfit = ls.realizedProfit || 0;
       s.lastMove = ls.lastMove || 0;
+      if(Number.isFinite(+ls.revenue)&&+ls.revenue>0) s.revenue=+ls.revenue;
+      if(Number.isFinite(+ls.opProfit)&&+ls.opProfit>=0) s.opProfit=+ls.opProfit;
     });
   }
   if(data.products) {
@@ -2013,10 +2112,11 @@ function applySaveData(data) {
     c.valuation=Math.max(0,+c.valuation||COMPANY_LEVELS[0].val);
     c.revenue=Math.max(0,+c.revenue||0); c.profit=Math.max(0,+c.profit||0);
     c.payout=Math.max(0,Math.min(1,Number.isFinite(+c.payout)?+c.payout:.3));
+    if(!c.acquired||typeof c.acquired!=="object"||Array.isArray(c.acquired)) c.acquired={};
     if(typeof c.name!=="string") c.name="나의 기업";
   } else state.company=null;
-  const ECON={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0};
-  state.economy=Object.assign({},ECON,(state.economy&&typeof state.economy==="object")?state.economy:{});
+  state.economy=Object.assign({},ECON_DEFAULT,(state.economy&&typeof state.economy==="object")?state.economy:{});
+  ["baseRate","inflation","unemployment","gdpGrowth","cycleLeft","rateAdj"].forEach(k=>{ if(!Number.isFinite(+state.economy[k])) state.economy[k]=ECON_DEFAULT[k]; });
   if(!["호황","중립","불황"].includes(state.economy.phase)) state.economy.phase="중립";
   if(!state.weekly||typeof state.weekly!=="object"||!state.weekly.counts) state.weekly={key:"",counts:{},claimed:{}};
   if(!state.special||typeof state.special!=="object") state.special={};
@@ -2065,7 +2165,7 @@ function clearGame(skipConfirm) {
   state.auto = Object.assign({},state.auto,{enabled:false});
   state.labor={shifts:0,earned:0,lastAt:{},warned:false};
   state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null;
-  state.altPrices={}; state.economy={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0};
+  state.altPrices={}; state.economy=Object.assign({},ECON_DEFAULT);
   state.weekly={key:"",counts:{},claimed:{}}; state.special={}; state.streak={days:1,last:"",best:1};
   state.dex={stocks:{},products:{},estates:{},metals:{},company:false}; state.peakNet=START_CASH; state.altRealized=0;
   state.journalFilter={q:"",side:"all"}; state.rewardedGrade=0; state.targetGoal=1000000000;
@@ -2078,6 +2178,8 @@ function clearGame(skipConfirm) {
     s.lastMove = 0;
     s.avgBuy = 0;
     s.realizedProfit = 0;
+    s.revenue = Math.max(100000000,Math.round(s.start*10000));
+    s.opProfit = Math.round(s.revenue*.12);
     s.hist = [s.start];
   });
   products.forEach(p => { p.amount = 0; p.rate = 0; p.bank=null; p.startedAt=null; p.matured=false; });
@@ -2299,8 +2401,12 @@ function portfolio(){
   }).join("");
   const achHtml=ACHIEVEMENTS.map(a=>`<div class="${(state.achievements||{})[a.id]?"done":""}"><b>${(state.achievements||{})[a.id]?"✅":"▫️"} ${a.label}</b><br><small>보상 ${won(a.reward)}</small></div>`).join("");
   const perf=performanceStats();
+  const style=investmentStyle();
   const journalHtml=journalFiltered().slice(0,8).map(x=>`<div><span>${x.side==="buy"?"매수":"매도"} ${escHtml(x.name)} ${x.qty}주</span><span class="${x.side==="sell"?(x.profit>=0?"up":"down"):""}">${x.side==="sell"?won(x.profit):won(x.valueKRW)}</span></div>`).join("")||"<div><span>조건에 맞는 거래가 없습니다.</span><span>-</span></div>";
   const ret=v=>v==null?"-":pct(v);
+  const styleHtml=`<div class="cloud-head"><div><b>🧭 ${style.style}</b><div style="font-size:12px;color:#667085;margin-top:4px">${style.desc}</div></div><span class="pill">진단</span></div>
+    <div class="kpis" style="margin-top:8px"><div class="kpi"><small>매수 / 매도</small><b>${style.buys} / ${style.sells}회</b></div><div class="kpi"><small>매도 승률</small><b>${(style.winRate*100).toFixed(0)}%</b></div><div class="kpi"><small>주식 비중</small><b>${style.stockPct.toFixed(1)}%</b></div><div class="kpi"><small>안전자산 비중</small><b>${style.safePct.toFixed(1)}%</b></div></div>
+    <p style="margin-top:8px;font-size:12px;">${style.advice}${style.top?` · 최고 수익 종목: <b>${escHtml(style.top.name)} ${pct(style.top.roi)}</b>`:""}</p>`;
   const perfHtml=`<div class="kpis">
       <div class="kpi"><small>거래 횟수</small><b>${perf.trades}회</b></div>
       <div class="kpi"><small>매도 승률</small><b>${(perf.winRate*100).toFixed(0)}%</b></div>
@@ -2328,7 +2434,7 @@ function portfolio(){
     ${altReturnRows().length?`<div style="margin-top:8px">${altReturnRows().map(r=>`<div class="row" style="grid-template-columns:1fr 1fr auto"><b>${escHtml(r.name)}</b><span>${won(r.value)}</span><span class="${r.roi>=0?"up":"down"}">${pct(r.roi)}</span></div>`).join("")}</div>`:""}
     <p style="margin-top:8px;font-size:12px;">가장 수익률 높은 종목: <b class="up">${perf.roiRows[0]?escHtml(perf.roiRows[0].name)+" "+pct(perf.roiRows[0].roi):"-"}</b></p>`;
   ensureWeekly();
-  const eco=state.economy||{phase:"중립",baseRate:.03,cycleLeft:0};
+  const eco=state.economy||ECON_DEFAULT;
   const estateHtml=ESTATES.map(e=>{
     const h=state.estate[e.id]||{qty:0,avgBuy:0}, price=estatePrice(e.id);
     const rent=h.qty*price*e.rent, upkeep=h.qty*price*e.upkeep;
@@ -2348,8 +2454,10 @@ function portfolio(){
     </div>`;
   }).join("");
   const c=state.company;
+  const cg=c?companyGradeInfo(c):null;
   const companyHtml=c?`
-    <div class="cloud-head"><div><b>🏭 ${escHtml(c.name)}</b> <span class="pill">Lv.${c.level}</span></div><div>기업 가치 <b>${won(c.valuation)}</b></div></div>
+    <div class="cloud-head"><div><b>🏭 ${escHtml(c.name)}</b> <span class="pill" style="color:${cg.color};border-color:${cg.color}">${cg.name}</span> <span class="pill">Lv.${c.level}</span></div><div>기업 가치 <b>${won(c.valuation)}</b></div></div>
+    <div style="margin-top:8px"><div class="mission-top"><small>다음 등급 ${cg.next?cg.next.name:"최고 등급"} · 인수 ${Object.keys(c.acquired||{}).length}개</small><small>${cg.next?`${Math.round(cg.progress*100)}%`:"MAX"}</small></div><div class="bar"><span style="width:${(cg.progress*100).toFixed(0)}%"></span></div></div>
     <div class="kpis" style="margin-top:8px"><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div></div>
     <div class="inline-form" style="margin-top:8px">
       <label>배당 성향 (%)<input type="number" min="0" max="100" step="5" value="${Math.round((c.payout||0)*100)}" onchange="setCompanyPayout(this.value)"></label>
@@ -2366,7 +2474,8 @@ function portfolio(){
   const dex=state.dex||{stocks:{},products:{},estates:{},metals:{}};
   const dexCount=o=>Object.keys(o||{}).length;
   const dexHtml=`<div class="kpis"><div class="kpi"><small>주식 도감</small><b>${dexCount(dex.stocks)} / ${stocks.length}</b></div><div class="kpi"><small>상품 도감</small><b>${dexCount(dex.products)} / ${products.length}</b></div><div class="kpi"><small>부동산 도감</small><b>${dexCount(dex.estates)} / ${ESTATES.length}</b></div><div class="kpi"><small>실물 도감</small><b>${dexCount(dex.metals)} / ${METALS.length}</b></div><div class="kpi"><small>기업</small><b>${dex.company?"설립":"미설립"}</b></div></div>`;
-  const economyHtml=`<div class="kpis"><div class="kpi"><small>경기 국면</small><b>${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b>${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>다음 전환 (실제)</small><b>${realSeconds(eco.cycleLeft||0)}초</b></div><div class="kpi"><small>시장 지수</small><b>${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b>${won(state.peakNet||totalAssetsKRW())}</b></div></div>`;
+  const economyHtml=`<div class="kpis"><div class="kpi"><small>경기 국면</small><b>${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b>${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>물가 상승률</small><b>${((eco.inflation??ECON_DEFAULT.inflation)*100).toFixed(1)}%</b></div><div class="kpi"><small>실업률</small><b>${((eco.unemployment??ECON_DEFAULT.unemployment)*100).toFixed(1)}%</b></div><div class="kpi"><small>GDP 성장률</small><b>${((eco.gdpGrowth??ECON_DEFAULT.gdpGrowth)*100).toFixed(1)}%</b></div><div class="kpi"><small>다음 전환 (실제)</small><b>${realSeconds(eco.cycleLeft||0)}초</b></div><div class="kpi"><small>시장 지수</small><b>${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b>${won(state.peakNet||totalAssetsKRW())}</b></div></div>
+    <p style="font-size:12px;margin-top:8px">금리·물가·실업률·성장률은 경기 국면에 따라 변합니다. 호황에는 주가 상승 압력과 물가 상승이, 불황에는 금융 위기와 주가 하락 압력이 커집니다.</p>`;
   const autoState=state.auto||{};
   const autoHtml=`<div class="inline-form">
       <label>주식 비중 (%)<input id="auto-pct" type="number" min="0" max="100" step="5" value="${autoState.stockPct??60}"></label>
@@ -2459,6 +2568,8 @@ function portfolio(){
     <div class="section"><h3>업적</h3><div class="panel"><div class="ach">${achHtml}</div></div></div>
 
     <div class="section"><h3>성과 분석</h3><div class="panel">${perfHtml}</div></div>
+
+    <div class="section"><h3>투자 성향 분석</h3><div class="panel">${styleHtml}</div></div>
 
     <div class="section"><h3>부동산</h3><div class="panel">${estateHtml}</div></div>
 
@@ -2811,6 +2922,16 @@ function tickSeconds() {
   }
 }
 
+function economicMarketBias(){
+  const e=state.economy||{};
+  const growth=Number.isFinite(+e.gdpGrowth)?+e.gdpGrowth:ECON_DEFAULT.gdpGrowth;
+  const inflation=Number.isFinite(+e.inflation)?+e.inflation:ECON_DEFAULT.inflation;
+  const unemployment=Number.isFinite(+e.unemployment)?+e.unemployment:ECON_DEFAULT.unemployment;
+  const rate=Number.isFinite(+e.baseRate)?+e.baseRate:ECON_DEFAULT.baseRate;
+  const phase=e.phase==="호황"?1:e.phase==="불황"?-1:0;
+  // 성장률은 우호적, 물가·실업률·금리 상승은 할인율과 소비 위축으로 부정적입니다.
+  return growth*.00015 + phase*.0002 - (inflation-ECON_DEFAULT.inflation)*.0003 - (unemployment-ECON_DEFAULT.unemployment)*.0015 - (rate-ECON_DEFAULT.baseRate)*.0005;
+}
 function tickMarket(){
   state.tick++;
   const idx=marketIndex();
@@ -2830,7 +2951,7 @@ function tickMarket(){
     let surge=Math.random()<.04 ? Math.random()*.04+.01 : 0;
     
     // 장기 성장 유동성 바이어스(시간 압축 대비 완만하게)
-    let longBias=.0003+Math.random()*.0002;
+    let longBias=.0003+Math.random()*.0002+economicMarketBias();
     let recovery=s.price<s.start ? .001 : 0;
     
     // [시장 대형 이벤트 시스템 반영]
