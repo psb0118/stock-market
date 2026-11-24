@@ -742,26 +742,46 @@ const RESET = total => `
   `);
   const brokeHtml = g.run("document.getElementById('portfolio').innerHTML");
   check('노동 섹션·6종 직업 렌더', brokeHtml.includes('labor-section') && brokeHtml.includes('편의점 야간') && brokeHtml.includes('긴급 외주') && g.run('LABOR_JOBS.length') === 6);
+  check('노동 미니게임 안내 문구', brokeHtml.includes('타이밍 작업 3회') && brokeHtml.includes('완벽 100%'));
   check('현금 0원 생계 위기 안내', brokeHtml.includes('현금과 자산이 바닥났습니다') && g.run('laborEmergency()') === true);
 
   // 잠긴 직업은 현금을 주지 않습니다.
   g.run("workLabor('delivery'); 1");
   check('경력 부족 직업 잠금', g.run('state.cash') === 0 && g.run('state.labor.shifts') === 0, g.run('state.cash'));
 
-  g.run("workLabor('convenience'); 1");
+  // 노동 미니게임 판정·일당 계산 (타이밍 작업 3회)
+  check('노동 판정: 중앙 완벽', g.run("laborRoundResult({pay:60000,zone:.2},.5).grade") === 'perfect');
+  check('노동 판정: 구간 안 성공', g.run("laborRoundResult({pay:60000,zone:.2},.62).grade") === 'good');
+  check('노동 판정: 구간 밖 실패', g.run("laborRoundResult({pay:60000,zone:.2},.1).grade") === 'miss');
+  check('노동 일당: 3회 완벽', g.run("laborShiftPay({pay:60000},['perfect','perfect','perfect']).pay") === 60000);
+  check('노동 일당: 성과만큼 삭감', g.run("laborShiftPay({pay:60000},['perfect','good','miss']).pay") === 36000, g.run("laborShiftPay({pay:60000},['perfect','good','miss']).pay"));
+  check('노동 일당: 전부 실패면 0원', g.run("laborShiftPay({pay:60000},['miss','miss','miss']).pay") === 0);
+
+  // 버튼만 눌러서는 돈이 들어오지 않고, 작업 3회를 마쳐야 일당이 지급됩니다.
+  const started = g.run("workLabor('convenience')");
+  check('노동 시작만으로는 미지급', started === true && g.run('state.cash') === 0 && g.run('state.labor.shifts') === 0, g.run('state.cash'));
+  g.run("laborStopAt(.5); laborStopAt(.5); 1");
+  check('작업 2회까지 미지급', g.run('state.cash') === 0 && g.run('state.labor.shifts') === 0);
+  g.run("laborStopAt(.5); 1");
   check('기본 노동 수입 지급', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1 && g.run('state.labor.earned') === 60000, g.run('state.cash'));
 
   g.run("workLabor('convenience'); 1");
   check('쿨다운 중 중복 노동 차단', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1, g.run('state.cash'));
 
-  g.run("workLabor('cafe'); 1");
+  g.run("workLabor('cafe'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
   check('두 번째 기본 노동으로 최소 생활비 달성', g.run('state.cash') === 105000 && g.run('state.labor.shifts') === 2 && g.run('laborEmergency()') === false, g.run('state.cash'));
 
-  g.run("workLabor('delivery'); 1");
+  g.run("workLabor('delivery'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
   check('경력 2회에 퀵배달 해금', g.run('state.cash') === 190000 && g.run('state.labor.shifts') === 3, g.run('state.cash'));
 
+  // 작업을 모두 놓치면 일당도 경력도 없고, 바로 재도전할 수 있습니다.
+  const gf = createGame();
+  gf.run("clearGame(true); state.cash=0; state.labor={shifts:0,earned:0,lastAt:{},warned:false}; workLabor('convenience'); laborStopAt(0); laborStopAt(0); laborStopAt(0); 1");
+  check('전부 실패하면 일당·경력 없음', gf.run('state.cash') === 0 && gf.run('state.labor.shifts') === 0, gf.run('state.cash'));
+  check('실패 후 쿨다운 없이 재도전', gf.run("laborRemaining(laborJob('convenience'))") === 0 && gf.run("workLabor('convenience')") === true);
+
   // 경력이 쌓이면 고소득 노동이 열립니다.
-  g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); 1");
+  g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
   check('경력 10회에 긴급 외주 해금', g.run('state.cash') === 490000 && g.run('state.labor.shifts') === 11, g.run('state.cash'));
   check('노동 경력·수입 저장', g.run('buildSaveData().state.labor.shifts') === 11 && g.run('buildSaveData().state.labor.earned') === 490000);
 

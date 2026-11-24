@@ -95,7 +95,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .modal-box{background:#fffdf8;border-radius:12px;max-width:580px;width:100%;max-height:86vh;overflow:auto;padding:18px;box-shadow:0 24px 60px #0005}
 .modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .modal-head h2{margin:0;font-size:20px}
-.modal-close{background:#e7ebef;color:#18212f;min-height:34px}
+.modal-close{background:#e7ebef;color:#18212f;min-height:34px;flex:0 0 auto;white-space:nowrap}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
 .kpi{border:1px solid #d8ded4;background:#fafafa;border-radius:8px;padding:10px}
 .kpi small{display:block;color:#667085;font-size:12px}
@@ -180,6 +180,16 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .labor-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}
 .labor-card button{min-height:34px;font-size:12px}
 .labor-note{font-size:11px;color:#667085;margin-top:8px}
+.labor-game{display:grid;gap:10px}
+.labor-track{position:relative;height:38px;border-radius:8px;background:#e7ebef;border:1px solid #cbd5e1;overflow:hidden}
+.labor-target{position:absolute;top:0;bottom:0;background:#bbf7d0}
+.labor-target.perfect{background:#34d399}
+.labor-cursor{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:#111827;border-radius:2px;box-shadow:0 0 0 2px #ffffffb3}
+.labor-game-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:#475569}
+.labor-game-result{font-size:13px;font-weight:700;color:#334155;min-height:20px}
+#labor-stop-btn{min-height:52px;font-size:16px}
+body.dark .labor-track{background:#243447;border-color:#33465c}
+body.dark .labor-game-meta,body.dark .labor-game-result{color:#cbd5e1}
 #laborFab{position:fixed;left:236px;right:auto;bottom:18px;z-index:55;display:inline-flex;align-items:center;gap:6px;min-height:42px;padding:0 15px;border-radius:999px;background:#f7c948;color:#17202b;font-weight:800;font-size:13px;box-shadow:0 6px 20px #0003;border:1px solid #d9a900}
 #laborFab.urgent{background:#fee2e2;color:#991b1b;border-color:#fca5a5;box-shadow:0 0 0 4px #f7c94855,0 6px 20px #0003}
 /* 노동 버튼은 화면 왼쪽 아래(데스크톱은 사이드바 오른쪽)에 둡니다. 오른쪽 아래 알림 토스트가 버튼을 가리지 않도록 합니다. */
@@ -370,12 +380,13 @@ const METALS=[
 // 쿨다운은 게임 배속과 무관한 실제 시간 기준이라 10배속에서도 반복 수익이 폭주하지 않습니다.
 const LABOR_MIN_CASH = 100000;
 const LABOR_JOBS=[
-{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,desc:"야간 계산·매장 정리"},
-{id:"cafe",name:"카페 서빙",icon:"☕",pay:45000,cooldown:25,req:0,desc:"주문 접수·음료 서빙"},
-{id:"delivery",name:"퀵배달",icon:"🛵",pay:85000,cooldown:35,req:2,desc:"도심 단거리 배달"},
-{id:"logistics",name:"물류센터",icon:"📦",pay:130000,cooldown:50,req:4,desc:"상하차·택배 분류"},
-{id:"tutoring",name:"과외",icon:"📚",pay:200000,cooldown:70,req:7,desc:"중학생 수학 과외"},
-{id:"freelance",name:"긴급 외주",icon:"💻",pay:300000,cooldown:100,req:10,desc:"간단한 웹·디자인 수정"}
+// 일당은 미니게임 성과에 비례합니다. zone(성공 구간 폭의 절반)·speed(초당 이동량)로 난이도를 조절합니다.
+{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,desc:"야간 계산·매장 정리",zone:.22,speed:.55},
+{id:"cafe",name:"카페 서빙",icon:"☕",pay:45000,cooldown:25,req:0,desc:"주문 접수·음료 서빙",zone:.20,speed:.62},
+{id:"delivery",name:"퀵배달",icon:"🛵",pay:85000,cooldown:35,req:2,desc:"도심 단거리 배달",zone:.17,speed:.70},
+{id:"logistics",name:"물류센터",icon:"📦",pay:130000,cooldown:50,req:4,desc:"상하차·택배 분류",zone:.15,speed:.78},
+{id:"tutoring",name:"과외",icon:"📚",pay:200000,cooldown:70,req:7,desc:"중학생 수학 과외",zone:.13,speed:.86},
+{id:"freelance",name:"긴급 외주",icon:"💻",pay:300000,cooldown:100,req:10,desc:"간단한 웹·디자인 수정",zone:.11,speed:.94}
 ];
 // 가상 기업: 설립 → 확장 → 인수합병
 const COMPANY_LEVELS=[
@@ -599,6 +610,7 @@ function openModal(title,html){
   if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","false");
 }
 function closeModal(){
+  laborAbortShift(true);
   const root=$("modalRoot"); if(!root) return;
   root.classList.remove("on");
   if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","true");
@@ -808,12 +820,119 @@ function laborJobCard(job){
   const l=ensureLabor(), locked=l.shifts<job.req, remain=laborRemaining(job);
   const label=locked?`🔒 노동 ${job.req}회 필요`:(remain>0?`${Math.ceil(remain/1000)}초 후`:"일하기");
   return `<article class="labor-card${locked?" locked":""}">
-    <div class="labor-top"><b>${job.icon} ${job.name}</b><span class="pill">+${won(job.pay)}</span></div>
-    <small>${job.desc} · 실제 ${job.cooldown}초 쿨다운</small>
+    <div class="labor-top"><b>${job.icon} ${job.name}</b><span class="pill">최대 +${won(job.pay)}</span></div>
+    <small>${job.desc} · 타이밍 작업 3회 · 실제 ${job.cooldown}초 쿨다운</small>
     <div class="labor-meta"><span>누적 ${l.shifts}회</span><span>총 ${won(l.earned)}</span></div>
     <button class="${locked?"ghost":"buy"}" data-labor-btn="${job.id}" onclick="workLabor('${job.id}')" ${locked?"disabled":""}>${label}</button>
   </article>`;
 }
+// ── 노동 미니게임 ────────────────────────────────────────────
+// 버튼 한 번으로 일당이 들어오지 않도록, 작업대의 표시선을 초록 구간에 맞추는
+// 타이밍 작업을 3번 성공시켜야 일당이 지급됩니다.
+const LABOR_ROUNDS=3;
+let laborSession=null;
+function laborRoundResult(job,p){
+  const zone=(job&&job.zone)||.2;
+  const pos=Math.max(0,Math.min(1,typeof p==="number"&&Number.isFinite(p)?p:.5));
+  const d=Math.abs(pos-.5);
+  const grade=d<=zone*.35?"perfect":(d<=zone?"good":"miss");
+  return {grade,pos,mult:grade==="perfect"?1:(grade==="good"?.8:0)};
+}
+function laborShiftPay(job,results){
+  const base=(job&&job.pay)||0;
+  const list=(results||[]).map(r=>typeof r==="string"?r:(r&&r.grade)||"miss");
+  const perfect=list.filter(g=>g==="perfect").length;
+  const good=list.filter(g=>g==="good").length;
+  const miss=Math.max(0,list.length-perfect-good);
+  const rate=(perfect+good*.8)/LABOR_ROUNDS;
+  return {pay:Math.max(0,Math.round(base*rate/1000)*1000),perfect,good,miss,rate};
+}
+function laborGameHtml(job){
+  const zone=(job.zone||.2)*100, perfect=zone*.35;
+  const band=(left,width,cls)=>`<span class="labor-target${cls?" "+cls:""}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></span>`;
+  return `<div class="labor-game">
+    <p>작업대의 표시선이 초록 구간을 지나갈 때 <b>멈추기</b>를 누르세요. 작업 ${LABOR_ROUNDS}번을 마치면 일당이 지급되고, 놓친 만큼 일당이 깎입니다.</p>
+    <div class="labor-track" role="img" aria-label="노동 타이밍 바">
+      ${band(50-zone,zone*2,"")}${band(50-perfect,perfect*2,"perfect")}<span class="labor-cursor" id="labor-cursor" style="left:50%"></span>
+    </div>
+    <div class="labor-game-meta"><span>작업 <b id="labor-round">1 / ${LABOR_ROUNDS}</b></span><span id="labor-grades">⭐ 완벽 · ✅ 성공 · ❌ 실패</span></div>
+    <div class="labor-game-result" id="labor-result">표시선을 초록 구간에 맞춰 주세요.</div>
+    <button id="labor-stop-btn" class="buy" onclick="laborStop()">멈추기</button>
+    <button class="ghost" onclick="closeLaborGame()">그만두기</button>
+  </div>`;
+}
+function laborLoop(ts){
+  const s=laborSession; if(!s) return;
+  const now=typeof ts==="number"?ts:0;
+  if(!s.last) s.last=now;
+  const dt=Math.max(0,Math.min(.05,(now-s.last)/1000)); s.last=now;
+  s.pos+=s.dir*(s.job.speed||.6)*dt;
+  if(s.pos>=1){s.pos=1;s.dir=-1;}
+  if(s.pos<=0){s.pos=0;s.dir=1;}
+  const cur=$("labor-cursor"); if(cur&&cur.style) cur.style.left=(s.pos*100).toFixed(1)+"%";
+  if(typeof requestAnimationFrame==="function") s.raf=requestAnimationFrame(laborLoop);
+}
+function laborAbortShift(quiet){
+  const s=laborSession; if(!s) return false;
+  if(s.raf && typeof cancelAnimationFrame==="function"){ try{ cancelAnimationFrame(s.raf); }catch(e){} }
+  laborSession=null;
+  if(!quiet) addLog("💼 노동을 중단했습니다. 일당은 지급되지 않습니다.");
+  return true;
+}
+function laborStartShift(jobOrId){
+  const job=typeof jobOrId==="string"?laborJob(jobOrId):jobOrId;
+  if(!job) return false;
+  laborAbortShift(true);
+  laborSession={job,round:0,results:[],pos:.5,dir:1,last:0,raf:0};
+  openModal(`${job.icon} ${job.name}`,laborGameHtml(job));
+  laborLoop(0);
+  return true;
+}
+function laborStop(){
+  const s=laborSession; if(!s) return false;
+  return laborStopAt(s.pos);
+}
+function laborStopAt(p){
+  const s=laborSession; if(!s) return false;
+  const r=laborRoundResult(s.job,p);
+  s.results.push(r);
+  s.round++;
+  const roundEl=$("labor-round"); if(roundEl) roundEl.textContent=`${Math.min(s.round+1,LABOR_ROUNDS)} / ${LABOR_ROUNDS}`;
+  const resEl=$("labor-result"); if(resEl) resEl.textContent=r.grade==="perfect"?"⭐ 완벽한 작업!":(r.grade==="good"?"✅ 작업 성공":"❌ 작업 실패");
+  const badge=$("labor-grades"); if(badge) badge.textContent=s.results.map(x=>x.grade==="perfect"?"⭐":x.grade==="good"?"✅":"❌").join(" ");
+  if(s.round<LABOR_ROUNDS) return true;
+  return laborFinishShift();
+}
+function laborShowResult(job,sum,pay){
+  const line=pay>0?`일당 <b>${won(pay)}</b>을 받았습니다.`:"모든 작업을 놓쳐 일당을 받지 못했습니다. 다시 도전하세요.";
+  openModal(`${job.icon} ${job.name} 결과`,`
+    <div class="kpis"><div class="kpi"><small>⭐ 완벽</small><b>${sum.perfect}회</b></div><div class="kpi"><small>✅ 성공</small><b>${sum.good}회</b></div><div class="kpi"><small>❌ 실패</small><b>${sum.miss}회</b></div><div class="kpi"><small>일당</small><b>${won(pay)}</b></div></div>
+    <p style="margin-top:10px;font-size:13px">${line}${pay>0?` (최대 ${won(job.pay)} · 달성률 ${Math.round(sum.rate*100)}%)`:""}</p>
+    <button class="buy" style="width:100%;margin-top:12px" onclick="closeLaborGame()">확인</button>`);
+}
+function laborFinishShift(){
+  const s=laborSession; if(!s) return false;
+  const job=s.job, sum=laborShiftPay(job,s.results);
+  laborAbortShift(true);
+  const l=ensureLabor();
+  if(sum.pay<=0){
+    addLog(`💼 ${job.name} 작업 실패: 일당 없음 (경력 미반영)`);
+    notify("system","노동 실패",`${job.name} 작업을 모두 놓쳤습니다. 일당 없이 다시 도전할 수 있습니다.`);
+    saveGame(); portfolio(); update();
+    laborShowResult(job,sum,0);
+    return false;
+  }
+  l.shifts++;
+  l.earned+=sum.pay;
+  l.lastAt[job.id]=Date.now();
+  state.cash=(state.cash||0)+sum.pay;
+  addLog(`💼 ${job.name} 노동 완료: +${won(sum.pay)} (완벽 ${sum.perfect}·성공 ${sum.good}·실패 ${sum.miss})`);
+  notify("system","노동 완료",`${job.name} +${won(sum.pay)} · 최소 생활비 목표 ${won(LABOR_MIN_CASH)}`);
+  saveGame(); portfolio(); update();
+  laborShowResult(job,sum,sum.pay);
+  return true;
+}
+function closeLaborGame(){ laborAbortShift(true); closeModal(); portfolio(); refreshLaborUI(); }
 function workLabor(id){
   const job=laborJob(id); if(!job) return false;
   const l=ensureLabor();
@@ -826,14 +945,7 @@ function workLabor(id){
     alert(`아직 쉬는 중입니다. ${Math.ceil(remain/1000)}초 후 다시 일할 수 있습니다.`);
     return false;
   }
-  l.shifts++;
-  l.earned+=job.pay;
-  l.lastAt[id]=Date.now();
-  state.cash=(state.cash||0)+job.pay;
-  addLog(`💼 ${job.name} 노동 완료: +${won(job.pay)} (누적 ${l.shifts}회)`);
-  notify("system","노동 완료",`${job.name} +${won(job.pay)} · 최소 생활비 목표 ${won(LABOR_MIN_CASH)}`);
-  saveGame(); portfolio(); update();
-  return true;
+  return laborStartShift(job);
 }
 function refreshLaborUI(){
   const l=ensureLabor();
@@ -2494,13 +2606,13 @@ function portfolio(){
   const labor=ensureLabor();
   const laborPct=Math.max(0,Math.min(100,(state.cash||0)/LABOR_MIN_CASH*100));
   const laborHtml=`<div class="labor-summary">
-      <div><b>💼 노동으로 다시 시작</b><p>현금이 0원이 되어도 단기 노동으로 최소 생활비를 벌 수 있습니다. 노동은 실제 시간 기준으로 쉬어야 하며, 많이 일할수록 더 나은 일자리가 열립니다.</p></div>
+      <div><b>💼 노동으로 다시 시작</b><p>현금이 0원이 되어도 단기 노동으로 최소 생활비를 벌 수 있습니다. 일하기를 누르면 타이밍 작업이 열리고, 작업 3번을 맞춰야 일당이 들어옵니다. 노동은 실제 시간 기준으로 쉬어야 하며, 많이 일할수록 더 나은 일자리가 열립니다.</p></div>
       <span class="pill">누적 ${labor.shifts}회 · ${won(labor.earned)}</span>
     </div>
     <div class="labor-progress"><div class="bar"><span style="width:${laborPct.toFixed(1)}%"></span></div><small>최소 생활비 목표 ${won(Math.min(LABOR_MIN_CASH,Math.max(0,state.cash||0)))} / ${won(LABOR_MIN_CASH)}</small></div>
     ${laborEmergency()?`<div class="labor-alert"><b>현금과 자산이 바닥났습니다.</b> 아래 기본 노동부터 시작해 ${won(LABOR_MIN_CASH)}의 최소 생활비를 마련한 뒤 다시 투자하세요.</div>`:""}
     <div class="labor-grid">${LABOR_JOBS.map(laborJobCard).join("")}</div>
-    <p class="labor-note">기본 노동 2종은 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주가 열립니다. 쿨다운은 배속과 무관한 실제 초입니다.</p>`;
+    <p class="labor-note">작업 성과에 따라 일당이 달라집니다(완벽 100% · 성공 80% · 실패 0%). 기본 노동 2종은 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주가 열립니다. 쿨다운은 배속과 무관한 실제 초입니다.</p>`;
 
   const orderRows = state.orders.length ? state.orders.map(o=>{
     const s=stock(o.stockId);
@@ -3180,6 +3292,16 @@ function update(){
 }
 
 init();
+
+// 노동 미니게임은 스페이스·엔터로도 멈출 수 있습니다(버튼에 포커스가 있을 때는 기본 클릭에 맡깁니다).
+if(typeof document!=="undefined" && typeof document.addEventListener==="function"){
+  document.addEventListener("keydown",e=>{
+    if(!laborSession) return;
+    const tag=e.target&&e.target.tagName?String(e.target.tagName).toUpperCase():"";
+    if(tag==="BUTTON"||tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA") return;
+    if(e.key===" "||e.key==="Enter"){ e.preventDefault(); laborStop(); }
+  });
+}
 </script>
 </body>
 </html>
