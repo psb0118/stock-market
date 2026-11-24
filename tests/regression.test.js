@@ -744,6 +744,8 @@ const RESET = total => `
   `);
   const brokeHtml = g.run("document.getElementById('portfolio').innerHTML");
   check('노동 섹션·6종 직업 렌더', brokeHtml.includes('labor-section') && brokeHtml.includes('편의점 야간') && brokeHtml.includes('긴급 외주') && g.run('LABOR_JOBS.length') === 6);
+  g.run("state.ui.assetTab='journal'; openLabor(); 1");
+  check('노동 진입 시 자산 개요 탭', g.run('state.ui.assetTab') === 'overview', g.run('state.ui.assetTab'));
   check('노동 미니게임 안내 문구', brokeHtml.includes('타이밍 작업 3회') && brokeHtml.includes('완벽 100%'));
   check('현금 0원 생계 위기 안내', brokeHtml.includes('현금과 자산이 바닥났습니다') && g.run('laborEmergency()') === true);
 

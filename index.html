@@ -35,7 +35,7 @@ h1{margin:0 0 5px;font-size:28px}
 h2{margin:0 0 8px}
 p{margin:0;color:#667085;line-height:1.45}
 .notice{background:#fff7d6;border:1px solid #edd07b;color:#604400;border-radius:8px;padding:10px 12px;margin-bottom:12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px}
 .top{display:flex;justify-content:space-between;gap:8px}
 .pill{display:inline-flex;align-items:center;border-radius:999px;background:#edf2f7;color:#334155;font-size:12px;padding:5px 8px;white-space:nowrap}
 .price{font-size:25px;font-weight:900;margin:12px 0 3px}
@@ -136,7 +136,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
   .bb-badge{display:none;margin-left:3px;font-size:11px;color:#f7c948;font-weight:800}
   .side .speed,.side .bell{display:none}
   .bb-nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px}
-  .bb-nav button{background:transparent;color:#cbd5e1;font-size:12px;min-height:34px}
+  .bb-nav button{background:transparent;color:#cbd5e1;font-size:12px;min-height:34px;white-space:nowrap;padding:0 4px}
   .bb-nav button.on{background:#f7c948;color:#17202b;font-weight:800}
   .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
 }
@@ -280,7 +280,7 @@ input:focus,select:focus{outline:2px solid #f2c14e66;border-color:#c9a53d}
 .notice{background:#f8fafc;border:1px solid var(--line);color:#475467;font-size:12px;border-radius:10px;padding:11px 13px;margin-bottom:12px}
 .breaking{border-radius:10px;border-left:4px solid var(--gold);box-shadow:none;padding:12px 14px;font-size:13px}
 .page.on{animation:fadeUp .18s ease}
-.subtabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin:0 0 14px;padding-bottom:2px;scrollbar-width:none}
+.subtabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 14px;padding-bottom:2px}
 .subtabs::-webkit-scrollbar{display:none}
 .subtabs button{flex:0 0 auto;min-height:36px;padding:0 13px;background:transparent;color:var(--muted);border-radius:8px 8px 0 0;font-size:13px;border-bottom:2px solid transparent}
 .subtabs button:hover{background:#eef2f6;color:var(--ink)}
@@ -312,7 +312,7 @@ input:focus,select:focus{outline:2px solid #f2c14e66;border-color:#c9a53d}
 .holding-row.compact{grid-template-columns:1.4fr 1fr 1fr auto;padding:9px 0}
 .holding-main b{font-size:14px}
 .stack{display:grid;gap:0}
-.asset-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.asset-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px}
 .asset-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
 .asset-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .asset-head b{font-size:15px}.asset-head small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
@@ -412,10 +412,13 @@ body.no-effects *{box-shadow:none!important}
   .side-status{display:none}
   .side .bell{display:none}
   main{padding:16px 14px 150px}
-  #laborFab{left:auto;right:14px;bottom:118px;width:auto;min-height:46px;padding:0 18px;border-radius:999px;font-size:13px;box-shadow:0 10px 24px #0c152355}
+  #laborFab{display:none}
   .page-head h1{font-size:22px}
   .page-head{align-items:flex-start;gap:8px}
-  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .stats{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+  .stats::-webkit-scrollbar{display:none}
+  .stats .box{flex:0 0 150px;padding:11px 12px}
+  .stats .box b{font-size:16px}
   .kpi-strip{grid-template-columns:1fr 1fr}
   .metric b{font-size:18px}
   .holding-row{grid-template-columns:1fr 1fr;gap:8px}
@@ -437,6 +440,21 @@ body.no-effects *{box-shadow:none!important}
   .modal-box .notify-grid{grid-template-columns:1fr 1fr;gap:6px}
   .modal-box .notify-toggle{font-size:11px;padding:7px 8px;min-height:38px}
   .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
+}
+@media(max-width:360px){
+  .nav{flex-wrap:wrap;overflow:visible;gap:4px;padding-right:0}
+  .nav button{min-height:30px;padding:0 8px;font-size:11px}
+  .speed-seg{display:flex;width:100%}
+  .speed-seg button{flex:1 1 0;min-width:0;padding:0 2px;font-size:12px}
+  .subtabs{flex-wrap:wrap;overflow:visible;gap:2px;padding-bottom:4px}
+  .subtabs button{min-height:32px;padding:0 8px;font-size:11px;border-radius:6px;border-bottom:0}
+  .subtabs button.on{background:#e7f3f1;color:var(--accent);border-bottom:0}
+  .bb-nav{gap:2px}
+  .bb-nav button{font-size:11px;padding:0 1px}
+  .bb-net{font-size:11px;gap:4px;padding-left:2px;padding-right:2px}
+  .bb-net b{font-size:14px}
+  .bb-tools{gap:3px}
+  .bb-net button{padding:0 5px;min-height:26px}
 }
 @media(max-width:540px){
   .stats{grid-template-columns:1fr 1fr}
@@ -503,6 +521,7 @@ body.no-effects *{box-shadow:none!important}
 <div id="modalRoot" class="modal" role="dialog" aria-modal="true" aria-hidden="true"></div>
 <div id="bottomBar">
   <div class="bb-net"><span>순자산</span><b id="bottomNet">-</b><span class="bb-tools">
+    <button onclick="openLabor()" aria-label="노동">💼</button>
     <button onclick="openNotifModal()" aria-label="알림">🔔<span id="bbBadge" class="bb-badge">0</span></button>
     <button id="bbSpeed" onclick="cycleSpeed()">1x</button>
     <button onclick="togglePause()" aria-label="일시정지">⏸</button>
@@ -1321,13 +1340,18 @@ function refreshLaborUI(){
     // 훨씬 아래로 스크롤해 섹션이 안 보이면 다시 띄워 바로 이동할 수 있게 합니다.
     const sec=$("labor-section");
     const secOnScreen=!!(activePage()==="portfolio" && sec && sec.getBoundingClientRect && sec.getBoundingClientRect().bottom>0 && sec.getBoundingClientRect().top<innerHeight);
-    fab.style.display=secOnScreen?"none":"inline-flex";
+    // 모바일은 하단 바의 노동 버튼을 쓰므로 떠 있는 버튼이 콘텐츠를 가리지 않게 숨깁니다.
+    const mobileView=typeof matchMedia==="function" && matchMedia("(max-width:850px)").matches;
+    fab.style.display=(mobileView||secOnScreen)?"none":"inline-flex";
     if(fab.classList) fab.classList.toggle("urgent",urgent);
     if(fab.setAttribute) fab.setAttribute("aria-label",urgent?"생계 위기 · 노동해서 생활비 벌기":"노동해서 생활비 벌기");
   }
 }
 function openLabor(){
   show("portfolio");
+  // 자산 탭이 거래 내역 등에 있어도 노동 섹션이 보이도록 개요 탭을 엽니다.
+  if(state.ui) state.ui.assetTab="overview";
+  portfolio();
   const fab=$("laborFab"); if(fab) fab.style.display="none";
   setTimeout(()=>{
     const section=$("labor-section");
@@ -3011,8 +3035,9 @@ function renderPage(id){
 
 function goPage(id){
   document.querySelectorAll(".page").forEach(x=>x.classList.toggle("on",x.id==id));
+  if(typeof window!=="undefined" && typeof window.scrollTo==="function") window.scrollTo({top:0,behavior:"auto"});
   const globalStats=document.querySelector(".stats");
-  if(globalStats) globalStats.classList.toggle("hidden",["dashboard","settings","rebirth"].includes(id));
+  if(globalStats) globalStats.classList.toggle("hidden",["dashboard","portfolio","settings","rebirth"].includes(id));
   const active=parentPage(id);
   document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("on",x.dataset.page===active));
   document.querySelectorAll(".bb-nav button").forEach(x=>x.classList.toggle("on",x.dataset.page===active));
