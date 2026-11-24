@@ -753,7 +753,7 @@ const state={
   labor: {shifts:0, earned:0, lastAt:{}, warned:false}, // 단기 노동 경력·누적 수입·직업별 마지막 노동 시각
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
-  seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈",
+  seasonBase: START_CASH, seasonBaseIndex: 1000, reportMonth: "", lastGrade: "브론즈",
   cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""},
   // ── 확장 자산·성장 시스템 ──
   estate:{}, metals:{gold:{qty:0,avg:0},silver:{qty:0,avg:0}}, altPrices:{}, company:null,
@@ -2683,7 +2683,7 @@ function resetRunForRebirth(){
   state.company=null; state.altPrices={}; state.economy=Object.assign({},ECON_DEFAULT);
   state.auto=Object.assign({},state.auto,{enabled:false});
   state.peakNet=start; state.altRealized=0; state.rewardedGrade=0; state.targetGoal=1000000000;
-  state.seasonBase=start; state.seasonBaseIndex=marketIndex();
+  state.seasonBase=start; state.seasonBaseIndex=marketIndex(); state.reportMonth=seasonKey();
   state.journalFilter={q:"",side:"all"}; state.ui={assetTab:"overview"};
   state.lastSeen=Date.now(); state.paused=false;
   // 업적·도감·특별 미션·설정·환생 기록은 영구 보존합니다.
@@ -2914,6 +2914,13 @@ function applySaveData(data) {
   if(!state.journalFilter||typeof state.journalFilter!=="object") state.journalFilter={q:"",side:"all"};
   state.peakNet=Math.max(Number.isFinite(+state.peakNet)?+state.peakNet:0,totalAssetsKRW());
   if(!Number.isFinite(+state.altRealized)) state.altRealized=0;
+  // 월간 리포트 기준점: 새 달이거나 월간 기준이 없는 구버전 저장이면 현재 자산에서 다시 시작합니다.
+  const month=seasonKey();
+  if(state.reportMonth!==month){
+    state.reportMonth=month;
+    state.seasonBase=totalAssetsKRW();
+    state.seasonBaseIndex=marketIndex();
+  }
   state.lastGrade=currentGrade();
 }
 
@@ -2953,7 +2960,7 @@ function clearGame(skipConfirm) {
   state.weekly={key:"",counts:{},claimed:{}}; state.special={}; state.streak={days:1,last:"",best:1};
   state.dex={stocks:{},products:{},estates:{},metals:{},company:false}; state.peakNet=START_CASH; state.altRealized=0;
   state.journalFilter={q:"",side:"all"}; state.rewardedGrade=0; state.targetGoal=1000000000;
-  state.seasonBase = START_CASH;
+  state.seasonBase = START_CASH; state.reportMonth=seasonKey();
   fx.usd = START_FX;
   fx.anchor = START_FX;
   stocks.forEach(s=>{

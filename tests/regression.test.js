@@ -932,6 +932,13 @@ const RESET = total => `
   `);
   check('잘못된 속도는 1~5로 보정', g.run('state.speed') === 5 && g.run('state.settings.speed') === 5, g.run('state.speed'));
   check('잘못된 설정값 보정', g.run("state.settings.numberFormat === 'full' && state.settings.theme === 'light'"), g.run('state.settings.numberFormat'));
+  g.run(`
+    state.cash=200000000; state.seasonBase=10000000; state.seasonBaseIndex=1000; state.reportMonth='1999-01';
+    const oldReport=JSON.parse(JSON.stringify(buildSaveData()));
+    applySaveData(oldReport);
+    1;
+  `);
+  check('월간 리포트 기준점 자동 갱신', g.run('state.reportMonth') === g.run('seasonKey()') && Math.abs(g.run('reportData().ret')) < 1e-9, g.run('reportData().ret'));
 
   // 알림 개별 토글·중복 억제
   g.run('state.notify.dividend = false; state.alerts = []; state.notifySeen = {}; notify("dividend","배당","테스트"); 1');
