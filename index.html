@@ -164,6 +164,25 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .rank-row.me{background:#e7f5ef;font-weight:700}
 .rank-row b{color:#0f766e}
 .alt-card{border:1px solid #d8ded4;background:#fffdf8;border-radius:8px;padding:12px;margin-bottom:8px}
+/* 노동 · 생계 */
+#labor-section{scroll-margin-top:18px}
+.labor-summary{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.labor-summary p{font-size:12px;margin-top:4px}
+.labor-progress{margin-top:10px}
+.labor-progress small{display:block;margin-top:4px;font-size:11px;color:#667085}
+.labor-alert{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:13px;line-height:1.5}
+.labor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.labor-card{border:1px solid #d8ded4;background:#fafafa;border-radius:8px;padding:10px;display:grid;gap:6px;min-width:0}
+.labor-card.locked{opacity:.62}
+.labor-top{display:flex;justify-content:space-between;gap:6px;align-items:center;flex-wrap:wrap}
+.labor-top b{font-size:14px}
+.labor-card small{font-size:12px;color:#667085}
+.labor-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}
+.labor-card button{min-height:34px;font-size:12px}
+.labor-note{font-size:11px;color:#667085;margin-top:8px}
+#laborFab{position:fixed;right:16px;bottom:18px;z-index:55;display:inline-flex;align-items:center;gap:6px;min-height:42px;padding:0 15px;border-radius:999px;background:#f7c948;color:#17202b;font-weight:800;font-size:13px;box-shadow:0 6px 20px #0003;border:1px solid #d9a900}
+#laborFab.urgent{background:#fee2e2;color:#991b1b;border-color:#fca5a5;box-shadow:0 0 0 4px #f7c94855,0 6px 20px #0003}
+@media(max-width:850px){#laborFab{left:12px;right:auto;bottom:104px;min-height:40px;padding:0 13px}#labor-section{scroll-margin-top:220px}}
 .alt-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px}
 .alt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:8px;font-size:12px}
 .alt-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
@@ -174,7 +193,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 @keyframes popIn{from{transform:scale(.98);opacity:.6}to{transform:none;opacity:1}}
 body.no-anim *{animation:none!important;transition:none!important}
 body.dark{background:#0b131d;color:#e2e8f0}
-body.dark .box,body.dark .card,body.dark .product,body.dark .news,body.dark .row,body.dark .panel,body.dark .section,body.dark .dash,body.dark .kpi,body.dark .journal,body.dark .log-box,body.dark .alt-card{background:#16202c;border-color:#2a3a4d;color:#e2e8f0}
+body.dark .box,body.dark .card,body.dark .product,body.dark .news,body.dark .row,body.dark .panel,body.dark .section,body.dark .dash,body.dark .kpi,body.dark .journal,body.dark .log-box,body.dark .alt-card,body.dark .labor-card{background:#16202c;border-color:#2a3a4d;color:#e2e8f0}
 body.dark .side{background:#080f18}
 body.dark .pill{background:#243447;color:#dbe4ef}
 body.dark p,body.dark small,body.dark .sub,body.dark .dash-foot{color:#9fb0c3}
@@ -245,6 +264,7 @@ body.dark .breaking{background:#060b12}
     <button data-page="portfolio" onclick="quickNav('portfolio')">자산</button>
   </div>
 </div>
+<button id="laborFab" onclick="openLabor()" aria-label="노동해서 생활비 벌기">💼 노동</button>
 
 <script>
 const START_FX=1390, START_CASH=10000000;
@@ -343,6 +363,18 @@ const METALS=[
 {id:"gold",name:"금",unit:"g",price:90000,vol:.010},
 {id:"silver",name:"은",unit:"g",price:1200,vol:.018}
 ];
+// ── 노동 · 생계 시스템 ───────────────────────────────────────
+// 현금과 자산이 모두 사라져도 최소 생활비를 벌 수 있는 단기 노동입니다.
+// 쿨다운은 게임 배속과 무관한 실제 시간 기준이라 10배속에서도 반복 수익이 폭주하지 않습니다.
+const LABOR_MIN_CASH = 100000;
+const LABOR_JOBS=[
+{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,desc:"야간 계산·매장 정리"},
+{id:"cafe",name:"카페 서빙",icon:"☕",pay:45000,cooldown:25,req:0,desc:"주문 접수·음료 서빙"},
+{id:"delivery",name:"퀵배달",icon:"🛵",pay:85000,cooldown:35,req:2,desc:"도심 단거리 배달"},
+{id:"logistics",name:"물류센터",icon:"📦",pay:130000,cooldown:50,req:4,desc:"상하차·택배 분류"},
+{id:"tutoring",name:"과외",icon:"📚",pay:200000,cooldown:70,req:7,desc:"중학생 수학 과외"},
+{id:"freelance",name:"긴급 외주",icon:"💻",pay:300000,cooldown:100,req:10,desc:"간단한 웹·디자인 수정"}
+];
 // 가상 기업: 설립 → 확장 → 인수합병
 const COMPANY_LEVELS=[
 {cost:50000000,revenue:2000000,profit:600000,val:50000000},
@@ -408,6 +440,7 @@ const state={
   feesTotal: 0,     // 누적 거래 수수료
   notify: {order:true, dividend:true, goal:true, grade:true, tax:true, sound:false, haptic:false},
   auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0, autoSell:false, takeProfit:20, stopLoss:10},
+  labor: {shifts:0, earned:0, lastAt:{}, warned:false}, // 단기 노동 경력·누적 수입·직업별 마지막 노동 시각
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
   seasonBase: START_CASH, seasonBaseIndex: 1000, lastGrade: "브론즈",
@@ -739,6 +772,86 @@ function autoInvest(force){
   return invested;
 }
 
+// ── 노동 · 생계 ───────────────────────────────────
+function ensureLabor(){
+  if(!state.labor || typeof state.labor!=="object") state.labor={shifts:0,earned:0,lastAt:{},warned:false};
+  if(!Number.isFinite(+state.labor.shifts) || +state.labor.shifts<0) state.labor.shifts=0;
+  if(!Number.isFinite(+state.labor.earned) || +state.labor.earned<0) state.labor.earned=0;
+  if(!state.labor.lastAt || typeof state.labor.lastAt!=="object") state.labor.lastAt={};
+  return state.labor;
+}
+function laborJob(id){ return LABOR_JOBS.find(j=>j.id===id)||null; }
+function laborRemaining(job){
+  if(!job) return 0;
+  const l=ensureLabor(), last=+l.lastAt[job.id]||0;
+  if(!last) return 0;
+  return Math.max(0, job.cooldown*1000-(Date.now()-last));
+}
+// 현금과 팔 수 있는 자산이 모두 바닥난 상태인지 판정합니다.
+function laborEmergency(){
+  const assets=stockValueKRW()+productValueKRW()+estateValue()+metalValue()+companyValue();
+  return (state.cash||0)<LABOR_MIN_CASH && assets<=0.01;
+}
+function laborJobCard(job){
+  const l=ensureLabor(), locked=l.shifts<job.req, remain=laborRemaining(job);
+  const label=locked?`🔒 노동 ${job.req}회 필요`:(remain>0?`${Math.ceil(remain/1000)}초 후`:"일하기");
+  return `<article class="labor-card${locked?" locked":""}">
+    <div class="labor-top"><b>${job.icon} ${job.name}</b><span class="pill">+${won(job.pay)}</span></div>
+    <small>${job.desc} · 실제 ${job.cooldown}초 쿨다운</small>
+    <div class="labor-meta"><span>누적 ${l.shifts}회</span><span>총 ${won(l.earned)}</span></div>
+    <button class="${locked?"ghost":"buy"}" data-labor-btn="${job.id}" onclick="workLabor('${job.id}')" ${locked?"disabled":""}>${label}</button>
+  </article>`;
+}
+function workLabor(id){
+  const job=laborJob(id); if(!job) return false;
+  const l=ensureLabor();
+  if(l.shifts<job.req){
+    alert(`이 노동은 누적 ${job.req}회 노동 후 가능합니다. (현재 ${l.shifts}회)`);
+    return false;
+  }
+  const remain=laborRemaining(job);
+  if(remain>0){
+    alert(`아직 쉬는 중입니다. ${Math.ceil(remain/1000)}초 후 다시 일할 수 있습니다.`);
+    return false;
+  }
+  l.shifts++;
+  l.earned+=job.pay;
+  l.lastAt[id]=Date.now();
+  state.cash=(state.cash||0)+job.pay;
+  addLog(`💼 ${job.name} 노동 완료: +${won(job.pay)} (누적 ${l.shifts}회)`);
+  notify("system","노동 완료",`${job.name} +${won(job.pay)} · 최소 생활비 목표 ${won(LABOR_MIN_CASH)}`);
+  saveGame(); portfolio(); update();
+  return true;
+}
+function refreshLaborUI(){
+  const l=ensureLabor();
+  document.querySelectorAll("[data-labor-btn]").forEach(btn=>{
+    const job=laborJob(btn.dataset.laborBtn); if(!job) return;
+    const locked=l.shifts<job.req, remain=laborRemaining(job);
+    btn.disabled=locked;
+    btn.textContent=locked?`🔒 노동 ${job.req}회 필요`:(remain>0?`${Math.ceil(remain/1000)}초 후`:"일하기");
+  });
+  const fab=$("laborFab");
+  if(fab){
+    const urgent=laborEmergency();
+    // 내 자산 화면에서 노동 섹션이 화면에 보이면 버튼을 숨겨 카드 조작을 가리지 않습니다.
+    // 훨씬 아래로 스크롤해 섹션이 안 보이면 다시 띄워 바로 이동할 수 있게 합니다.
+    const sec=$("labor-section");
+    const secOnScreen=!!(activePage()==="portfolio" && sec && sec.getBoundingClientRect && sec.getBoundingClientRect().bottom>0 && sec.getBoundingClientRect().top<innerHeight);
+    fab.style.display=secOnScreen?"none":"inline-flex";
+    if(fab.classList) fab.classList.toggle("urgent",urgent);
+    if(fab.setAttribute) fab.setAttribute("aria-label",urgent?"생계 위기 · 노동해서 생활비 벌기":"노동해서 생활비 벌기");
+  }
+}
+function openLabor(){
+  show("portfolio");
+  const fab=$("laborFab"); if(fab) fab.style.display="none";
+  setTimeout(()=>{
+    const section=$("labor-section");
+    if(section && section.scrollIntoView) section.scrollIntoView({behavior:"smooth",block:"start"});
+  },60);
+}
+
 // ── 확장 자산: 부동산 · 실물자산 · 기업 ───────────────
 function markDex(kind,id){
   if(!state.dex||typeof state.dex!=="object") state.dex={stocks:{},products:{},estates:{},metals:{},company:false};
@@ -860,7 +973,9 @@ function tickAlt(){
     if(state.marketSeconds%30===0){ const pay=Math.round(c.profit*(c.payout==null?.3:c.payout)); state.cash+=pay; if(pay>0) addLog(`🏭 기업 배당 +${won(pay)}`); }
   }
   const eco=state.economy||(state.economy={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0});
-  eco.cycleLeft=(eco.cycleLeft||0)-1;
+  // tickAlt는 15게임초마다 실행되므로 남은 시간도 15초씩 줄여야 합니다.
+  // (기존에는 1씩 줄어 90초 표시가 실제로는 1,350초가 되는 버그가 있었습니다.)
+  eco.cycleLeft=(eco.cycleLeft||0)-15;
   if(eco.cycleLeft<=0){
     const phases=["호황","중립","불황"];
     eco.phase=phases[Math.floor(Math.random()*3)];
@@ -1123,13 +1238,38 @@ function cycleSpeed(){
   const i=seq.indexOf(state.speed||1);
   setSpeed(seq[(i+1)%seq.length]);
 }
+function speedNow(){ return Math.max(1,Math.min(10,state.speed||1)); }
+// 게임 시간(초)을 현재 배속에서 실제 기다려야 하는 초로 환산합니다.
+// 3배속에서 180게임초는 실제 60초이므로, 화면 카운트다운이 3초씩 건너뛰지 않습니다.
+function realSeconds(gameSeconds){
+  const sec=Math.max(0,Number(gameSeconds)||0);
+  return Math.max(0,Math.ceil(sec/speedNow()));
+}
+function renderMarketBar(){
+  const bar=$("marketTimeBar"); if(!bar) return;
+  if(state.paused){
+    bar.style.background="#fef3c7";
+    bar.style.color="#92400e";
+    bar.textContent="⏸ 일시정지 중 · 재개하면 시장이 다시 움직입니다.";
+    return;
+  }
+  const cycleTime=state.marketSeconds%240;
+  if(cycleTime<180){
+    bar.style.background="#e0f2fe";
+    bar.style.color="#0369a1";
+    bar.textContent=`🟢 [개장 중] 주식 거래 가능 (다음 휴장까지 실제 ${realSeconds(180-cycleTime)}초 · ${speedNow()}x)`;
+  }else{
+    bar.style.background="#fee2e2";
+    bar.style.color="#991b1b";
+    bar.textContent=`🔴 [휴장 중] 주식 거래 제한 (다음 개장까지 실제 ${realSeconds(240-cycleTime)}초 · ${speedNow()}x) - 금융상품 이자는 정상 지급됩니다.`;
+  }
+}
 function updateSpeedUI(){
-  const label=state.paused?"⏸ 정지":`${state.speed||1}x`;
+  const label=state.paused?"⏸ 정지":`${speedNow()}x`;
   ["speedState","bbSpeed"].forEach(id=>{ const el=$(id); if(el) el.textContent=label; });
-  const bar=$("marketTimeBar");
-  if(bar && state.paused) bar.textContent="⏸ 일시정지 중 · 재개하면 시장이 다시 움직입니다.";
+  renderMarketBar();
   document.querySelectorAll("[data-speed]").forEach(b=>{
-    b.classList.toggle("on",!state.paused && +b.dataset.speed===(state.speed||1));
+    b.classList.toggle("on",!state.paused && +b.dataset.speed===speedNow());
   });
 }
 
@@ -1721,6 +1861,7 @@ function init(){
 
   // 1초 드라이버: 배속(1x/3x/10x)·일시정지를 한곳에서 처리합니다.
   setInterval(gameLoop,1000);
+  setInterval(refreshLaborUI,1000);
   setInterval(()=>saveGame(),10000);
   if(typeof window!=="undefined" && window.addEventListener){
     window.addEventListener("beforeunload",()=>{ try{ saveGame(); }catch(e){} });
@@ -1841,6 +1982,13 @@ function applySaveData(data) {
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
   state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
   state.auto.estatePct=Math.max(0,Math.min(100,+state.auto.estatePct||0));
+  const LABOR_DEFAULT={shifts:0,earned:0,lastAt:{},warned:false};
+  state.labor=Object.assign({},LABOR_DEFAULT,(state.labor&&typeof state.labor==="object")?state.labor:{});
+  state.labor.shifts=Math.max(0,Math.floor(+state.labor.shifts||0));
+  state.labor.earned=Math.max(0,+state.labor.earned||0);
+  if(!state.labor.lastAt||typeof state.labor.lastAt!=="object") state.labor.lastAt={};
+  LABOR_JOBS.forEach(j=>{ const t=+state.labor.lastAt[j.id]; if(!Number.isFinite(t)||t<0) delete state.labor.lastAt[j.id]; });
+  state.labor.warned=!!state.labor.warned;
   if(!Number.isFinite(+state.rewardedGrade)) state.rewardedGrade=gradeIndex(currentGrade());
   if(!Number.isFinite(+state.targetGoal)||+state.targetGoal<=0) state.targetGoal=1000000000;
   if(!state.daily || typeof state.daily!=="object") state.daily={date:"",counts:{},claimed:{}};
@@ -1915,7 +2063,9 @@ function clearGame(skipConfirm) {
   state.paused = false;
   state.speed = 1;
   state.auto = Object.assign({},state.auto,{enabled:false});
+  state.labor={shifts:0,earned:0,lastAt:{},warned:false};
   state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null;
+  state.altPrices={}; state.economy={phase:"중립",baseRate:.03,cycleLeft:90,rateAdj:0};
   state.weekly={key:"",counts:{},claimed:{}}; state.special={}; state.streak={days:1,last:"",best:1};
   state.dex={stocks:{},products:{},estates:{},metals:{},company:false}; state.peakNet=START_CASH; state.altRealized=0;
   state.journalFilter={q:"",side:"all"}; state.rewardedGrade=0; state.targetGoal=1000000000;
@@ -1957,6 +2107,7 @@ function goPage(id){
   if(activeNav&&activeNav.parentElement){ const n=activeNav.parentElement; n.scrollLeft=Math.max(0,activeNav.offsetLeft-n.clientWidth/2+activeNav.offsetWidth/2); }
   if(id=="news")news();
   if(id=="portfolio")portfolio();
+  refreshLaborUI();
   if(id=="banking")refreshBankingState();
   if(["domestic","foreign","mega","special","watch"].includes(id)) applyStockView(id);
 }
@@ -2009,7 +2160,7 @@ function banking(){
 
 // 상품 카드의 부제(현재 등급 이율 또는 잠금 안내)
 function productSubText(p, unlocked, held){
-  const term=p.term>0?` · 만기 ${p.term}초 · 보너스 ${(p.bonus*100).toFixed(1)}%`:" · 수시 입출금";
+  const term=p.term>0?` · 만기 실제 ${realSeconds(p.term)}초 · 보너스 ${(p.bonus*100).toFixed(1)}%`:" · 수시 입출금";
   const bank=BANKS.find(b=>b.id===p.bank);
   return `${p.type} · ${unlocked ? `현재 등급 연 ${(gradeRateFor(p.id, currentGrade())*100).toFixed(1)}%` : `🔒 ${unlockLabel(p.id)}${held?" · 보유 중(이자는 확정 이율로 유지)":""}`}${term}${bank?` · ${bank.name}`:""}`;
 }
@@ -2025,6 +2176,8 @@ function refreshBankingState(){
     if(sub) sub.textContent=productSubText(p, unlocked, held);
     const input=document.getElementById(`prod-${p.id}`);
     if(input) input.disabled=!unlocked;
+    const maturity=card.querySelector(`[data-maturity="${p.id}"]`);
+    if(maturity) maturity.value=productMaturityText(p);
     const joinBtn=card.querySelector(`[data-join="${p.id}"]`);
     if(joinBtn) joinBtn.disabled=!unlocked;
   });
@@ -2038,6 +2191,16 @@ function gradeBannerHTML(){
   return `🏅 현재 등급: <b>${currentGrade()}</b> · 총자산 ${won(totalAssetsKRW())}` +
     (next ? ` · 다음 등급 <b>${next.grade}</b>까지 ${won(next.remain)}` : " · 최고 등급입니다") +
     `<br><span style="font-size:12px;">등급이 높을수록 같은 상품의 이율이 높습니다. 가입 시점의 이율은 이후 등급이 바뀌어도 유지됩니다.</span>`;
+}
+
+function productMaturityText(p){
+  if(p.amount<=0) return "미가입";
+  if(p.term<=0) return "수시";
+  if(p.matured) return "만기 완료";
+  // startedAt이 0인 경우(게임 시작 직후 가입)도 '지금 가입'으로 잘못 해석하지 않도록 null만 검사합니다.
+  const start=p.startedAt!=null?p.startedAt:state.marketSeconds;
+  const gameLeft=Math.max(0,p.term-(state.marketSeconds-start));
+  return `실제 ${realSeconds(gameLeft)}초 남음`;
 }
 
 // 상품 카드: 현재 등급 이율과 가입 당시 확정 이율을 함께 보여줍니다.
@@ -2062,7 +2225,7 @@ function productCard(p){
     </div>
     <div class="inline-form" style="margin-top:8px">
       <label>은행<select id="bank-${p.id}" ${unlocked?"":"disabled"}>${BANKS.map(b=>`<option value="${b.id}" ${(p.bank||"hanbit")===b.id?"selected":""}>${b.name} (${b.mult>1?"+":""}${((b.mult-1)*100).toFixed(0)}%)</option>`).join("")}</select></label>
-      <label>만기 상태<input value="${p.amount<=0?"미가입":p.term>0?(p.matured?"만기 완료":`${Math.max(0,p.term-(state.marketSeconds-(p.startedAt||state.marketSeconds)))}초 남음`):"수시"}" readonly></label>
+      <label>만기 상태<input id="maturity-${p.id}" data-maturity="${p.id}" value="${productMaturityText(p)}" readonly></label>
     </div>
   </article>`;
 }
@@ -2203,7 +2366,7 @@ function portfolio(){
   const dex=state.dex||{stocks:{},products:{},estates:{},metals:{}};
   const dexCount=o=>Object.keys(o||{}).length;
   const dexHtml=`<div class="kpis"><div class="kpi"><small>주식 도감</small><b>${dexCount(dex.stocks)} / ${stocks.length}</b></div><div class="kpi"><small>상품 도감</small><b>${dexCount(dex.products)} / ${products.length}</b></div><div class="kpi"><small>부동산 도감</small><b>${dexCount(dex.estates)} / ${ESTATES.length}</b></div><div class="kpi"><small>실물 도감</small><b>${dexCount(dex.metals)} / ${METALS.length}</b></div><div class="kpi"><small>기업</small><b>${dex.company?"설립":"미설립"}</b></div></div>`;
-  const economyHtml=`<div class="kpis"><div class="kpi"><small>경기 국면</small><b>${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b>${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>다음 전환</small><b>${eco.cycleLeft||0}초</b></div><div class="kpi"><small>시장 지수</small><b>${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b>${won(state.peakNet||totalAssetsKRW())}</b></div></div>`;
+  const economyHtml=`<div class="kpis"><div class="kpi"><small>경기 국면</small><b>${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b>${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>다음 전환 (실제)</small><b>${realSeconds(eco.cycleLeft||0)}초</b></div><div class="kpi"><small>시장 지수</small><b>${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b>${won(state.peakNet||totalAssetsKRW())}</b></div></div>`;
   const autoState=state.auto||{};
   const autoHtml=`<div class="inline-form">
       <label>주식 비중 (%)<input id="auto-pct" type="number" min="0" max="100" step="5" value="${autoState.stockPct??60}"></label>
@@ -2218,6 +2381,17 @@ function portfolio(){
       ${autoState.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 적립 끄기</button></label>':""}
     </div>
     <p style="margin-top:8px;font-size:12px;">${autoState.enabled?`✅ 켜짐 · 60초마다 현금을 주식 ${autoState.stockPct}% / 금 ${autoState.goldPct||0}% / 부동산 ${autoState.estatePct||0}% / 예금으로 재투자합니다.${autoState.autoSell?` 보유 종목이 익절 ${autoState.takeProfit}% 또는 손절 ${autoState.stopLoss}%에 닿으면 자동 매도합니다.`:''}`:"꺼짐 · 켜면 60초마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
+
+  const labor=ensureLabor();
+  const laborPct=Math.max(0,Math.min(100,(state.cash||0)/LABOR_MIN_CASH*100));
+  const laborHtml=`<div class="labor-summary">
+      <div><b>💼 노동으로 다시 시작</b><p>현금이 0원이 되어도 단기 노동으로 최소 생활비를 벌 수 있습니다. 노동은 실제 시간 기준으로 쉬어야 하며, 많이 일할수록 더 나은 일자리가 열립니다.</p></div>
+      <span class="pill">누적 ${labor.shifts}회 · ${won(labor.earned)}</span>
+    </div>
+    <div class="labor-progress"><div class="bar"><span style="width:${laborPct.toFixed(1)}%"></span></div><small>최소 생활비 목표 ${won(Math.min(LABOR_MIN_CASH,Math.max(0,state.cash||0)))} / ${won(LABOR_MIN_CASH)}</small></div>
+    ${laborEmergency()?`<div class="labor-alert"><b>현금과 자산이 바닥났습니다.</b> 아래 기본 노동부터 시작해 ${won(LABOR_MIN_CASH)}의 최소 생활비를 마련한 뒤 다시 투자하세요.</div>`:""}
+    <div class="labor-grid">${LABOR_JOBS.map(laborJobCard).join("")}</div>
+    <p class="labor-note">기본 노동 2종은 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주가 열립니다. 쿨다운은 배속과 무관한 실제 초입니다.</p>`;
 
   const orderRows = state.orders.length ? state.orders.map(o=>{
     const s=stock(o.stockId);
@@ -2264,10 +2438,12 @@ function portfolio(){
       <div class="alloc-bar" role="img" aria-label="자산 배분">${allocBar||'<span style="width:100%;background:#e7ebef"></span>'}</div>
       <div class="alloc-legend">${allocLegend}</div>
       <div class="dash-foot">
-        <span>다음 배당 <b>${secondsToDividend()}초</b> 후 · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b></span>
+        <span>다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b></span>
         <span>총부채 <b>${debt>0?won(debt):"없음"}</b></span>
       </div>
     </div>
+
+    <div class="section" id="labor-section"><h3>노동 · 생계</h3><div class="panel">${laborHtml}</div></div>
 
     <div class="portfolio">
       <h3>주식 투자 현황 (평단·수익률·실현손익 모두 매수 수수료 0.15% 포함 기준)</h3>
@@ -2593,26 +2769,20 @@ function tickSeconds() {
   state.marketSeconds++;
   
   // 3분(180초) 개장 후 1분(60초) 휴장 순환 시스템
-  let cycleTime = state.marketSeconds % 240;
+  // 남은 시간 표시는 renderMarketBar가 현재 배속을 반영한 실제 초로 처리합니다.
+  const cycleTime = state.marketSeconds % 240;
   if (cycleTime < 180) {
     if(!state.marketOpen) {
       state.marketOpen = true;
       addLog("📢 시장이 개장되었습니다! 주식 거래가 가능합니다.");
     }
-    let remain = 180 - cycleTime;
-    $("marketTimeBar").style.background = "#e0f2fe";
-    $("marketTimeBar").style.color = "#0369a1";
-    $("marketTimeBar").textContent = `🟢 [개장 중] 주식 거래 가능 (다음 휴장까지 ${remain}초 남음)`;
   } else {
     if(state.marketOpen) {
       state.marketOpen = false;
       addLog("🔒 시장이 마감(휴장)되었습니다. 당분간 주식 거래가 제한됩니다.");
     }
-    let remain = 240 - cycleTime;
-    $("marketTimeBar").style.background = "#fee2e2";
-    $("marketTimeBar").style.color = "#991b1b";
-    $("marketTimeBar").textContent = `🔴 [휴장 중] 주식 거래 제한 (다음 개장까지 ${remain}초 남음) - 금융상품 이자는 정상 지급됩니다.`;
   }
+  renderMarketBar();
 
   // 이벤트 잔여 타이머 감소 처리
   if(state.currentEvent) {
@@ -2873,6 +3043,7 @@ function update(){
   state.peakNet=Math.max(state.peakNet||0,totalAssetsKRW());
   const bn=$("bottomNet");
   if(bn) bn.textContent=wonShort(totalAssetsKRW());
+  refreshLaborUI();
 
   const grade=currentGrade();
   if(state.lastGrade && state.lastGrade!==grade) notify("grade","등급 변동",`${state.lastGrade} → ${grade}`);

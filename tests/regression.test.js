@@ -484,6 +484,37 @@ const RESET = total => `
   g.run('state.paused=true; const beforePause=state.marketSeconds; gameLoop(); state.paused=false; 1');
   check('일시정지 중 시간 정지', g.run('state.marketSeconds') === 10, g.run('state.marketSeconds'));
 
+  // 배속에서도 화면 카운트다운은 실제 시간 기준으로 1초씩 줄어야 합니다.
+  g.run('state.speed=3; state.paused=false; state.marketSeconds=0; state.marketOpen=true; tickSeconds(); tickSeconds(); tickSeconds(); 1');
+  const bar3 = g.run("document.getElementById('marketTimeBar').textContent");
+  check('3배속 장중 카운트다운 실제 초', bar3.includes('실제 59초') && bar3.includes('3x'), bar3);
+  check('게임 시간→실제 초 환산', g.run('realSeconds(179)') === 60 && g.run('realSeconds(90)') === 30 && g.run('realSeconds(0)') === 0, g.run('realSeconds(179)'));
+
+  g.run('state.speed=10; state.marketSeconds=180; tickSeconds(); 1');
+  const bar10 = g.run("document.getElementById('marketTimeBar').textContent");
+  check('10배속 휴장 카운트다운 실제 초', bar10.includes('실제 6초') && bar10.includes('10x'), bar10);
+  g.run('state.speed=3; state.marketSeconds=300; product("deposit").amount=1000000; product("deposit").startedAt=0; product("deposit").term=600; product("deposit").matured=false; 1');
+  check('상품 만기 카운트다운 실제 초', g.run('productMaturityText(product("deposit"))') === '실제 100초 남음', g.run('productMaturityText(product("deposit"))'));
+
+  g.run('state.paused=true; updateSpeedUI(); 1');
+  check('일시정지 시장 바 표시', g.run("document.getElementById('marketTimeBar').textContent").includes('일시정지'));
+  g.run('state.marketSeconds=180; state.marketOpen=false; state.paused=false; updateSpeedUI(); 1');
+  check('재개 시 시장 바 즉시 복원', g.run("document.getElementById('marketTimeBar').textContent").includes('휴장 중'));
+
+  // 경기 전환 타이머는 tickAlt(15게임초)마다 15초씩 줄어야 합니다.
+  g.run(`
+    state.economy={phase:'중립',baseRate:.03,cycleLeft:30,rateAdj:0};
+    state.marketSeconds=60; state.estate={}; state.company=null;
+    state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}};
+    state.rewardedGrade=7; tickAlt();
+    1
+  `);
+  check('경기 전환 타이머 15초 감소', g.run('state.economy.cycleLeft') === 15, g.run('state.economy.cycleLeft'));
+
+  // 전체 초기화는 경제 국면과 부동산 가격도 새 게임 기본값으로 돌려야 합니다.
+  g.run('state.economy={phase:"호황",baseRate:.08,cycleLeft:7,rateAdj:.004}; state.altPrices={apt:999999999}; clearGame(true); 1');
+  check('초기화 시 경제·부동산 가격 리셋', g.run('state.economy.phase') === '중립' && g.run('state.economy.cycleLeft') === 90 && !g.run('state.altPrices.apt'), g.run('state.economy.phase') + '/' + g.run('state.economy.cycleLeft'));
+
   // 다중 탭 저장 충돌 가드
   g.run('localStorage.setItem("money_playground_save","SENTINEL"); multiTab=false; handleExternalSave(); saveGame(); 1');
   check('다른 탭 감지 시 저장 중단', g.run('localStorage.getItem("money_playground_save")') === 'SENTINEL', g.run('localStorage.getItem("money_playground_save")'));
@@ -697,6 +728,55 @@ const RESET = total => `
   check('10억 예금 10배속 1시간 폭주 없음', deposit.end.total > 0 && deposit.end.total < 2000000000, Math.round(deposit.end.total));
 
   check('시뮬레이션 손익 유한값', [hourA, stress, deposit].every(r => Number.isFinite(r.end.total) && Number.isFinite(r.max)), 'finite');
+}
+
+// ── 12. 노동·생계 시스템 ──────────────────────────────────────
+{
+  const g = createGame();
+  g.run(`
+    clearGame(true);
+    state.cash=0; state.usd=0; state.loan=0;
+    state.labor={shifts:0,earned:0,lastAt:{},warned:false};
+    portfolio();
+    1;
+  `);
+  const brokeHtml = g.run("document.getElementById('portfolio').innerHTML");
+  check('노동 섹션·6종 직업 렌더', brokeHtml.includes('labor-section') && brokeHtml.includes('편의점 야간') && brokeHtml.includes('긴급 외주') && g.run('LABOR_JOBS.length') === 6);
+  check('현금 0원 생계 위기 안내', brokeHtml.includes('현금과 자산이 바닥났습니다') && g.run('laborEmergency()') === true);
+
+  // 잠긴 직업은 현금을 주지 않습니다.
+  g.run("workLabor('delivery'); 1");
+  check('경력 부족 직업 잠금', g.run('state.cash') === 0 && g.run('state.labor.shifts') === 0, g.run('state.cash'));
+
+  g.run("workLabor('convenience'); 1");
+  check('기본 노동 수입 지급', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1 && g.run('state.labor.earned') === 60000, g.run('state.cash'));
+
+  g.run("workLabor('convenience'); 1");
+  check('쿨다운 중 중복 노동 차단', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1, g.run('state.cash'));
+
+  g.run("workLabor('cafe'); 1");
+  check('두 번째 기본 노동으로 최소 생활비 달성', g.run('state.cash') === 105000 && g.run('state.labor.shifts') === 2 && g.run('laborEmergency()') === false, g.run('state.cash'));
+
+  g.run("workLabor('delivery'); 1");
+  check('경력 2회에 퀵배달 해금', g.run('state.cash') === 190000 && g.run('state.labor.shifts') === 3, g.run('state.cash'));
+
+  // 경력이 쌓이면 고소득 노동이 열립니다.
+  g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); 1");
+  check('경력 10회에 긴급 외주 해금', g.run('state.cash') === 490000 && g.run('state.labor.shifts') === 11, g.run('state.cash'));
+  check('노동 경력·수입 저장', g.run('buildSaveData().state.labor.shifts') === 11 && g.run('buildSaveData().state.labor.earned') === 490000);
+
+  const saved = JSON.parse(JSON.stringify(g.run('buildSaveData()')));
+  const g2 = createGame();
+  g2.run('applySaveData(' + JSON.stringify(saved) + '); 1');
+  check('노동 저장 복원', g2.run('state.labor.shifts') === 11 && g2.run('state.labor.earned') === 490000, g2.run('state.labor.shifts'));
+
+  g2.run('clearGame(true); 1');
+  check('초기화 시 노동 경력 리셋', g2.run('state.labor.shifts') === 0 && g2.run('state.labor.earned') === 0);
+
+  // 노동 필드가 없던 구버전 저장도 기본값으로 복구합니다.
+  const g3 = createGame();
+  g3.run('delete state.labor; applySaveData({state:{cash:5000}}); 1');
+  check('구버전 저장 노동 기본값 보정', g3.run('state.labor.shifts') === 0 && g3.run('state.labor.earned') === 0 && !!g3.run('state.labor.lastAt'));
 }
 
 const failed = results.filter(r => !r.pass);
