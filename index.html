@@ -3782,42 +3782,50 @@ function tickMarket(){
     let surge=Math.random()<.04 ? Math.random()*.04+.01 : 0;
     
     // 장기 성장 유동성 바이어스(시간 압축 대비 완만하게)
-    let longBias=.0003+Math.random()*.0002+economicMarketBias();
+    let longBias=.0004+Math.random()*.0002+economicMarketBias();
     let recovery=s.price<s.start ? .001 : 0;
     
     // [시장 대형 이벤트 시스템 반영]
-    if(state.currentEvent === "AI_BOOM" && (s.theme.includes("AI") || s.theme.includes("반도체"))) {
-      longBias += 0.025;
-      if(Math.random() < 0.2) surge += 0.05;
+    // 호황·침체 모두 시장 전체에 작은 방향성을 주고, 테마 종목에만 추가 온도를 더합니다.
+    // (예전에는 하락 이벤트만 전 종목에 -4%/틱을 걸어 시장이 만성 하락했고,
+    //  이를 시작가 80% 지지선으로 막아 -20%가 하한처럼 보였습니다.)
+    if(state.currentEvent === "AI_BOOM") {
+      longBias += 0.005;
+      if(s.theme.includes("AI") || s.theme.includes("반도체")) {
+        longBias += 0.01;
+        if(Math.random() < 0.2) surge += 0.03;
+      }
     }
-    if(state.currentEvent === "SEMI_STRONG" && s.theme.includes("반도체")) {
-      longBias += 0.03;
+    if(state.currentEvent === "SEMI_STRONG") {
+      longBias += 0.003;
+      if(s.theme.includes("반도체")) longBias += 0.008;
     }
     if(state.currentEvent === "MARKET_CRASH") {
-      longBias -= 0.04;
-      if(Math.random() < 0.3) crash -= 0.06;
+      longBias -= 0.008;
+      if(Math.random() < 0.15) crash -= 0.03;
     }
     if(state.currentEvent === "BUBBLE_SHOCK") {
-      longBias -= 0.02;
-      noise *= 1.8; // 변동성 극한 확장
+      longBias -= 0.004;
+      noise *= 1.5; // 변동성 확장
     }
-    // 시작가 대비 1.6배를 넘으면 차익 실현 압력으로 과열을 식힙니다.
-    if(s.price > s.start*1.6) longBias -= .002;
+    // 시작가 대비 과열 폭이 커질수록 차익 실현 압력을 키워 추세가 스스로 꺾이게 합니다.
+    // 고정된 천장(+120%)을 없애 대신, 3배 부근에서는 되돌림이 폭등을 확실히 눌러줍니다.
+    const ratio=s.price/s.start;
+    if(ratio>1.8) longBias -= Math.min(.01, (ratio-1.8)*.003);
 
     let next=s.price*(1+noise+crash+surge+longBias+recovery);
-    // 한 종목이 몇 시간 만에 수십 배가 되는 것을 막는 상한(시작가 2.2배)입니다.
-    next=Math.min(next, s.start*2.2);
+    // 수십 배 폭등 같은 비정상 수치만 막는 안전장치(시작가 6배)입니다.
+    next=Math.min(next, s.start*6);
     
-    // 연도 및 진행별 하방 지지선 하향 조정으로 무조건적인 우상향 제거, 리스크 강화
-    // 시간이 지날수록 하한선이 무한히 올라가 모든 종목을 강제로 상승시키던 문제를 막습니다.
-    // 시작가의 40%에서 출발해 최대 80%까지만 완만히 올라가고, 그 뒤로는 고정됩니다.
-    let softFloor=s.start*(0.4 + Math.min(0.4, state.tick*.0002));
+    // 하한은 시간이 지나도 올라가지 않는 최후의 지지선(시작가 8%)입니다.
+    // 예전에는 시작가의 80%까지 끌어올려 모든 종목이 -20%에서 멈춰 하방 리스크가 사라졌습니다.
+    let hardFloor=s.start*.08;
     
     const isForeign = ["foreign","mega","special"].includes(s.group);
     if(isForeign){
-      s.price=Math.max(1,Math.round(Math.max(next,softFloor)*100)/100);
+      s.price=Math.max(1,Math.round(Math.max(next,hardFloor)*100)/100);
     }else{
-      s.price=Math.max(100,Math.round(Math.max(next,softFloor)/100)*100);
+      s.price=Math.max(100,Math.round(Math.max(next,hardFloor)/100)*100);
     }
     s.lastMove=(s.price-old)/old;
     s.hist.push(s.price);
@@ -3846,13 +3854,18 @@ function marketEventsAndNews() {
 
     // 속보 내용이 실제 가격에 반영되도록 관련 종목에 즉시 충격을 줍니다.
     if(state.currentEvent === "SEMI_STRONG"){
-      stocks.filter(s=>s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.03+Math.random()*0.05));
+      stocks.filter(s=>s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.02+Math.random()*0.03));
     }
     if(state.currentEvent === "AI_BOOM"){
-      stocks.filter(s=>s.theme.includes("AI")||s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.03+Math.random()*0.05));
+      // 호황은 시장 전체를 조금씩 올리고, AI·반도체 테마는 더 크게 올립니다.
+      stocks.forEach(s=>applyShock(s, 0.01+Math.random()*0.01));
+      stocks.filter(s=>s.theme.includes("AI")||s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.02+Math.random()*0.03));
     }
-    if(state.currentEvent === "MARKET_CRASH" || state.currentEvent === "BUBBLE_SHOCK"){
-      stocks.forEach(s=>applyShock(s, -(0.03+Math.random()*0.06)));
+    if(state.currentEvent === "MARKET_CRASH"){
+      stocks.forEach(s=>applyShock(s, -(0.02+Math.random()*0.03)));
+    }
+    if(state.currentEvent === "BUBBLE_SHOCK"){
+      stocks.forEach(s=>applyShock(s, -(0.015+Math.random()*0.025)));
     }
     if(state.currentEvent === "FX_SURGE"){
       fx.usd = Math.round(fx.usd * 1.03);
