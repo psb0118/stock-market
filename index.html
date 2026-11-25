@@ -3216,7 +3216,17 @@ function init(){
   }
   setTimeout(bootDone,350);
   if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
-    navigator.serviceWorker.register("sw.js").catch(()=>{});
+    // 새 배포가 첫 로드에 보이도록 서비스워커 스크립트도 HTTP 캐시를 건너뛰고 확인합니다.
+    const hadController=!!navigator.serviceWorker.controller;
+    let swReloaded=false;
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{
+      if(!hadController||swReloaded) return; // 첫 설치 때는 새로고침하지 않습니다.
+      swReloaded=true;
+      try{ location.reload(); }catch(e){}
+    });
+    navigator.serviceWorker.register("sw.js",{updateViaCache:"none"})
+      .then(reg=>{ try{ reg.update(); }catch(e){} })
+      .catch(()=>{});
   }
 }
 

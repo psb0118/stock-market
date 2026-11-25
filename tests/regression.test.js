@@ -562,6 +562,9 @@ const RESET = total => `
   const swSource = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   check('PWA 서비스워커 파일', swSource.includes('addEventListener("fetch"'));
   check('서비스워커는 API 응답을 캐시하지 않음', swSource.includes('url.pathname.includes("/api/")') && swSource.includes('url.origin !== self.location.origin'));
+  check('서비스워커가 HTML을 HTTP 캐시 없이 새로 받음', /cache:\s*"no-store"/.test(swSource) && swSource.includes('request.mode === "navigate"'));
+  check('서비스워커 등록이 HTTP 캐시를 건너뜀', html.includes('updateViaCache:"none"'));
+  check('새 서비스워커 적용 시 새로고침', html.includes('controllerchange'));
   check('PWA 아이콘', fs.existsSync(path.join(root, 'icon.svg')));
   check('index.html PWA 연결', html.includes('rel="manifest"') && html.includes('serviceWorker'));
 }
