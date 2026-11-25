@@ -514,6 +514,9 @@ body.no-effects *{box-shadow:none!important}
     <section id="loan" class="page"></section>
     <section id="tax" class="page"></section>
     <section id="orders" class="page"></section>
+    <section id="short" class="page"></section>
+    <section id="ipo" class="page"></section>
+    <section id="guide" class="page"></section>
   </main>
 </div>
 
@@ -601,6 +604,7 @@ const NAV_ITEMS=[
   {id:"company", label:"기업 경영", icon:"▣"},
   {id:"economy", label:"경제 현황", icon:"◎"},
   {id:"rebirth", label:"환생", icon:"♻"},
+  {id:"guide", label:"도움말", icon:"?"},
   {id:"settings", label:"설정", icon:"⚙"}
 ];
 function parentPage(id){
@@ -611,15 +615,17 @@ function pageHeader(kicker,title,desc,actions){
   return `<div class="page-head"><div><span class="eyebrow">${kicker||""}</span><h1>${title}</h1><p>${desc||""}</p></div>${actions?`<div class="page-actions">${actions}</div>`:""}</div>`;
 }
 function marketTabs(active){
-  const tabs=[["domestic","국내"],["foreign","해외"],["mega","초대형"],["special","특별"],["watch","관심"],["news","뉴스"]];
+  const tabs=[["domestic","국내"],["foreign","해외"],["mega","초대형"],["special","특별"],["ipo","공모주"],["watch","관심"],["news","뉴스"]];
   return `<div class="subtabs">${tabs.map(([id,label])=>`<button class="${id===active?"on":""}" onclick="show('${id}')">${label}</button>`).join("")}</div>`;
 }
 function financeTabs(active){
-  const tabs=[["banking","예금·적금"],["fx","환율"],["loan","대출"],["tax","세금"],["orders","예약 주문"]];
+  const tabs=[["banking","예금·적금"],["short","공매도"],["fx","환율"],["loan","대출"],["tax","세금"],["orders","예약 주문"]];
   return `<div class="subtabs">${tabs.map(([id,label])=>`<button class="${id===active?"on":""}" onclick="show('${id}')">${label}</button>`).join("")}</div>`;
 }
 
 // 전면 교체된 주식 종목 데이터 리스트
+// 지수 연동 ETF의 배율(지수 1배·2배·인버스 -1배). 종목 정의보다 먼저 있어야 합니다.
+const INDEX_POWERS={market_etf:1, market_2x:2, market_inv:-1};
 const stockDefinitions = [
 ["future_ai","미래AI전자","203010","국내","domestic",92000,.0012,.035,"AI 메모리·반도체"],
 ["hanbit_semi","한빛반도체","203020","국내","domestic",310000,.0015,.040,"HBM·데이터센터"],
@@ -638,15 +644,19 @@ const stockDefinitions = [
 ["hyper_vis","HyperVision","HPVS","특별","special",255*START_FX,.0014,.085,"디지털 자산"],
 ["deep_forge","DeepForge","DPFG","특별","special",125*START_FX,.0016,.075,"AI 데이터 분석"],
 ["zero_orbit","Zero Orbit","ZROR","특별","special",85*START_FX,.0015,.090,"위성 통신"],
-["market_etf","시장지수 ETF","KIDX","국내","domestic",10000,.0,.010,"시장지수"]
+["market_etf","시장지수 ETF","KIDX","국내","domestic",10000,.0,.010,"시장지수"],
+["market_2x","시장 2X 레버리지 ETF","K2XL","국내","domestic",10000,.0,.008,"레버리지"],
+["market_inv","시장 인버스 ETF","KINV","국내","domestic",10000,.0,.008,"인버스"]
 ];
 
 let stocks = stockDefinitions.map(x=>{
   const isForeign = ["foreign","mega","special"].includes(x[4]);
   let initPrice = isForeign ? Math.round(x[5]/START_FX) : Math.round(x[5]/100)*100;
   const baseRevenue=Math.max(100000000,Math.round(initPrice*10000));
-  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice],revenue:baseRevenue,opProfit:Math.round(baseRevenue*.12)};
+  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice],revenue:baseRevenue,opProfit:Math.round(baseRevenue*.12),indexPower:INDEX_POWERS[x[0]]||0};
 });
+// 지수 연동 ETF(지수·2X·인버스)는 랜덤워크 대신 시장 지수를 따라 움직입니다.
+const isIndexFund=s=>!!(s&&s.indexPower);
 
 // 가입 금액(amount)과 별개로, 가입 당시 확정된 연이율(rate)을 함께 보관합니다.
 // rate가 0이면 미가입 상태이며, 가입하는 순간의 등급 이율이 그 값으로 고정됩니다.
@@ -699,11 +709,37 @@ const COMPANY_LEVELS=[
 {cost:300000000,revenue:16000000,profit:5200000,val:300000000},
 {cost:600000000,revenue:32000000,profit:11000000,val:600000000}
 ];
+// 인수 대상: 가치 상승(이득)과 함께 매출·이익 기여, 유지비·가치 변동성(위협)이 붙습니다.
 const RIVALS=[
-{id:"r1",name:"경쟁사 알파",cost:120000000,boost:150000000},
-{id:"r2",name:"경쟁사 베타",cost:300000000,boost:400000000},
-{id:"r3",name:"경쟁사 감마",cost:800000000,boost:1200000000}
+{id:"r1",name:"경쟁사 알파",cost:120000000,boost:150000000,rev:3000000,profit:900000,upkeep:300000,risk:.02,
+ benefit:"기업 가치 +1.5억 · 매출 +3백만/30초",threat:"유지비 30만원/30초 · 가치 변동성 +2%p"},
+{id:"r2",name:"경쟁사 베타",cost:300000000,boost:400000000,rev:7000000,profit:2200000,upkeep:800000,risk:.03,
+ benefit:"기업 가치 +4억 · 매출 +7백만/30초",threat:"유지비 80만원/30초 · 가치 변동성 +3%p"},
+{id:"r3",name:"경쟁사 감마",cost:800000000,boost:1200000000,rev:18000000,profit:6000000,upkeep:2400000,risk:.04,
+ benefit:"기업 가치 +12억 · 매출 +1.8천만/30초",threat:"유지비 240만원/30초 · 가치 변동성 +4%p"},
+{id:"r4",name:"동네 상권 체인",cost:60000000,boost:70000000,rev:1500000,profit:450000,upkeep:120000,risk:.02,
+ benefit:"기업 가치 +7천만 · 매출 +1.5백만/30초",threat:"유지비 12만원/30초 · 가치 변동성 +2%p"},
+{id:"r5",name:"온라인 쇼핑몰",cost:220000000,boost:280000000,rev:6000000,profit:1800000,upkeep:700000,risk:.035,
+ benefit:"기업 가치 +2.8억 · 매출 +6백만/30초",threat:"유지비 70만원/30초 · 가치 변동성 +3.5%p"},
+{id:"r6",name:"물류 스타트업",cost:500000000,boost:700000000,rev:12000000,profit:3000000,upkeep:1900000,risk:.045,
+ benefit:"기업 가치 +7억 · 매출 +1.2천만/30초",threat:"유지비 190만원/30초 · 가치 변동성 +4.5%p"},
+{id:"r7",name:"핀테크 유니콘",cost:1500000000,boost:2300000000,rev:35000000,profit:11000000,upkeep:5200000,risk:.05,
+ benefit:"기업 가치 +23억 · 매출 +3.5천만/30초",threat:"유지비 520만원/30초 · 가치 변동성 +5%p"},
+{id:"r8",name:"글로벌 지주사",cost:3200000000,boost:5200000000,rev:80000000,profit:26000000,upkeep:12000000,risk:.06,
+ benefit:"기업 가치 +52억 · 매출 +8천만/30초",threat:"유지비 1,200만원/30초 · 가치 변동성 +6%p"}
 ];
+// 공모주(IPO): 시장에 순차적으로 새 종목이 상장됩니다. 모두 원화 거래 종목입니다.
+const IPO_POOL=[
+{id:"ipo_med",name:"노바헬스",ticker:"NVHL",group:"domestic",price:42000,vol:.038,theme:"바이오"},
+{id:"ipo_game",name:"픽셀게임즈",ticker:"PXGM",group:"domestic",price:18000,vol:.045,theme:"게임"},
+{id:"ipo_food",name:"한상푸드",ticker:"HSFD",group:"domestic",price:26000,vol:.028,theme:"식품"},
+{id:"ipo_robot",name:"로봇테크",ticker:"RBTK",group:"domestic",price:55000,vol:.052,theme:"로봇"},
+{id:"ipo_energy",name:"그린파워",ticker:"GRPW",group:"domestic",price:33000,vol:.036,theme:"에너지"},
+{id:"ipo_fin",name:"세움캐피탈",ticker:"SWCP",group:"domestic",price:21000,vol:.03,theme:"금융"},
+{id:"ipo_cloud",name:"클라우드원",ticker:"CLDW",group:"domestic",price:64000,vol:.048,theme:"클라우드"}
+];
+// 금리연동 채권: 기준금리가 내려가면 가격이 오르고, 올라가면 내려갑니다.
+const BOND={face:100000, coupon:.036, fee:.002};
 // 기업 가치에 따른 기업 등급. 인수·확장으로 가치가 커지면 자동으로 바뀝니다.
 const COMPANY_GRADES=[
 {min:0,name:"스타트업",color:"#64748b"},
@@ -751,7 +787,12 @@ const state={
   eventTimer: 0,
   loan: 0,          // 신용 대출 잔액(원화)
   loanRate: 0,      // 대출 실행 시점 금리(연)
-  orders: [],       // 예약(지정가) 주문
+  orders: [],       // 예약 주문(지정가·손절·트레일링·분할매수)
+  shorts: [],       // 공매도 포지션
+  bonds: {qty:0, avg:0}, // 금리연동 채권
+  ipo: {offer:null, nextAt:0, history:[]}, // 공모주 청약
+  shortRealized: 0, // 공매도 누적 실현손익
+  listedIds: [],    // 공모주로 새로 상장된 종목 id
   goals: {},        // 달성한 목표 id
   realizedYTD: 0,   // 연간 실현손익 누계(양도세 계산)
   taxedProfit: 0,   // 이미 과세된 누적 실현손익
@@ -808,7 +849,7 @@ function stockValueKRW(){
 }
 function productValueKRW(){ return products.reduce((a,p)=>a+p.amount, 0); }
 // 총자산 = 현금 + 달러 환산액 + 주식 평가액 + 금융상품 평가액 + 부동산 + 실물자산 + 기업 가치
-function grossAssetsKRW(){ return (state.cash||0) + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW() + estateValue() + metalValue() + companyValue(); }
+function grossAssetsKRW(){ return (state.cash||0) + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW() + estateValue() + metalValue() + companyValue() + bondValueKRW() + shortValueKRW(); }
 // 순자산 = 총자산 - 부채(대출)
 function netAssetsKRW(){ return grossAssetsKRW() - (state.loan||0); }
 // 기존 함수 이름은 순자산 기준으로 유지합니다(등급·목표·랭킹 공통).
@@ -861,7 +902,25 @@ function estatePrice(id){ const d=ESTATES.find(x=>x.id===id); return (state.altP
 function estateValue(){ return ESTATES.reduce((a,e)=>a + (state.estate&&state.estate[e.id]?state.estate[e.id].qty:0)*estatePrice(e.id),0); }
 function metalPrice(id){ const d=METALS.find(x=>x.id===id); return (state.altPrices && Number.isFinite(state.altPrices[id])) ? state.altPrices[id] : (d?d.price:0); }
 function metalValue(){ return METALS.reduce((a,m)=>a + ((state.metals&&state.metals[m.id]?state.metals[m.id].qty:0)||0)*metalPrice(m.id),0); }
-function companyValue(){ return state.company ? Math.max(0,state.company.valuation||0) : 0; }
+function companyValue(){
+  const c=state.company; if(!c) return 0;
+  // 상장해 지분을 팔았으면 내가 가진 지분만큼만 내 자산입니다.
+  const own=c.listed?Math.max(0,Math.min(100,+c.listed.ownPct||0))/100:1;
+  return Math.max(0,+c.valuation||0)*own;
+}
+// 공매도 평가손익: 진입가와 현재가의 차이(주식을 빌려 판 뒤 되사야 하므로 가격이 오르면 손실).
+function shortValueKRW(){
+  return (Array.isArray(state.shorts)?state.shorts:[]).reduce((a,p)=>{
+    const s=stock(p.stockId); if(!s) return a;
+    return a + (p.entry - s.price) * p.qty * (isForeignStock(s)?fx.usd:1);
+  },0);
+}
+// 금리연동 채권 가격: 기준금리가 내려가면 오르고, 올라가면 내려갑니다.
+function bondUnitPrice(){
+  const rate=Math.max(.005,(state.economy&&+state.economy.baseRate)||.03);
+  return Math.round(Math.max(60000,Math.min(200000,BOND.face*(.045/rate))));
+}
+function bondValueKRW(){ const b=state.bonds||{}; return Math.max(0,+b.qty||0)*bondUnitPrice(); }
 function currentTitle(){ return TITLES[currentGrade()]||TITLES["브론즈"]; }
 function currentGrade(){
   const total=totalAssetsKRW();
@@ -880,7 +939,7 @@ function nextGradeInfo(){
 
 // ── 시장 지수 · 관심종목 ─────────────────────────────
 function marketIndex(){
-  const list=stocks.filter(s=>s.id!=="market_etf");
+  const list=stocks.filter(s=>!isIndexFund(s));
   if(!list.length) return 1000;
   return 1000*list.reduce((a,s)=>a+s.price/s.start,0)/list.length;
 }
@@ -1048,7 +1107,10 @@ function saveAutoSettings(){
   const autoSell=$("auto-sell")?$("auto-sell").checked:false;
   const takeProfit=Math.max(0,Math.min(200,+($("auto-tp")?$("auto-tp").value:20)||0));
   const stopLoss=Math.max(0,Math.min(100,+($("auto-sl")?$("auto-sl").value:10)||0));
-  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every,autoSell,takeProfit,stopLoss});
+  const rebalance=$("auto-reb")?$("auto-reb").checked:!!(state.auto||{}).rebalance;
+  const rebStockPct=Math.max(0,Math.min(100,+($("auto-reb-pct")?$("auto-reb-pct").value:60)||0));
+  const rebBand=Math.max(2,Math.min(20,Math.round(+($("auto-reb-band")?$("auto-reb-band").value:5)||5)));
+  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every,autoSell,takeProfit,stopLoss,rebalance,rebStockPct,rebBand});
   saveGame(); if(activePage()==="settings") settingsPage(); else portfolio(); update();
   notify("system","자동 투자",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)} · ${state.auto.every}초 주기${state.auto.autoSell?` · 익절 ${state.auto.takeProfit}%/손절 ${state.auto.stopLoss}%`:''}`);
 }
@@ -1097,7 +1159,7 @@ function autoInvest(force){
   const stockPart=Math.max(0,Math.min(100,a.stockPct||0))*budget/100;
   let invested=0;
   if(stockPart>0){
-    const list=stocks.filter(s=>s.id!=="market_etf");
+    const list=stocks.filter(s=>!isIndexFund(s));
     const perKRW=stockPart/list.length;
     list.forEach(s=>{
       const foreign=isForeignStock(s);
@@ -1437,7 +1499,7 @@ function foundCompany(){
   const name=($("company-name")?$("company-name").value.trim():"")||"나의 기업";
   if(!confirmTrade("기업 설립",`${name} · ${won(def.cost)}`)) return;
   state.cash-=def.cost;
-  state.company={name,level:1,valuation:def.val,book:def.val,revenue:def.revenue,profit:def.profit,payout:.3};
+  state.company={name,level:1,valuation:def.val,book:def.val,revenue:def.revenue,profit:def.profit,payout:.3,upkeep:0,risk:0,listed:null};
   markDex("company",true);
   addLog(`🏭 기업 설립: ${name} (${won(def.cost)})`);
   notify("system","기업 설립",`${name} 설립 완료`);
@@ -1457,14 +1519,294 @@ function acquireRival(id){
   const r=RIVALS.find(x=>x.id===id); if(!r||c.acquired&&c.acquired[id]) return;
   if(state.cash<r.cost) return alert(`인수 비용 ${won(r.cost)}이 부족합니다.`);
   if(!confirmTrade("기업 인수",`${r.name} · ${won(r.cost)}`)) return;
-  state.cash-=r.cost; c.valuation+=r.boost; c.book=(c.book||c.valuation-r.boost)+r.boost; c.revenue+=Math.round(r.boost*.02); c.profit+=Math.round(r.boost*.006);
+  state.cash-=r.cost; c.valuation+=r.boost; c.book=(c.book||c.valuation-r.boost)+r.boost;
+  c.revenue+=r.rev||Math.round(r.boost*.02);
+  c.profit+=r.profit||Math.round(r.boost*.006);
+  c.upkeep=(c.upkeep||0)+(r.upkeep||0);
+  c.risk=Math.min(.15,(c.risk||0)+(r.risk||0));
   c.acquired=Object.assign({},c.acquired,{[id]:true});
-  addLog(`🤝 기업 인수: ${r.name} (+${won(r.boost)})`);
+  addLog(`🤝 기업 인수: ${r.name} (+${won(r.boost)}) · 유지비 ${won(r.upkeep||0)}/30초`);
+  notify("system","인수 완료",`${r.name} · ${r.benefit}`);
   notify("system","인수합병",`${r.name} 인수 완료`);
   checkAchievements();
   saveGame(); portfolio(); update();
 }
 function setCompanyPayout(v){ if(!state.company) return; state.company.payout=Math.max(0,Math.min(1,(+v||0)/100)); saveGame(); portfolio(); }
+
+// ── 주문 체결 공통 ─────────────────────────────
+// 예약 주문·자동 리밸런싱이 같은 수수료/세금/기록 경로를 쓰도록 모았습니다.
+function marketBuyShares(s,qty){
+  qty=Math.floor(+qty||0); if(!s||qty<=0) return false;
+  const foreign=isForeignStock(s);
+  const cost=s.price*(1+stockFeeRate())*qty;
+  if(foreign ? state.usd<cost : state.cash<cost) return false;
+  if(foreign) state.usd-=cost; else state.cash-=cost;
+  s.avgBuy=((s.avgBuy*s.own)+(s.price*(1+stockFeeRate()))*qty)/(s.own+qty);
+  s.own+=qty;
+  recordTrade(s,"buy",qty,s.price,0);
+  return true;
+}
+function marketSellShares(s,qty){
+  qty=Math.floor(+qty||0); if(!s||qty<=0||s.own<qty) return false;
+  const foreign=isForeignStock(s);
+  const revenue=s.price*(1-stockFeeRate()-tradeTaxRate())*qty;
+  const profit=revenue-s.avgBuy*qty;
+  const profitKRW=foreign?profit*fx.usd:profit;
+  if(foreign){ state.usd+=revenue; s.realizedProfit+=profitKRW; } else { state.cash+=revenue; s.realizedProfit+=profit; }
+  s.own-=qty; if(s.own===0) s.avgBuy=0;
+  recordTrade(s,"sell",qty,s.price,profitKRW);
+  settleTax(profitKRW); creditStockBonus(profitKRW);
+  return true;
+}
+
+// ── 공매도 ────────────────────────────────────
+function ensureShorts(){ if(!Array.isArray(state.shorts)) state.shorts=[]; return state.shorts; }
+function shortStock(stockId,qty){
+  if(!checkMarketOpen()) return;
+  const s=stock(stockId); if(!s) return alert("종목을 선택해 주세요.");
+  if(isIndexFund(s)) return alert("지수 ETF는 공매도할 수 없습니다.");
+  qty=Math.floor(+qty||0);
+  if(qty<=0) return alert("공매도 수량을 입력해 주세요.");
+  const foreign=isForeignStock(s);
+  const valueKRW=s.price*qty*(foreign?fx.usd:1);
+  const marginNeed=valueKRW*0.3;
+  const cashKRW=state.cash+(state.usd||0)*fx.usd;
+  if(cashKRW<marginNeed) return alert(`공매도에는 포지션의 30%(${won(marginNeed)}) 이상의 현금이 필요합니다.`);
+  if(!confirmTrade("공매도",`${s.name} ${qty}주 @ ${foreign?usdStr(s.price):won(s.price)} · 증거금 ${won(marginNeed)}`)) return;
+  const proceeds=s.price*qty*(1-stockFeeRate());
+  if(foreign) state.usd+=proceeds; else state.cash+=proceeds;
+  ensureShorts().push({id:`sh${Date.now()}${Math.floor(Math.random()*1000)}`,stockId,qty,entry:s.price,margin:marginNeed,at:state.marketSeconds});
+  addLog(`🔻 공매도: ${s.name} ${qty}주 @ ${foreign?usdStr(s.price):won(s.price)}`);
+  notify("order","공매도 실행",`${s.name} ${qty}주`);
+  saveGame(); update(); if(activePage()==="short") shortPage();
+}
+function coverShort(id,qty,force){
+  const pos=ensureShorts().find(p=>p.id===id); if(!pos) return;
+  const s=stock(pos.stockId); if(!s) return;
+  qty=Math.min(Math.floor(+qty||pos.qty)||pos.qty,pos.qty);
+  const foreign=isForeignStock(s);
+  const cost=s.price*qty*(1+stockFeeRate());
+  if(!force && (foreign ? state.usd<cost : state.cash<cost)) return alert("환매에 필요한 현금이 부족합니다.");
+  if(foreign){
+    if(state.usd<cost){
+      const need=(cost-state.usd)*fx.usd;
+      if(state.cash>=need){ state.cash-=need; }
+      else { const short=need-state.cash; state.cash=0; state.loan=(state.loan||0)+short; state.loanRate=state.loanRate||0.08; addLog(`⚠️ 환매 부족분 ${won(short)}이 대출로 전환되었습니다.`); }
+      state.usd=cost;
+    }
+    state.usd-=cost;
+  } else {
+    if(state.cash<cost){ const short=Math.max(0,cost-state.cash); state.cash=0; state.loan=(state.loan||0)+short; state.loanRate=state.loanRate||0.08; addLog(`⚠️ 환매 부족분 ${won(short)}이 대출로 전환되었습니다.`); }
+    else state.cash-=cost;
+  }
+  const pnl=(pos.entry-s.price)*qty*(1-stockFeeRate());
+  const pnlKRW=foreign?pnl*fx.usd:pnl;
+  state.shortRealized=(state.shortRealized||0)+pnlKRW;
+  pos.qty-=qty;
+  if(pos.qty<=0) state.shorts=ensureShorts().filter(p=>p.id!==id);
+  addLog(`${force?"⚠️ 강제 청산":"🔺 공매도 환매"}: ${s.name} ${qty}주 · 실현손익 ${won(pnlKRW)}`);
+  notify("order",force?"마진콜 · 강제 청산":"공매도 환매",`${s.name} ${qty}주 · ${won(pnlKRW)}`);
+  saveGame(); update(); if(activePage()==="short") shortPage();
+}
+function coverShortAll(){ ensureShorts().slice().forEach(p=>coverShort(p.id,p.qty)); }
+// 가격이 진입가 대비 30% 오르면 증거금이 녹아 강제 청산됩니다.
+function checkShortMargins(){
+  ensureShorts().slice().forEach(p=>{
+    const s=stock(p.stockId); if(!s) return;
+    if(s.price>=p.entry*1.3) coverShort(p.id,p.qty,true);
+  });
+}
+
+// ── 금리연동 채권 ──────────────────────────────
+function ensureBonds(){ if(!state.bonds||typeof state.bonds!=="object") state.bonds={qty:0,avg:0}; const b=state.bonds; b.qty=Math.max(0,+b.qty||0); b.avg=Math.max(0,+b.avg||0); return b; }
+function buyBond(qty){
+  const b=ensureBonds(); qty=Math.floor(+qty||0);
+  if(qty<=0) return alert("매수 수량을 입력해 주세요.");
+  const price=bondUnitPrice(), cost=price*qty*(1+BOND.fee);
+  if(state.cash<cost) return alert(`채권 매수에는 ${won(cost)}이 필요합니다.`);
+  state.cash-=cost;
+  b.avg=((b.avg*b.qty)+price*qty)/(b.qty+qty);
+  b.qty+=qty;
+  addLog(`📜 채권 매수: ${qty}구좌 @ ${won(price)}`);
+  saveGame(); banking(); update();
+}
+function sellBond(qty){
+  const b=ensureBonds(); qty=Math.min(Math.floor(+qty||0)||b.qty,b.qty);
+  if(qty<=0) return alert("보유한 채권이 없습니다.");
+  const price=bondUnitPrice();
+  const revenue=price*qty*(1-BOND.fee);
+  state.cash+=revenue;
+  b.qty-=qty; if(b.qty===0) b.avg=0;
+  addLog(`📜 채권 매도: ${qty}구좌 @ ${won(price)} (${won(revenue)})`);
+  saveGame(); banking(); update();
+}
+
+// ── 기업: 정보 수정 · 삭제 · 상장 ─────────────────────────
+function updateCompanyName(){
+  const c=state.company; if(!c) return;
+  const input=$("company-rename");
+  const name=((input&&input.value)||"").trim().slice(0,12);
+  if(!name) return alert("기업명을 입력해 주세요.");
+  c.name=name;
+  addLog(`🏭 기업명 변경: ${name}`);
+  saveGame(); companyPage(); update();
+}
+function deleteCompany(){
+  const c=state.company; if(!c) return;
+  if(!confirm(`${c.name}을(를) 삭제할까요?\n\n기업 가치·매출·배당·인수한 회사가 모두 사라지며, 환불이나 보상은 전혀 없습니다.`)) return;
+  const name=c.name;
+  state.company=null;
+  addLog(`🗑️ 기업 삭제: ${name} (보상 없음)`);
+  notify("system","기업 삭제",`${name} · 보상 없음`);
+  saveGame(); portfolio(); companyPage(); update();
+}
+const COMPANY_SHARES=100000;
+function listCompany(){
+  const c=state.company; if(!c) return alert("먼저 기업을 설립해 주세요.");
+  if(c.listed) return alert("이미 상장한 기업입니다.");
+  if(c.level<2) return alert("기업 Lv.2 이상이어야 상장할 수 있습니다.");
+  if((c.valuation||0)<100000000) return alert("기업 가치 1억원 이상이어야 상장할 수 있습니다.");
+  const fee=Math.max(5000000,Math.round(c.valuation*.02));
+  if(state.cash<fee) return alert(`상장 수수료 ${won(fee)}이 부족합니다.`);
+  const ipoPrice=Math.max(100,Math.round(c.valuation/COMPANY_SHARES));
+  const salePct=30;
+  if(!confirmTrade("기업 상장",`공모 ${salePct}% · 공모가 ${won(ipoPrice)} · 수수료 ${won(fee)}`)) return;
+  state.cash-=fee;
+  const raised=Math.round(COMPANY_SHARES*salePct/100*ipoPrice);
+  state.cash+=raised;
+  c.listed={shares:COMPANY_SHARES,ipoPrice,price:ipoPrice,ownPct:100-salePct,dayBase:state.marketSeconds,raised};
+  addLog(`🔔 기업 상장: ${c.name} · 공모가 ${won(ipoPrice)} · 조달 ${won(raised)}`);
+  publishBreakingNews("🔔 기업 상장", `${c.name}이(가) 상장했습니다. 공모가 ${won(ipoPrice)} · ${salePct}% 공모`);
+  notify("system","기업 상장",`${c.name} · ${won(raised)} 조달`);
+  checkAchievements();
+  saveGame(); companyPage(); portfolio(); update();
+}
+function sellCompanyShares(pct){
+  const c=state.company; if(!c||!c.listed) return alert("상장한 기업만 지분을 매각할 수 있습니다.");
+  pct=Math.max(5,Math.min(100,Math.floor(+pct||0)||5));
+  if(pct>c.listed.ownPct) return alert("보유 지분보다 많이 매각할 수 없습니다.");
+  const price=c.listed.price;
+  const cash=Math.round(c.listed.shares*pct/100*price);
+  c.listed.ownPct-=pct;
+  state.cash+=cash;
+  addLog(`📤 지분 매각: ${pct}% · ${won(cash)} (남은 지분 ${c.listed.ownPct}%)`);
+  saveGame(); companyPage(); update();
+}
+
+// ── 공모주(IPO) ────────────────────────────────
+function ensureIPO(){
+  if(!state.ipo||typeof state.ipo!=="object") state.ipo={offer:null,nextAt:0,history:[]};
+  const ipo=state.ipo;
+  if(!Array.isArray(ipo.history)) ipo.history=[];
+  if(!Number.isFinite(+ipo.nextAt)) ipo.nextAt=0;
+  return ipo;
+}
+// 공모주로 상장된 종목을 주식 목록에 추가합니다(저장 데이터 복원에도 사용).
+function ensureListedStock(def,price){
+  const exist=stocks.find(s=>s.id===def.id); if(exist) return exist;
+  const p=Math.max(100,Math.round((+price||def.price||1000)/100)*100);
+  const revenue=Math.max(100000000,Math.round(p*10000));
+  const s={id:def.id,name:def.name,ticker:def.ticker||def.id.toUpperCase(),market:"국내",group:"domestic",price:p,start:p,drift:.001,vol:def.vol||.035,theme:def.theme||"신규 상장",own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[p],revenue,opProfit:Math.round(revenue*.12),indexPower:0,ipo:true};
+  stocks.push(s);
+  return s;
+}
+function resetListedStocks(){ stocks=stocks.filter(s=>!s.ipo); state.listedIds=[]; }
+function tickIPO(){
+  const ipo=ensureIPO();
+  if(ipo.offer){
+    if(state.marketSeconds>=ipo.offer.closesAt) closeIPO();
+    return;
+  }
+  if(state.marketSeconds<ipo.nextAt) return;
+  const pool=IPO_POOL.filter(d=>!stocks.some(s=>s.id===d.id));
+  if(!pool.length){ ipo.nextAt=state.marketSeconds+300; return; }
+  const d=pool[Math.floor(Math.random()*pool.length)];
+  const price=Math.max(100,Math.round(d.price*(0.9+Math.random()*0.2)/100)*100);
+  ipo.offer={id:d.id,name:d.name,ticker:d.ticker,group:"domestic",theme:d.theme,vol:d.vol,price,qty:60000,closesAt:state.marketSeconds+120,subscribed:0,mine:0};
+  publishBreakingNews("📢 공모주 청약", `${d.name}(${d.ticker}) 공모가 ${won(price)} · 120초간 청약 접수 중`);
+  notify("system","공모주 청약 시작",`${d.name} · 공모가 ${won(price)}`);
+}
+function subscribeIPO(){
+  const ipo=ensureIPO(),o=ipo.offer; if(!o) return alert("진행 중인 공모주가 없습니다.");
+  const amount=Math.floor(+((($("ipo-amount")||{}).value)||0)||0);
+  if(amount<10000) return alert("1만원 이상 청약할 수 있습니다.");
+  if(state.cash<amount) return alert("현금이 부족합니다.");
+  state.cash-=amount;
+  o.mine=(o.mine||0)+amount;
+  o.subscribed=(o.subscribed||0)+amount;
+  addLog(`📝 공모주 청약: ${o.name} ${won(amount)}`);
+  saveGame(); ipoPage(); update();
+}
+function cancelIPO(){
+  const ipo=ensureIPO(),o=ipo.offer; if(!o||!o.mine) return;
+  state.cash+=o.mine;
+  o.subscribed=Math.max(0,(o.subscribed||0)-o.mine);
+  o.mine=0;
+  addLog(`↩️ 공모주 청약 취소: ${o.name}`);
+  saveGame(); ipoPage(); update();
+}
+function closeIPO(){
+  const ipo=ensureIPO(),o=ipo.offer; if(!o) return;
+  const mine=Math.max(0,+o.mine||0);
+  const mineShares=o.price>0?mine/o.price:0;
+  const demandShares=Math.round(o.qty*(0.3+Math.random()*2.2))+mineShares;
+  const ratio=Math.min(1,o.qty/Math.max(1,demandShares));
+  const alloc=mine>0?Math.max(0,Math.floor(mineShares*ratio)):0;
+  if(mine>0) state.cash+=mine-alloc*o.price;
+  const open=Math.max(100,Math.round(o.price*(0.9+Math.random()*0.35)/100)*100);
+  const s=ensureListedStock(o,o.price);
+  s.start=o.price; s.price=open; s.lastMove=(open-o.price)/o.price; s.hist=[o.price,open];
+  if(alloc>0){ s.own=alloc; s.avgBuy=o.price; }
+  if(!state.listedIds.includes(o.id)) state.listedIds.push(o.id);
+  ipo.history.unshift({id:o.id,name:o.name,price:o.price,open,alloc,at:state.marketSeconds});
+  ipo.history=ipo.history.slice(0,8);
+  ipo.offer=null;
+  ipo.nextAt=state.marketSeconds+300+Math.floor(Math.random()*300);
+  addLog(`📈 신규 상장: ${o.name} 공모가 ${won(o.price)} → 시초가 ${won(open)}${alloc?` · ${alloc}주 배정`:""}`);
+  publishBreakingNews("📈 신규 상장", `${o.name}(${o.ticker}) 상장 · 공모가 ${won(o.price)} · 시초가 ${won(open)}`);
+  notify("system","공모주 상장",`${o.name}${alloc?` · ${alloc}주 배정`:" · 청약 미참여"}`);
+  if(activePage()==="ipo") ipoPage();
+  saveGame(); update();
+}
+
+// ── 자동 리밸런싱 ─────────────────────────────
+function autoRebalance(){
+  const a=state.auto||{};
+  if(!a.enabled||!a.rebalance||!state.marketOpen) return 0;
+  const gross=grossAssetsKRW(); if(gross<=0) return 0;
+  const target=Math.max(0,Math.min(100,+a.rebStockPct||60))/100;
+  const band=Math.max(0.02,Math.min(0.2,(+a.rebBand||5)/100));
+  const now=stockValueKRW()/gross;
+  let moved=0;
+  if(now>target+band){
+    let need=(now-target-band)*gross;
+    [...stocks].filter(s=>s.own>0&&!isIndexFund(s)).sort((x,y)=>y.price*y.own-x.price*x.own).forEach(s=>{
+      if(need<=0) return;
+      const unit=s.price*(isForeignStock(s)?fx.usd:1);
+      const qty=Math.min(s.own,Math.max(1,Math.floor(need/unit)));
+      const before=s.own;
+      if(marketSellShares(s,qty)){ const done=(before-s.own)*unit; moved+=done; need-=done; }
+    });
+  } else if(now<target-band){
+    const need=(target-band-now)*gross;
+    const budget=Math.min(state.cash,need);
+    if(budget>10000){
+      const list=stocks.filter(s=>!isIndexFund(s));
+      const per=budget/list.length;
+      list.forEach(s=>{
+        const unit=s.price*(1+stockFeeRate())*(isForeignStock(s)?fx.usd:1);
+        const qty=Math.floor(per/unit);
+        if(qty>0&&marketBuyShares(s,qty)) moved+=per;
+      });
+    }
+  }
+  if(moved>0){
+    addLog(`⚖️ 자동 리밸런싱: 주식 비중 ${pct(now)} → 목표 ${Math.round(target*100)}% · ${won(moved)} 조정`);
+    notify("system","리밸런싱",`${won(moved)} · 주식 ${Math.round(target*100)}% 맞춤`);
+    saveGame(); update();
+  }
+  return moved;
+}
 function tickAlt(){
   if(!state.altPrices||typeof state.altPrices!=="object") state.altPrices={};
   ESTATES.forEach(e=>{
@@ -1484,11 +1826,32 @@ function tickAlt(){
   }
   const c=state.company;
   if(c){
+    if(!Number.isFinite(+c.upkeep)) c.upkeep=0;
+    if(!Number.isFinite(+c.risk)) c.risk=0;
     c.revenue=Math.max(0,Math.round(c.revenue*(0.99+Math.random()*.02)));
-    // 기업 가치는 장부가(설립·확장·인수 누계) 주변에서만 움직이게 해 무한 복리를 막습니다.
+    // 기업 가치는 장부가(설립·확장·인수 누계) 주변에서만 움직입니다.
+    // 인수한 회사가 많을수록 위협(가치 변동성)이 커져 장부가에서 더 크게 출렁입니다.
     const book=Math.max(10000000,c.book||c.valuation);
-    c.valuation=Math.max(book*.8,Math.min(book*1.2,Math.round(c.valuation*(0.997+Math.random()*.006))));
-    if(state.marketSeconds%30===0){ const pay=Math.round(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)); state.cash+=pay; if(pay>0) addLog(`🏭 기업 배당 +${won(pay)}`); }
+    const swing=0.2+Math.max(0,Math.min(0.15,+c.risk||0));
+    c.valuation=Math.max(book*(1-swing),Math.min(book*(1+swing),Math.round(c.valuation*(0.997+Math.random()*.006))));
+    // 상장한 기업은 주가가 순자산 가치를 향해 천천히 수렴하며 매 틱 변동합니다.
+    if(c.listed && (+c.listed.shares||0)>0){
+      const fair=Math.max(100,c.valuation/c.listed.shares);
+      const p=Math.max(100,+c.listed.price||+c.listed.ipoPrice||100);
+      c.listed.price=Math.max(100,Math.round(p*(0.994+Math.random()*0.012)+(fair-p)*0.03));
+    }
+    if(state.marketSeconds%30===0){
+      // 상장해 지분을 팔았으면 내 지분만큼만 배당을 받습니다.
+      const own=c.listed?Math.max(0,Math.min(100,+c.listed.ownPct||0))/100:1;
+      const pay=Math.round(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)*own);
+      state.cash+=pay;
+      if(pay>0) addLog(`🏭 기업 배당 +${won(pay)}`);
+      if((c.upkeep||0)>0){
+        const up=c.upkeep;
+        state.cash=Math.max(0,state.cash-up);
+        addLog(`🏭 인수 기업 유지비 -${won(up)}`);
+      }
+    }
   }
   const eco=state.economy||(state.economy=Object.assign({},ECON_DEFAULT));
   // tickAlt는 15게임초마다 실행되므로 남은 시간도 15초씩 줄여야 합니다.
@@ -2030,15 +2393,35 @@ function sparklineSVG(s){
 // ── 예약(지정가) 주문 ────────────────────────────────
 function placeOrder(){
   const stockId = $("order-stock") ? $("order-stock").value : "";
-  const side = $("order-side") ? $("order-side").value : "buy";
+  const type = (($("order-type")||{}).value) || "limit";
+  const side = (($("order-side")||{}).value) || "buy";
   const qty = Math.floor(+($("order-qty") ? $("order-qty").value : 0) || 0);
   const limit = +($("order-limit") ? $("order-limit").value : 0) || 0;
+  const trail = Math.max(1, Math.min(50, Math.floor(+((($("order-trail")||{}).value)) || 5)));
+  const every = Math.max(15, Math.min(600, Math.floor(+((($("order-every")||{}).value)) || 60)));
   const s = stock(stockId);
   if(!s) return alert("예약할 종목을 선택해 주세요.");
-  if(qty <= 0 || limit <= 0) return alert("수량과 지정가를 올바르게 입력해 주세요.");
-  if(side === "sell" && s.own < qty) return alert("보유 수량이 부족합니다.");
-  state.orders.push({id:`o${Date.now()}${Math.floor(Math.random()*1000)}`, stockId, side, qty, limit});
-  addLog(`예약 주문: ${s.name} ${side === "buy" ? "매수" : "매도"} ${qty}주 @ ${isForeignStock(s) ? usdStr(limit) : won(limit)}`);
+  const id = `o${Date.now()}${Math.floor(Math.random()*1000)}`;
+  const priceText = isForeignStock(s) ? usdStr(limit) : won(limit);
+  if(type === "dca"){
+    if(limit < 10000) return alert("분할 매수 금액은 1만원 이상이어야 합니다.");
+    state.orders.push({id, stockId, type:"dca", side:"buy", amount:limit, every, lastAt:state.marketSeconds});
+    addLog(`🔁 분할 매수 예약: ${s.name} ${won(limit)} / ${every}초`);
+  } else if(type === "trailing"){
+    if(s.own <= 0) return alert("보유 중인 종목만 트레일링 스톱을 걸 수 있습니다.");
+    state.orders.push({id, stockId, type:"trailing", side:"sell", qty:qty||s.own, trail, peak:s.price});
+    addLog(`📉 트레일링 스톱: ${s.name} ${qty||s.own}주 · 고점 대비 -${trail}%`);
+  } else if(type === "stop"){
+    if(qty <= 0 || limit <= 0) return alert("수량과 조건 가격을 입력해 주세요.");
+    if(side === "sell" && s.own < qty) return alert("보유 수량이 부족합니다.");
+    state.orders.push({id, stockId, type:"stop", side, qty, limit});
+    addLog(`🛑 조건 주문: ${s.name} ${side==="buy"?"돌파 매수":"손절 매도"} ${qty}주 @ ${priceText}`);
+  } else {
+    if(qty <= 0 || limit <= 0) return alert("수량과 지정가를 올바르게 입력해 주세요.");
+    if(side === "sell" && s.own < qty) return alert("보유 수량이 부족합니다.");
+    state.orders.push({id, stockId, type:"limit", side, qty, limit});
+    addLog(`예약 주문: ${s.name} ${side === "buy" ? "매수" : "매도"} ${qty}주 @ ${priceText}`);
+  }
   saveGame(); portfolio(); update();
 }
 
@@ -2049,41 +2432,79 @@ function cancelOrder(oid){
   saveGame(); portfolio();
 }
 
-// 가격이 지정가에 도달한 주문을 체결합니다(휴장 중에는 대기).
+// 예약 주문 체결: 지정가·조건(손절/돌파)·트레일링 스톱·분할 매수(DCA)를 처리합니다.
+// 휴장 중에는 지정가·조건·트레일링이 대기하고, 분할 매수도 개장 후에만 실행됩니다.
 function processOrders(){
-  if(!state.marketOpen || !state.orders.length) return;
+  if(!state.orders.length) return;
   const remain = [];
   state.orders.forEach(o => {
     const s = stock(o.stockId);
     if(!s) return;
+    const foreign = isForeignStock(s);
+    const px = p => foreign ? usdStr(p) : won(p);
+    if(o.type === "dca"){
+      if(state.marketOpen && state.marketSeconds - (o.lastAt||0) >= (o.every||60)){
+        const unit = s.price*(1+stockFeeRate())*(foreign?fx.usd:1);
+        const qty = Math.max(0,Math.floor((o.amount||0)/unit));
+        if(qty>0 && marketBuyShares(s,qty)){
+          o.lastAt = state.marketSeconds;
+          addLog(`🔁 분할 매수 체결: ${s.name} ${qty}주 @ ${px(s.price)}`);
+          notify("order","분할 매수",`${s.name} ${qty}주`);
+          bumpDaily("orders");
+        }
+      }
+      remain.push(o); return;
+    }
+    if(!state.marketOpen){ remain.push(o); return; }
+    if(o.type === "trailing"){
+      o.peak = Math.max(+o.peak||0, s.price);
+      const trig = (o.peak||s.price)*(1-(o.trail||5)/100);
+      if(s.price > trig){ remain.push(o); return; }
+      const qty = Math.min(o.qty||s.own, s.own);
+      if(qty>0 && marketSellShares(s,qty)){
+        addLog(`📉 트레일링 스톱 매도: ${s.name} ${qty}주 @ ${px(s.price)}`);
+        notify("order","트레일링 스톱",`${s.name} ${qty}주`);
+        bumpDaily("orders");
+      }
+      return;
+    }
+    if(o.type === "stop"){
+      const hit = o.side === "buy" ? s.price >= o.limit : s.price <= o.limit;
+      if(!hit){ remain.push(o); return; }
+      if(o.side === "buy"){
+        if(marketBuyShares(s,o.qty)){
+          addLog(`🛑 돌파 매수 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
+          notify("order","돌파 매수",`${s.name} ${o.qty}주`);
+          bumpDaily("orders");
+        } else remain.push(o);
+      } else {
+        if(s.own < o.qty){ remain.push(o); return; }
+        if(marketSellShares(s,o.qty)){
+          addLog(`🛑 손절 매도 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
+          notify("order","손절 매도",`${s.name} ${o.qty}주`);
+          bumpDaily("orders");
+        }
+      }
+      return;
+    }
+    // 지정가 주문
     const hit = o.side === "buy" ? s.price <= o.limit : s.price >= o.limit;
     if(!hit){ remain.push(o); return; }
-    const foreign = isForeignStock(s);
     if(o.side === "buy"){
-      const cost = s.price * (1 + stockFeeRate()) * o.qty;
-      if(foreign ? state.usd < cost : state.cash < cost){ remain.push(o); return; } // 잔고 부족 시 다음 틱 재시도
-      if(foreign) state.usd -= cost; else state.cash -= cost;
-      s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + stockFeeRate())) * o.qty) / (s.own + o.qty);
-      s.own += o.qty;
-      addLog(`⏱ 예약 매수 체결: ${s.name} ${o.qty}주 @ ${foreign ? usdStr(s.price) : won(s.price)}`);
-      bumpDaily("orders");
-      notify("order","지정가 매수 체결",`${s.name} ${o.qty}주`);
-      recordTrade(s,"buy",o.qty,s.price,0);
+      if(marketBuyShares(s,o.qty)){
+        addLog(`⏱ 예약 매수 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
+        notify("order","지정가 매수 체결",`${s.name} ${o.qty}주`);
+        bumpDaily("orders");
+      } else remain.push(o);
     } else {
       if(s.own < o.qty){ remain.push(o); return; }
-      const revenue = s.price * (1 - stockFeeRate() - tradeTaxRate()) * o.qty;
-      const profitTotal = revenue - (s.avgBuy * o.qty);
-      const profitKRW = foreign ? profitTotal * fx.usd : profitTotal;
-      if(foreign){ state.usd += revenue; s.realizedProfit += profitKRW; }
-      else { state.cash += revenue; s.realizedProfit += profitTotal; }
-      s.own -= o.qty;
-      if(s.own === 0) s.avgBuy = 0;
-      addLog(`⏱ 예약 매도 체결: ${s.name} ${o.qty}주 @ ${foreign ? usdStr(s.price) : won(s.price)}`);
-      bumpDaily("orders");
-      notify("order","지정가 매도 체결",`${s.name} ${o.qty}주 · ${won(profitKRW)}`);
-      recordTrade(s,"sell",o.qty,s.price,profitKRW);
-      settleTax(profitKRW);
-      creditStockBonus(profitKRW);
+      const before = s.avgBuy*o.qty;
+      if(marketSellShares(s,o.qty)){
+        const profitKRW = (s.price*(1-stockFeeRate()-tradeTaxRate())*o.qty - before);
+        addLog(`⏱ 예약 매도 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
+        notify("order","지정가 매도 체결",`${s.name} ${o.qty}주 · ${won(profitKRW)}`);
+        bumpDaily("orders");
+      }
     }
   });
   state.orders = remain;
@@ -2181,7 +2602,7 @@ function ensureStockFundamentals(s){
 }
 function earningsSurprise(){
   if(!stocks.length) return;
-  const pool=stocks.filter(s=>s.id!=="market_etf");
+  const pool=stocks.filter(s=>!isIndexFund(s));
   const s = pool[Math.floor(Math.random() * pool.length)];
   if(!s) return;
   ensureStockFundamentals(s);
@@ -2524,33 +2945,70 @@ function realestatePage(){
 }
 
 // ── 기업 경영 ───────────────────────────────────────────────
+function rivalsSection(c){
+  const owned=(c&&c.acquired)||{};
+  const totalUpkeep=RIVALS.filter(r=>owned[r.id]).reduce((a,r)=>a+r.upkeep,0);
+  const totalRisk=RIVALS.filter(r=>owned[r.id]).reduce((a,r)=>a+r.risk,0);
+  const rows=RIVALS.map(r=>{
+    const done=!!owned[r.id];
+    return `<div class="panel" style="margin-bottom:8px">
+      <div class="company-head" style="align-items:center"><div><b>${r.name}</b> <span class="pill">${won(r.cost)}</span></div><span class="pill">${done?"인수 완료":"미인수"}</span></div>
+      <p class="muted-sm" style="margin:6px 0"><b class="up">이득</b> ${r.benefit}</p>
+      <p class="muted-sm" style="margin:0"><b class="down">위협</b> ${r.threat}</p>
+      <div class="button-row" style="margin-top:8px"><button class="${done?"ghost":"buy"}" onclick="acquireRival('${r.id}')" ${done?"disabled":""}>${done?"인수 완료":"인수하기"}</button></div>
+    </div>`;
+  }).join("");
+  return `<section class="section"><div class="section-head"><h3>인수합병</h3><span class="pill">유지비 ${won(totalUpkeep)}/30초 · 변동성 +${(totalRisk*100).toFixed(1)}%p</span></div>
+    <div class="notice">인수하면 기업 가치·매출·배당이 늘지만, <b>유지비</b>가 30초마다 현금에서 나가고 <b>기업 가치 변동성(위협)</b>도 커집니다. 유지비는 현금이 바닥나면 0원까지만 빠집니다.</div>
+    ${rows}</section>`;
+}
 function companyPage(){
   const c=state.company;
   let body;
   if(!c){
     body=`<div class="panel">
       <h3>기업 설립</h3>
-      <p class="muted-sm">5,000만원으로 기업을 설립하면 30초마다 배당을 받고, 사업 확장과 인수합병으로 가치를 키울 수 있습니다.</p>
+      <p class="muted-sm">${won(COMPANY_LEVELS[0].cost)}으로 기업을 설립하면 30초마다 배당을 받고, 사업 확장·상장·인수합병으로 가치를 키울 수 있습니다.</p>
       <div class="inline-form" style="margin-top:10px">
         <label>기업명<input id="company-name" maxlength="12" placeholder="예: 한빛캐피탈"></label>
         <label>&nbsp;<button class="buy" onclick="foundCompany()">기업 설립 (${won(COMPANY_LEVELS[0].cost)})</button></label>
       </div>
-    </div>`;
+    </div>
+    ${rivalsSection(null)}`;
   } else {
     const cg=companyGradeInfo(c);
+    const cL=c.listed;
+    const listedCard=cL?`<div class="kpis" style="margin-top:10px">
+        <div class="kpi"><small>공모가</small><b>${won(cL.ipoPrice)}</b></div>
+        <div class="kpi"><small>현재 주가</small><b>${won(cL.price)}</b></div>
+        <div class="kpi"><small>내 지분</small><b>${cL.ownPct}%</b></div>
+        <div class="kpi"><small>내 지분 가치</small><b>${won(cL.shares*cL.ownPct/100*cL.price)}</b></div>
+      </div>
+      <div class="inline-form" style="margin-top:8px">
+        <label>지분 매각 (%)<input id="company-sell-pct" type="number" min="5" max="${Math.max(5,cL.ownPct)}" step="5" value="5"></label>
+        <label>&nbsp;<button class="ghost" onclick="sellCompanyShares(document.getElementById('company-sell-pct').value)">지분 매각</button></label>
+      </div>
+      <p class="muted-sm">상장하면 공모로 현금을 조달하고 주가를 확인할 수 있지만, 판 지분만큼 배당과 기업 평가액이 줄어듭니다.</p>`
+      :`<p class="muted-sm" style="margin-top:10px">Lv.2 이상 · 기업 가치 1억원 이상이면 상장할 수 있습니다. 상장하면 30%를 공모해 현금을 조달합니다(수수료 기업 가치의 2%, 최소 500만원).</p>
+      <button class="buy" style="margin-top:8px" onclick="listCompany()">기업 상장(IPO)</button>`;
     body=`<div class="panel">
-      <div class="company-head"><div><span class="pill" style="color:${cg.color};border-color:${cg.color}">${cg.name}</span> <span class="pill">Lv.${c.level}</span><h2>${escHtml(c.name)}</h2></div><div class="company-value"><small>기업 가치</small><b>${won(c.valuation)}</b></div></div>
+      <div class="company-head"><div><span class="pill" style="color:${cg.color};border-color:${cg.color}">${cg.name}</span> <span class="pill">Lv.${c.level}</span>${cL?` <span class="pill">상장 · ${cL.shares.toLocaleString("ko-KR")}주</span>`:""}<h2>${escHtml(c.name)}</h2></div><div class="company-value"><small>기업 가치</small><b>${won(c.valuation)}</b></div></div>
       <div class="mission" style="border:0;padding:0"><div class="mission-top"><small>다음 등급 ${cg.next?cg.next.name:"최고 등급"} · 인수 ${Object.keys(c.acquired||{}).length}개</small><small>${cg.next?`${Math.round(cg.progress*100)}%`:"MAX"}</small></div><div class="bar"><span style="width:${(cg.progress*100).toFixed(0)}%"></span></div></div>
-      <div class="kpis" style="margin-top:12px"><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>30초 배당</small><b>${won(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04))}</b></div></div>
+      <div class="kpis" style="margin-top:12px"><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>30초 배당</small><b>${won(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)*(cL?cL.ownPct/100:1))}</b></div></div>
       <div class="inline-form" style="margin-top:10px">
+        <label>기업명<input id="company-rename" maxlength="12" value="${escAttr(c.name)}"></label>
+        <label>&nbsp;<button class="ghost" onclick="updateCompanyName()">이름 저장</button></label>
         <label>배당 성향 (%)<input type="number" min="0" max="100" step="5" value="${Math.round((c.payout||0)*100)}" onchange="setCompanyPayout(this.value)"></label>
         <label>&nbsp;<button class="buy" onclick="expandCompany()">사업 확장${COMPANY_LEVELS[c.level]?` (${won(COMPANY_LEVELS[c.level].cost)})`:" (최대)"}</button></label>
         <label>&nbsp;<button class="ghost" onclick="openAssetDetail('company')">기업 상세</button></label>
       </div>
+      ${listedCard}
+      <div class="button-row" style="margin-top:12px"><button class="sell" onclick="deleteCompany()">기업 삭제</button></div>
+      <p class="muted-sm" style="margin-top:6px">기업 삭제는 <b>아무 보상 없이</b> 기업·매출·배당·인수 기록을 모두 없앱니다. 다시 설립하면 Lv.1부터 시작합니다.</p>
     </div>
-    <section class="section"><h3>인수합병</h3><div class="panel stack">${RIVALS.map(r=>`<div class="holding-row compact"><b>${r.name}</b><span>비용 ${won(r.cost)}</span><span class="up">가치 +${won(r.boost)}</span><button class="ghost" onclick="acquireRival('${r.id}')" ${c.acquired&&c.acquired[r.id]?"disabled":""}>${c.acquired&&c.acquired[r.id]?"인수 완료":"인수"}</button></div>`).join("")}</div></section>`;
+    ${rivalsSection(c)}`;
   }
-  $("company").innerHTML=`${pageHeader("BUSINESS","기업 경영","기업을 설립·확장하고 경쟁사를 인수해 가치를 키웁니다.")}${body}`;
+  $("company").innerHTML=`${pageHeader("BUSINESS","기업 경영","기업을 설립·확장·상장하고 경쟁사를 인수해 가치를 키웁니다.")}${body}`;
 }
 
 // ── 경제 현황 ───────────────────────────────────────────────
@@ -2697,7 +3155,7 @@ function resetRunForRebirth(){
   const start=rebirthStartCash();
   state.cash=start; state.usd=0; state.tick=0; state.news=[]; state.logs=[];
   state.marketSeconds=0; state.marketOpen=true; state.currentEvent=null; state.eventTimer=0;
-  state.loan=0; state.loanRate=0; state.orders=[]; state.goals={};
+  state.loan=0; state.loanRate=0; state.orders=[]; state.shorts=[]; state.bonds={qty:0,avg:0}; state.ipo={offer:null,nextAt:0,history:[]}; state.shortRealized=0; resetListedStocks(); state.goals={};
   state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
   state.watch=[]; state.journal=[]; state.alerts=[];
   state.loanTotal=0; state.dividendTotal=0; state.feesTotal=0;
@@ -2738,6 +3196,7 @@ function init(){
   stockPage("mega","초대형주","세계 시장 영향력이 큰 종목입니다. 달러(USD)로 거래됩니다.");
   stockPage("special","특별 주식","변동성이 높고 성장이 기대되는 테마 종목입니다. 달러(USD)로 거래됩니다.");
   stockPage("watch","관심종목","카드의 ★로 담은 종목을 한곳에서 봅니다. 검색과 정렬도 사용할 수 있습니다.");
+  ipoPage(); shortPage(); guidePage();
   // 저장 데이터를 먼저 불러온 뒤 화면을 그려야 잠금 상태·보유 현황·등급이 올바르게 표시됩니다.
   loadGame();
   state.lastGrade=currentGrade();
@@ -2832,6 +3291,8 @@ function applySaveData(data) {
   if(!data || typeof data !== "object") throw new Error("잘못된 저장 데이터");
   if(data.state) Object.assign(state, data.state);
   if(data.fx) Object.assign(fx, data.fx);
+  // 공모주로 상장된 종목을 먼저 복원해야 저장된 가격·보유량을 적용할 수 있습니다.
+  if(Array.isArray(state.listedIds)) state.listedIds.forEach(id => { const d=IPO_POOL.find(x=>x.id===id); if(d) ensureListedStock(d,d.price); });
   if(data.stocks) {
     data.stocks.forEach(ls => {
       let s = stocks.find(x => x.id === ls.id);
@@ -2863,6 +3324,11 @@ function applySaveData(data) {
   }
   // 새 기능 필드 기본값 보정(구버전 세이브 대응)
   if(!Array.isArray(state.orders)) state.orders = [];
+  if(!Array.isArray(state.shorts)) state.shorts = [];
+  state.shorts=state.shorts.filter(p=>p&&typeof p==="object"&&stock(p.stockId)&&+p.qty>0).map(p=>({id:p.id||`sh${Math.random().toString(36).slice(2,8)}`,stockId:p.stockId,qty:Math.floor(+p.qty||0),entry:Math.max(0,+p.entry||0),margin:Math.max(0,+p.margin||0),at:Math.max(0,+p.at||0)}));
+  ensureBonds(); ensureIPO();
+  if(!Array.isArray(state.listedIds)) state.listedIds = [];
+  if(!Number.isFinite(+state.shortRealized)) state.shortRealized = 0;
   if(!state.goals || typeof state.goals !== "object") state.goals = {};
   ["loan","loanRate","realizedYTD","taxedProfit","taxPaid"].forEach(k => {
     if(!Number.isFinite(state[k])) state[k] = 0;
@@ -2876,7 +3342,7 @@ function applySaveData(data) {
   ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
   state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
   Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic") state.notify[k]=state.notify[k]!==false; });
-  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10};
+  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10,rebalance:false,rebStockPct:60,rebBand:5};
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
   state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
   state.auto.estatePct=Math.max(0,Math.min(100,+state.auto.estatePct||0));
@@ -2924,6 +3390,14 @@ function applySaveData(data) {
     c.payout=Math.max(0,Math.min(1,Number.isFinite(+c.payout)?+c.payout:.3));
     if(!c.acquired||typeof c.acquired!=="object"||Array.isArray(c.acquired)) c.acquired={};
     if(typeof c.name!=="string") c.name="나의 기업";
+    c.upkeep=Math.max(0,+c.upkeep||0);
+    c.risk=Math.max(0,+c.risk||0);
+    if(c.listed&&typeof c.listed==="object"){
+      c.listed.shares=Math.max(1,Math.floor(+c.listed.shares||COMPANY_SHARES));
+      c.listed.ipoPrice=Math.max(100,Math.round(+c.listed.ipoPrice||100));
+      c.listed.price=Math.max(100,Math.round(+c.listed.price||c.listed.ipoPrice));
+      c.listed.ownPct=Math.max(0,Math.min(100,Math.round(+c.listed.ownPct||0)));
+    } else c.listed=null;
   } else state.company=null;
   state.economy=Object.assign({},ECON_DEFAULT,(state.economy&&typeof state.economy==="object")?state.economy:{});
   ["baseRate","inflation","unemployment","gdpGrowth","cycleLeft","rateAdj"].forEach(k=>{ if(!Number.isFinite(+state.economy[k])) state.economy[k]=ECON_DEFAULT[k]; });
@@ -2963,6 +3437,11 @@ function clearGame(skipConfirm) {
   state.loan = 0;
   state.loanRate = 0;
   state.orders = [];
+  state.shorts = [];
+  state.bonds = {qty:0,avg:0};
+  state.ipo = {offer:null,nextAt:0,history:[]};
+  state.shortRealized = 0;
+  resetListedStocks();
   state.goals = {};
   state.realizedYTD = 0;
   state.taxedProfit = 0;
@@ -3029,6 +3508,9 @@ function renderPage(id){
   if(id==="loan")loanPage();
   if(id==="tax")taxPage();
   if(id==="orders")ordersPage();
+  if(id==="short")shortPage();
+  if(id==="ipo")ipoPage();
+  if(id==="guide")guidePage();
   if(id==="banking")refreshBankingState();
   if(["domestic","foreign","mega","special","watch"].includes(id)) applyStockView(id);
 }
@@ -3095,7 +3577,8 @@ function banking(){
   ${financeTabs("banking")}
   <div class="notice" id="gradeBanner">${gradeBannerHTML()}</div>
   <div class="notice">각 상품별 원금이 3,000만 원을 초과하면 초과분 이율이 50%로 감소하고, 이자 계산 기준 원금은 최대 3억 원입니다.</div>
-  <div class="products">${products.map(productCard).join("")}</div>`;
+  <div class="products">${products.map(productCard).join("")}</div>
+  ${bondPanelHtml()}`;
 }
 
 // 상품 카드의 부제(현재 등급 이율 또는 잠금 안내)
@@ -3402,27 +3885,173 @@ function autoPanelHtml(){
       <label>익절 (%)<input id="auto-tp" type="number" min="0" max="200" step="1" value="${a.takeProfit??20}"></label>
       <label>손절 (%)<input id="auto-sl" type="number" min="0" max="100" step="1" value="${a.stopLoss??10}"></label>
       <label class="check"><input id="auto-sell" type="checkbox" ${a.autoSell?"checked":""}> 자동 매매(익절/손절)</label>
+      <label class="check"><input id="auto-reb" type="checkbox" ${a.rebalance?"checked":""}> 자동 리밸런싱</label>
+      <label>목표 주식 비중 (%)<input id="auto-reb-pct" type="number" min="0" max="100" step="5" value="${a.rebStockPct??60}"></label>
+      <label>허용 범위 (%p)<input id="auto-reb-band" type="number" min="2" max="20" step="1" value="${a.rebBand??5}"></label>
       <label>&nbsp;<button class="buy" onclick="saveAutoSettings()">${a.enabled?"규칙 저장":"자동 투자 켜기"}</button></label>
       <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
       ${a.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 투자 끄기</button></label>':""}
     </div>
-    <p class="muted-sm">${a.enabled?`켜짐 · ${a.every||60}초마다 현금을 주식 ${a.stockPct}% / 금 ${a.goldPct||0}% / 부동산 ${a.estatePct||0}% / 예금으로 재투자합니다.${a.autoSell?` 익절 ${a.takeProfit}% 또는 손절 ${a.stopLoss}%에 닿으면 자동 매도합니다.`:""}`:"꺼짐 · 켜면 설정한 주기마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
+    <p class="muted-sm">${a.enabled?`켜짐 · ${a.every||60}초마다 현금을 주식 ${a.stockPct}% / 금 ${a.goldPct||0}% / 부동산 ${a.estatePct||0}% / 예금으로 재투자합니다.${a.autoSell?` 익절 ${a.takeProfit}% 또는 손절 ${a.stopLoss}%에 닿으면 자동 매도합니다.`:""}${a.rebalance?` 주식 비중이 목표 ${a.rebStockPct??60}%에서 ${a.rebBand??5}%p 이상 벗어나면 자동으로 리밸런싱합니다.`:""}`:"꺼짐 · 켜면 설정한 주기마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
 }
 
+function orderTypeText(o){
+  if(o.type==="dca") return `분할 매수 ${won(o.amount||0)} / ${o.every||60}초`;
+  if(o.type==="trailing") return `트레일링 ${o.qty}주 · 고점 대비 -${o.trail||5}%`;
+  if(o.type==="stop") return `${o.side==="buy"?"돌파 매수":"손절 매도"} ${o.qty}주 @ ${won(o.limit)}`;
+  return `지정가 ${o.side==="buy"?"매수":"매도"} ${o.qty}주 @ ${won(o.limit)}`;
+}
 function ordersPanelHtml(){
   const rows=state.orders.length?state.orders.map(o=>{
     const s=stock(o.stockId); if(!s) return "";
-    const foreign=isForeignStock(s);
-    return `<div class="holding-row compact"><b>${s.name}</b><span>${o.side==="buy"?"매수":"매도"} ${o.qty}주</span><span>지정가 ${foreign?usdStr(o.limit):won(o.limit)}</span><button class="ghost" onclick="cancelOrder('${o.id}')">취소</button></div>`;
-  }).join(""):`<div class="empty-state small"><b>예약 주문이 없습니다</b><p>지정가에 도달하면 자동으로 체결됩니다.</p></div>`;
+    return `<div class="holding-row compact"><b>${s.name}</b><span>${orderTypeText(o)}</span><button class="ghost" onclick="cancelOrder('${o.id}')">취소</button></div>`;
+  }).join(""):`<div class="empty-state small"><b>예약 주문이 없습니다</b><p>지정가·손절·트레일링·분할 매수를 등록하면 조건에 맞을 때 자동으로 체결됩니다.</p></div>`;
   return `<div class="panel"><div class="field">
       <label>종목<select id="order-stock">${stocks.map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></label>
+      <label>주문 종류<select id="order-type"><option value="limit">지정가</option><option value="stop">조건(손절/돌파)</option><option value="trailing">트레일링 스톱</option><option value="dca">분할 매수</option></select></label>
       <label>구분<select id="order-side"><option value="buy">매수</option><option value="sell">매도</option></select></label>
       <label>수량<input id="order-qty" type="number" min="1" step="1" value="1"></label>
-      <label>지정가 (원/달러)<input id="order-limit" type="number" min="1" step="1" placeholder="가격 입력"></label>
+      <label>가격·금액 (원/달러)<input id="order-limit" type="number" min="1" step="1" placeholder="가격 입력"></label>
+      <label>트레일링 하락폭 (%)<input id="order-trail" type="number" min="1" max="50" step="1" value="5"></label>
+      <label>분할 매수 주기 (초)<input id="order-every" type="number" min="15" max="600" step="15" value="60"></label>
     </div>
     <button class="buy" onclick="placeOrder()" style="margin-top:8px;width:100%">예약 주문 등록</button>
-    <div class="stack" style="margin-top:12px">${rows}</div></div>`;
+    <div class="stack" style="margin-top:12px">${rows}</div>
+    <div class="notice" style="margin-top:12px">지정가: 가격이 지정가에 닿으면 체결 · 조건: 손절은 아래로, 돌파 매수는 위로 닿을 때 · 트레일링: 보유 종목이 최고가에서 설정한 %만큼 빠지면 전량 매도 · 분할 매수: 설정한 금액을 주기마다 자동 매수합니다. 모든 주문은 거래 수수료·세금이 똑같이 적용됩니다.</div></div>`;
+}
+
+// ── 금리연동 채권 패널 ─────────────────────────
+function bondPanelHtml(){
+  const b=ensureBonds(), price=bondUnitPrice();
+  const rate=(state.economy&&+state.economy.baseRate)||.03;
+  const pnl=b.qty?(price-b.avg)*b.qty:0;
+  return `<section class="section"><div class="section-head"><h3>금리연동 채권</h3><span class="pill">기준금리 ${(rate*100).toFixed(2)}%</span></div>
+    <div class="panel">
+      <div class="kpis"><div class="kpi"><small>현재 가격</small><b>${won(price)}</b></div><div class="kpi"><small>보유</small><b>${b.qty}구좌</b></div><div class="kpi"><small>평가액</small><b>${won(b.qty*price)}</b></div><div class="kpi"><small>평가손익</small><b class="${pnl>=0?"up":"down"}">${won(pnl)}</b></div></div>
+      <p class="muted-sm" style="margin-top:8px">금리가 내려가면 채권 가격이 올라 차익이 생기고, 금리가 올라가면 가격이 내려갑니다. 액면가 ${won(BOND.face)} 기준으로 15초마다 연 3.6% 이자가 현금으로 들어옵니다. 매수·매도 수수료 0.2%.</p>
+      <div class="inline-form" style="margin-top:8px">
+        <label>수량 (구좌)<input id="bond-qty" type="number" min="1" step="1" value="1"></label>
+        <label>&nbsp;<button class="buy" onclick="buyBond(document.getElementById('bond-qty').value)">채권 매수</button></label>
+        <label>&nbsp;<button class="ghost" onclick="sellBond(document.getElementById('bond-qty').value)">채권 매도</button></label>
+      </div>
+    </div></section>`;
+}
+
+// ── 공매도 화면 ────────────────────────────────
+function shortPage(){
+  const pos=ensureShorts();
+  const rows=pos.length?pos.map(p=>{
+    const s=stock(p.stockId); if(!s) return "";
+    const foreign=isForeignStock(s);
+    const px=v=>foreign?usdStr(v):won(v);
+    const pnl=(p.entry-s.price)*p.qty*(foreign?fx.usd:1);
+    const danger=s.price>=p.entry*1.2;
+    return `<div class="holding-row compact"><b>${s.name}</b><span>${p.qty}주 · 진입 ${px(p.entry)}</span><span>현재 ${px(s.price)}</span><span class="${pnl>=0?"up":"down"}">${won(pnl)}</span><span class="${danger?"down":"muted-sm"}">${danger?"⚠ 마진콜 임박":"유지"}</span><button class="ghost" onclick="coverShort('${p.id}')">환매</button></div>`;
+  }).join(""):`<div class="empty-state small"><b>공매도 포지션이 없습니다</b><p>가격이 내려갈 것 같으면 주식을 빌려 먼저 팔고, 나중에 싸게 되사서 차익을 낼 수 있습니다.</p></div>`;
+  const realized=state.shortRealized||0;
+  $("short").innerHTML=`${pageHeader("FINANCE","공매도","주식을 빌려 먼저 팔고, 나중에 되사서 차익을 노립니다. 가격이 오르면 손실이 커집니다.")}
+  ${financeTabs("short")}
+  <div class="notice">공매도는 포지션 가치의 <b>30% 이상 현금</b>이 있어야 열 수 있고, 가격이 진입가보다 <b>30% 오르면 마진콜(강제 청산)</b>됩니다. 환매 수수료가 붙고, 현금이 부족하면 부족분이 대출로 전환될 수 있습니다.</div>
+  <div class="panel">
+    <div class="inline-form">
+      <label>종목<select id="short-stock">${stocks.filter(s=>!isIndexFund(s)).map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></label>
+      <label>수량<input id="short-qty" type="number" min="1" step="1" value="1"></label>
+      <label>&nbsp;<button class="sell" onclick="shortStock(document.getElementById('short-stock').value, document.getElementById('short-qty').value)">공매도 실행</button></label>
+      ${pos.length?'<label>&nbsp;<button class="ghost" onclick="coverShortAll()">전량 환매</button></label>':""}
+    </div>
+    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>열린 포지션</small><b>${pos.length}건</b></div><div class="kpi"><small>공매도 평가손익</small><b class="${shortValueKRW()>=0?"up":"down"}">${won(shortValueKRW())}</b></div><div class="kpi"><small>누적 실현손익</small><b class="${realized>=0?"up":"down"}">${won(realized)}</b></div></div>
+    <div class="stack" style="margin-top:10px">${rows}</div>
+  </div>`;
+}
+
+// ── 공모주 화면 ────────────────────────────────
+function ipoPage(){
+  const ipo=ensureIPO(), o=ipo.offer;
+  const remain=o?Math.max(0,o.closesAt-state.marketSeconds):0;
+  const demandShares=o&&o.price>0?((o.subscribed||0)+(o.mine||0))/o.price:0;
+  const ratio=o&&o.qty>0?demandShares/o.qty:0;
+  const offerHtml=o?`<div class="panel">
+      <div class="company-head"><div><span class="pill">청약 진행 중</span> <span class="pill">${o.ticker}</span><h2>${escHtml(o.name)}</h2><div class="muted-sm">${o.theme} · 공모 ${o.qty.toLocaleString("ko-KR")}주</div></div><div class="company-value"><small>공모가</small><b>${won(o.price)}</b></div></div>
+      <div class="kpis" style="margin-top:10px"><div class="kpi"><small>마감까지</small><b>${remain}초</b></div><div class="kpi"><small>청약 경쟁률</small><b>${(ratio*100).toFixed(0)}%</b></div><div class="kpi"><small>내 청약</small><b>${won(o.mine||0)}</b></div><div class="kpi"><small>예상 배정</small><b>${Math.max(0,Math.floor(((o.mine||0)/o.price)*Math.min(1,o.qty/Math.max(1,demandShares*1.5)))).toLocaleString("ko-KR")}주</b></div></div>
+      <div class="inline-form" style="margin-top:10px">
+        <label>청약 금액 (원)<input id="ipo-amount" type="number" min="10000" step="10000" placeholder="예: 1000000"></label>
+        <label>&nbsp;<button class="buy" onclick="subscribeIPO()">청약하기</button></label>
+        ${(o.mine||0)>0?'<label>&nbsp;<button class="ghost" onclick="cancelIPO()">청약 취소</button></label>':""}
+      </div>
+      <p class="muted-sm">청약이 몰리면 공모 수량만큼만 배정되고 나머지 금액은 자동 환불됩니다. 상장 첫날 가격은 공모가 대비 -10% ~ +25% 사이에서 결정됩니다.</p>
+    </div>`:`<div class="panel"><div class="empty-state small"><b>진행 중인 공모주가 없습니다</b><p>시장이 열려 있으면 5~10분 간격으로 새 공모주가 등장합니다.</p></div></div>`;
+  const hist=ipo.history.length?ipo.history.map(h=>`<div class="holding-row compact"><b>${escHtml(h.name)}</b><span>공모가 ${won(h.price)}</span><span>시초가 ${won(h.open)}</span><span class="${h.open>=h.price?"up":"down"}">${pct((h.open-h.price)/h.price)}</span><span>${h.alloc?`${h.alloc.toLocaleString("ko-KR")}주 배정`:"미참여"}</span></div>`).join(""):`<div class="muted-sm">아직 신규 상장 기록이 없습니다.</div>`;
+  $("ipo").innerHTML=`${pageHeader("MARKET","공모주 청약","신규 상장 종목을 공모가에 청약합니다. 상장 후에는 일반 종목처럼 사고팔 수 있습니다.")}
+  ${marketTabs("ipo")}
+  ${offerHtml}
+  <section class="section"><h3>최근 상장</h3><div class="panel stack">${hist}</div></section>`;
+}
+
+// ── 게임 가이드 ────────────────────────────────
+function guidePage(){
+  const section=(title,body)=>`<section class="section"><h3>${title}</h3><div class="panel">${body}</div></section>`;
+  const ul=items=>`<ul style="margin:6px 0 0 18px;line-height:1.75;font-size:13px;color:#344054">${items.map(i=>`<li>${i}</li>`).join("")}</ul>`;
+  $("guide").innerHTML=`${pageHeader("GUIDE","게임 방법","처음 시작해도 바로 이해할 수 있도록 모든 기능을 순서대로 설명합니다.")}
+    <div class="panel"><b>한 줄 요약</b><p class="muted-sm" style="margin-top:6px">${won(START_CASH)}으로 시작해 주식·예금·부동산·기업으로 순자산을 늘리고, 순자산 1억원을 넘기면 환생해서 영구 업그레이드를 얻는 게임입니다. 게임 시간은 5초에 1틱씩 흐르고, 속도는 1~5배까지 조절할 수 있습니다.</p></div>
+    ${section("1. 화면 구성", ul([
+      "왼쪽(모바일은 위쪽) 메뉴: 대시보드 · 내 자산 · 주식 시장 · 금융상품 · 부동산 · 기업 경영 · 경제 현황 · 환생 · 도움말 · 설정",
+      "상단: 현금·달러·주식 평가액·금융상품 평가액·순자산과 시장 개장/마감 상태",
+      "하단 바(모바일): 순자산, 노동, 알림, 속도, 일시정지, 주요 메뉴 이동"]))}
+    ${section("2. 주식 시장", ul([
+      "국내·해외·초대형·특별·공모주·관심종목 탭으로 나뉩니다. 카드의 ★를 누르면 관심종목에 담깁니다.",
+      "매수·매도 수수료 0.15%, 매도 시 거래세 0.2%가 붙습니다. 등급과 환생 업그레이드로 수수료를 줄일 수 있습니다.",
+      "시장은 게임 시간 180초 개장 · 60초 휴장을 반복합니다. 휴장 중에는 거래가 제한됩니다.",
+      "가격은 매 틱(5초) 변동하며, 호황·침체·환율 같은 대형 이벤트가 발생합니다. 상·하한은 없고, 폭락 시에도 시작가의 8%까지만 내려갑니다.",
+      "지수 ETF 3종: 시장지수 ETF(지수 1배), 2X 레버리지(지수 2배), 인버스(지수 반대로). 하락장에서는 인버스가 오릅니다.",
+      "배당은 일정 주기로 지급되고, 실적 발표일에 주가가 크게 움직입니다."]))}
+    ${section("3. 공매도", ul([
+      "가격이 내려갈 것 같을 때 주식을 빌려 먼저 팔고, 나중에 되사서 차익을 냅니다.",
+      "포지션 가치의 30% 이상 현금이 필요하고, 가격이 진입가보다 30% 오르면 마진콜로 강제 청산됩니다.",
+      "지수 ETF는 공매도할 수 없고, 환매 시 수수료가 붙습니다."]))}
+    ${section("4. 공모주(IPO)", ul([
+      "5~10분 간격으로 새 종목이 공모를 시작합니다. 120초 동안 청약할 수 있습니다.",
+      "청약이 몰리면 공모 수량만큼만 배정되고 나머지는 자동 환불됩니다.",
+      "상장 첫날 가격은 공모가 대비 -10% ~ +25%에서 결정되고, 이후 일반 종목처럼 거래됩니다."]))}
+    ${section("5. 예약 주문 4종", ul([
+      "지정가: 가격이 지정가에 닿으면 자동 체결",
+      "조건(손절/돌파): 손절은 가격이 아래로, 돌파 매수는 위로 닿을 때 체결",
+      "트레일링 스톱: 보유 종목이 최고가에서 설정한 %만큼 빠지면 전량 매도",
+      "분할 매수(DCA): 설정한 금액을 주기마다 자동 매수"]))}
+    ${section("6. 금융상품", ul([
+      "예금·적금·파킹·채권·ETF·연금·프라이빗 뱅킹은 등급이 오르면 열립니다. 15초마다 이자가 붙습니다.",
+      "한 상품 원금이 3,000만원을 넘으면 초과분 이율이 절반으로 줄고, 이자 계산 원금은 최대 3억원입니다.",
+      "금리연동 채권: 기준금리가 내려가면 가격이 올라 차익이 생기고, 올라가면 가격이 내려갑니다. 액면가 기준 연 3.6% 이자가 현금으로 들어옵니다."]))}
+    ${section("7. 부동산·실물자산", ul([
+      "부동산은 시세 차익과 임대 수익(60초마다)을 주고, 유지비가 나갑니다.",
+      "금·은은 인플레이션 방어 수단으로, 부동산보다 변동성이 큽니다."]))}
+    ${section("8. 기업 경영", ul([
+      "기업을 설립하면 30초마다 배당을 받습니다. 사업 확장으로 레벨을 올리고, 인수합병으로 가치를 키웁니다.",
+      "기업명과 배당 성향은 언제든 바꿀 수 있습니다.",
+      "Lv.2·가치 1억원 이상이면 상장(IPO)할 수 있습니다. 30%를 공모해 현금을 조달하고 주가가 표시되며, 지분을 5% 단위로 매각할 수 있습니다. 대신 판 지분만큼 배당·평가액이 줄어듭니다.",
+      "인수한 회사는 가치·매출·배당을 늘리지만 30초마다 유지비가 나가고 기업 가치 변동성이 커집니다(위협).",
+      "기업 삭제는 보상이 전혀 없습니다. 삭제하면 기업·매출·배당·인수 기록이 모두 사라집니다."]))}
+    ${section("9. 자동화", ul([
+      "자동 투자: 설정한 주기마다 남는 현금을 주식·금·부동산·예금에 분배합니다.",
+      "자동 리밸런싱: 주식 비중이 목표에서 허용 범위(%p) 이상 벗어나면 자동으로 사고팔아 맞춥니다.",
+      "자동 매매: 보유 종목이 익절/손절선에 닿으면 자동 매도합니다."]))}
+    ${section("10. 노동·생활비", ul([
+      "현금이 바닥나면 노동으로 최소 생활비를 벌 수 있습니다. 타이밍 작업 3회로 기본 생활비가 마련됩니다.",
+      "많이 일할수록 더 나은 일자리(퀵배달·물류·과외·외주)가 열리고 일당이 올라갑니다."]))}
+    ${section("11. 경제·세금·대출", ul([
+      "경제 현황에서 경기 국면·기준금리·물가·실업률·성장률·시장 지수를 확인합니다. 호황엔 주가 상승, 불황엔 하락 압력이 커집니다.",
+      "매도 이익에는 양도세가 붙고, 연간 기본공제가 있습니다. 세금 탭에서 납부 내역을 봅니다.",
+      "대출은 등급에 따라 한도·금리가 다르고, 이자는 15초마다 붙습니다."]))}
+    ${section("12. 환생", ul([
+      "순자산 1억원을 넘기면 환생할 수 있습니다. 진행(현금·주식·기업·부동산)은 초기화되지만 포인트·업그레이드·설정·업적은 유지됩니다.",
+      "포인트로 시작 자금, 주식 이익, 예금 이자, 배당, 노동, 기업, 부동산, 수수료, 프라이빗 뱅킹, 오프라인 정산을 영구히 강화합니다."]))}
+    ${section("13. 속도·저장", ul([
+      "1~5배속은 게임 시간 자체를 빠르게 합니다. 5배속은 5초에 5틱이 흐릅니다.",
+      "10초마다 자동 저장되고, 설정에서 즉시 저장하거나 세이브 파일을 내보낼 수 있습니다."]))}
+    ${section("자주 묻는 질문", ul([
+      "<b>돈이 안 늘어요</b> — 시장이 휴장 중이거나, 수수료·세금이 이익보다 큰 경우입니다. 상단의 개장 상태를 확인하세요.",
+      "<b>주식이 계속 떨어져요</b> — 이벤트·경기 국면에 따라 하락장이 있습니다. 인버스 ETF·공매도·현금 비중으로 대응할 수 있습니다.",
+      "<b>기업을 지우면 돈을 돌려받나요?</b> — 아닙니다. 삭제는 보상 없는 완전 삭제입니다.",
+      "<b>환생하면 뭐가 남나요?</b> — 포인트·업그레이드·업적·도감·설정·환생 기록이 남습니다."]))}`;
 }
 
 function loanPanelHtml(){
@@ -3749,6 +4378,7 @@ function tickSeconds() {
   }
   // 자동 매매(익절/손절) → 매도가 없을 때만 자동 적립을 실행합니다.
   if(state.auto && state.auto.enabled && state.marketSeconds % Math.max(15,state.auto.every||60) === 0){
+    autoRebalance();
     if(!autoSellRules()) autoInvest();
   }
 }
@@ -3768,9 +4398,10 @@ function tickMarket(){
   const idx=marketIndex();
   stocks.forEach(s=>{
     let old=s.price;
-    // 시장지수 ETF는 랜덤워크 대신 지수(1,000 기준)를 10배로 추종합니다.
-    if(s.id==="market_etf"){
-      s.price=Math.max(100,Math.round(idx*10/100)*100);
+    // 지수 ETF는 랜덤워크 대신 시장 지수를 추종합니다(2X는 제곱, 인버스는 역수).
+    if(isIndexFund(s)){
+      const mult=Math.pow(idx/1000,s.indexPower);
+      s.price=Math.max(100,Math.min(1000000,Math.round(s.start*mult/100)*100));
       s.lastMove=(s.price-old)/old;
       s.hist.push(s.price); if(s.hist.length>60) s.hist.shift();
       return;
@@ -3782,7 +4413,7 @@ function tickMarket(){
     let surge=Math.random()<.04 ? Math.random()*.04+.01 : 0;
     
     // 장기 성장 유동성 바이어스(시간 압축 대비 완만하게)
-    let longBias=.0004+Math.random()*.0002+economicMarketBias();
+    let longBias=.0006+Math.random()*.0002+economicMarketBias();
     let recovery=s.price<s.start ? .001 : 0;
     
     // [시장 대형 이벤트 시스템 반영]
@@ -3831,6 +4462,8 @@ function tickMarket(){
     s.hist.push(s.price);
     if(s.hist.length > 60) s.hist.shift();
   });
+  checkShortMargins();
+  tickIPO();
   processOrders();
   update();
 }
@@ -3933,6 +4566,10 @@ function interest(){
       notify("maturity","만기 보너스",`${p.name} +${won(bonus)}`);
     }
   });
+
+  // 금리연동 채권 이자(15초): 액면가 기준 연 3.6%
+  const bond=ensureBonds();
+  if(bond.qty>0) state.cash += bond.qty*BOND.face*BOND.coupon*0.015;
 
   // 대출 이자(15초 단위): 연이율 × 0.015, 현금이 부족하면 대출 잔액에 가산
   if(state.loan > 0) {
