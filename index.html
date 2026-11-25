@@ -568,7 +568,7 @@ const REBIRTH_UPGRADES=[
   {id:"offline",name:"야간 정산",       desc:"오프라인 정산 +2시간",             max:3,  base:4, step:2}
 ];
 // master: 모든 알림 끄기, toast: 화면 토스트, center: 알림 센터 기록, news: 시황 속보 배너
-const NOTIFY_DEFAULT={master:false,toast:true,center:true,news:true,order:true,dividend:true,stock:true,maturity:true,loan:true,earnings:true,economy:true,goal:true,mission:true,achievement:true,grade:true,rebirth:true,tax:true,system:true,sound:false,haptic:false};
+const NOTIFY_DEFAULT={master:false,toast:true,center:true,news:true,newsGap:15,order:true,dividend:true,stock:true,maturity:true,loan:true,earnings:true,economy:true,goal:true,mission:true,achievement:true,grade:true,rebirth:true,tax:true,system:true,sound:false,haptic:false};
 // 종류별 알림 목록(설정 화면과 알림 센터가 함께 사용)
 const NOTIFY_KINDS=[["order","지정가 체결"],["dividend","배당금"],["stock","주가 급등·급락"],["maturity","예금 만기"],["loan","대출 이자"],["earnings","실적 발표"],["economy","경제 이벤트"],["news","시장 뉴스"],["goal","목표 달성"],["mission","미션 완료"],["achievement","업적 달성"],["grade","등급 상승"],["rebirth","환생 가능"],["tax","세금"],["system","시스템"]];
 const SETTINGS_DEFAULT={theme:"light",confirmTrades:true,animations:true,effects:true,numberFormat:"full",autoSave:true};
@@ -1022,12 +1022,15 @@ function showToast(title,text){
   setTimeout(()=>{ try{ wrap.removeChild(el); }catch(e){} },4200);
 }
 function updateBell(){
+  const n=state.notify||{};
+  // 알림 센터 기록을 끈 상태(또는 모든 알림 끄기)면 종 아이콘의 배지를 숨깁니다.
+  const centerOn=n.center!==false && n.master!==true;
   const unread=(state.alerts||[]).filter(a=>!a.read).length;
   const label=unread>99?"99+":String(unread);
   ["bellBadge","bbBadge"].forEach(id=>{
     const b=$(id); if(!b) return;
     b.textContent=label;
-    b.style.display=unread?"inline-flex":"none";
+    b.style.display=(centerOn && unread)?"inline-flex":"none";
   });
 }
 function openModal(title,html){
@@ -3090,6 +3093,7 @@ function settingsPage(){
         ${notifySoundToggle("sound","효과음")}
         ${notifySoundToggle("haptic","진동")}
       </div>
+      ${settingRow("시황 속보 최소 간격","배너가 이 간격보다 자주 뜨지 않습니다. 뉴스 탭 기록은 항상 남습니다.",`<select onchange="setNotifyGap(this.value)">${[0,5,10,15,30,60].map(sec=>`<option value="${sec}" ${Math.round(+state.notify.newsGap||0)===sec?"selected":""}>${sec?sec+"초":"제한 없음"}</option>`).join("")}</select>`)}
       <h4 style="margin:14px 0 8px;font-size:13px">종류별 알림</h4>
       <div class="notify-grid">${notifies.map(([k,l])=>notifyToggle(k,l)).join("")}</div>
       <div class="button-row" style="margin-top:12px"><button class="ghost" onclick="setAllNotify(false)">종류 모두 끄기</button><button class="ghost" onclick="setAllNotify(true)">종류 모두 켜기</button></div>
@@ -3421,8 +3425,9 @@ function applySaveData(data) {
   if(!state.achievements || typeof state.achievements!=="object") state.achievements={};
   ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
   state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
-  Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic"&&k!=="master") state.notify[k]=state.notify[k]!==false; });
+  Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic"&&k!=="master"&&k!=="newsGap") state.notify[k]=state.notify[k]!==false; });
   state.notify.master=state.notify.master===true;
+  state.notify.newsGap=Math.max(0,Math.min(600,Math.round(+state.notify.newsGap||0)));
   const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10,rebalance:false,rebStockPct:60,rebBand:5};
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
   state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
@@ -4132,7 +4137,9 @@ function guidePage(){
       "설정 → 알림에서 <b>모든 알림 끄기</b> 하나로 토스트·알림 센터·시황 속보 배너를 한 번에 멈출 수 있습니다.",
       "표시 방식을 따로 고를 수도 있습니다: 화면 토스트, 알림 센터 기록, 시황 속보 배너(둘 다 끄면 알림이 남지 않습니다).",
       "종류별 알림(지정가 체결·배당·급등급락·경제 이벤트·목표·업적 등)은 각각 끄거나 '종류 모두 끄기/켜기'로 일괄 변경할 수 있습니다.",
-      "시황 속보 배너를 꺼도 뉴스 탭의 기록은 계속 쌓입니다."]))}
+      "시황 속보 배너를 꺼도 뉴스 탭의 기록은 계속 쌓입니다.",
+      "배너가 너무 자주 뜨면 설정에서 '최소 표시 간격'(제한 없음~60초)을 고를 수 있습니다.",
+      "알림 센터 기록을 끄면 종 아이콘의 읽지 않은 개수 배지도 숨겨집니다."]))}
     ${section("자주 묻는 질문", ul([
       "<b>돈이 안 늘어요</b> — 시장이 휴장 중이거나, 수수료·세금이 이익보다 큰 경우입니다. 상단의 개장 상태를 확인하세요.",
       "<b>주식이 계속 떨어져요</b> — 이벤트·경기 국면에 따라 하락장이 있습니다. 인버스 ETF·공매도·현금 비중으로 대응할 수 있습니다.",
@@ -4608,6 +4615,7 @@ function marketEventsAndNews() {
   publishBreakingNews("시황 속보", text);
 }
 
+let breakingShownAt=0; // 시황 속보 배너를 마지막으로 띄운 시각(실시간)
 function publishBreakingNews(title, text){
   let fullText = `[${title}] ${text}`;
   state.news.unshift(fullText);
@@ -4615,14 +4623,25 @@ function publishBreakingNews(title, text){
 
   // 배너만 알림 설정을 따릅니다. 꺼도 뉴스 탭 기록은 그대로 남습니다.
   const n=state.notify||{};
-  const bannerOn=(n.master!==true) && n.news!==false;
+  const gap=Math.max(0,Math.min(600,Math.round(+n.newsGap||0)));
+  const now=Date.now();
+  const tooSoon=gap>0 && breakingShownAt>0 && now-breakingShownAt < gap*1000;
+  const bannerOn=(n.master!==true) && n.news!==false && !tooSoon;
   const box=bannerOn?$("breaking"):null;
   if(box){
+    breakingShownAt=now;
     box.innerHTML=`<b>${title}</b> ${text}`;
     box.classList.add("show");
     setTimeout(()=>box.classList.remove("show"),5500);
   }
   if(activePage()==="news") news();
+}
+// 시황 속보 배너의 최소 표시 간격(초). 0이면 제한 없이 매번 표시합니다.
+function setNotifyGap(v){
+  if(!state.notify || typeof state.notify!=="object") state.notify=Object.assign({},NOTIFY_DEFAULT);
+  state.notify.newsGap=Math.max(0,Math.min(600,Math.round(+v||0)));
+  saveGame();
+  try{ if(activePage()==="settings") settingsPage(); }catch(e){}
 }
 
 function interest(){

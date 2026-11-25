@@ -127,6 +127,48 @@ function createGame(seed = 5) {
   check('알림 설정 저장·복원', g.run('state.notify.master') === true && g.run('state.notify.news') === false);
 }
 
+// ── 종 아이콘 배지 ──────────────────────────────
+{
+  const g = createGame();
+  g.run("state.alerts=[{at:Date.now(),kind:'system',title:'배지',text:'',read:false}]; state.notify.master=false; state.notify.center=true; updateBell(); 1");
+  check('알림이 있으면 배지 표시', g.el('bellBadge').style.display === 'inline-flex' && g.el('bbBadge').style.display === 'inline-flex');
+
+  g.run("setNotify('center',false); 1");
+  check('알림 센터 기록을 끄면 배지 숨김', g.el('bellBadge').style.display === 'none' && g.el('bbBadge').style.display === 'none');
+
+  g.run("setNotify('center',true); updateBell(); 1");
+  check('다시 켜면 배지 복귀', g.el('bellBadge').style.display === 'inline-flex', g.el('bellBadge').style.display);
+
+  g.run("setNotify('master',true); 1");
+  check('모든 알림 끌 때도 배지 숨김', g.el('bellBadge').style.display === 'none');
+  g.run("setNotify('master',false); 1");
+}
+
+// ── 시황 속보 최소 표시 간격 ────────────────────
+{
+  const g = createGame();
+  const shown = () => g.el('breaking').classList.contains('show');
+  check('기본 최소 간격은 15초', g.run('state.notify.newsGap') === 15, g.run('state.notify.newsGap'));
+
+  g.run("setNotifyGap(30); publishBreakingNews('시황 속보','첫 번째'); 1");
+  check('첫 속보는 바로 표시', shown() === true);
+
+  g.run("document.getElementById('breaking').classList.remove('show'); publishBreakingNews('시황 속보','두 번째'); 1");
+  check('간격 안의 두 번째 속보는 숨김', shown() === false);
+  check('숨겨도 뉴스 기록은 저장', g.run("state.news[0].includes('두 번째')") === true);
+
+  g.run("breakingShownAt=0; publishBreakingNews('시황 속보','세 번째'); 1");
+  check('간격이 지나면 다시 표시', shown() === true);
+
+  g.run("setNotifyGap(0); 1");
+  g.run("document.getElementById('breaking').classList.remove('show'); publishBreakingNews('시황 속보','네 번째'); 1");
+  check('제한 없음은 매번 표시', shown() === true);
+
+  g.run("setNotifyGap(20); saveGame(); 1");
+  g.run("state.notify.newsGap=15; loadGame(); 1");
+  check('최소 간격 저장·복원', g.run('state.notify.newsGap') === 20, g.run('state.notify.newsGap'));
+}
+
 // ── 화면 렌더 ────────────────────────────────────
 {
   const g = createGame();
@@ -135,6 +177,7 @@ function createGame(seed = 5) {
   check('설정에 표시 방식 3종', settingsHtml.includes('화면 토스트') && settingsHtml.includes('알림 센터 기록') && settingsHtml.includes('시황 속보 배너'));
   check('설정에 종류별 알림', settingsHtml.includes('종류별 알림') && settingsHtml.includes('주가 급등·급락') && settingsHtml.includes('시장 뉴스'));
   check('설정에 일괄 켜기/끄기 버튼', settingsHtml.includes('종류 모두 끄기') && settingsHtml.includes('종류 모두 켜기'));
+  check('설정에 시황 속보 최소 간격 선택', settingsHtml.includes('시황 속보 최소 간격') && settingsHtml.includes('제한 없음') && settingsHtml.includes('<option value="30"'));
 
   g.run("state.alerts=[]; notify('tax','세금','1원'); openNotifModal(); 1");
   const modal = g.run("document.getElementById('modalRoot').innerHTML");
