@@ -721,7 +721,9 @@ const RESET = total => `
   const hourA = runSimulation({ seconds: 3600, seed });
   const hourB = runSimulation({ seconds: 3600, seed });
   check('고정 시드 시뮬레이션 재현', hourA.end.total === hourB.end.total && hourA.max === hourB.max, Math.round(hourA.end.total));
-  check('1배속 1시간 자산 폭주 없음', hourA.end.total > 600000000 && hourA.end.total < 1500000000 && hourA.max < 1500000000, Math.round(hourA.end.total) + '/' + Math.round(hourA.max));
+  // 시장 기대 수익을 소폭 올린 뒤(주가 상·하한 제거) 1시간 최대치가 1.5B를 살짝 넘습니다.
+  // 폭주(1시간에 2배 이상)를 잡는 것이 목적이므로 상한만 1.75B로 맞췄습니다.
+  check('1배속 1시간 자산 폭주 없음', hourA.end.total > 600000000 && hourA.end.total < 1750000000 && hourA.max < 1750000000, Math.round(hourA.end.total) + '/' + Math.round(hourA.max));
 
   const stress = runSimulation({ seconds: 36000, seed });
   check('10배속 1시간 자산 폭주 없음', stress.end.total > 0 && stress.end.total < 2200000000 && stress.max < 2200000000, Math.round(stress.end.total) + '/' + Math.round(stress.max));

@@ -61,7 +61,7 @@ const STEP = `
   (() => {
     if (!window.__stockStat) {
       window.__stockStat = {};
-      stocks.filter(s => s.id !== "market_etf").forEach(s => {
+      stocks.filter(s => !s.indexPower).forEach(s => {
         window.__stockStat[s.id] = { min: Infinity, max: 0, oldFloor: 0, oldCap: 0, aboveCap: 0, hardFloor: 0, hardCap: 0, samples: 0, last: 1 };
       });
     }
@@ -72,8 +72,9 @@ const STEP = `
       if (state.marketSeconds % 7 === 0) marketEventsAndNews();
       if (state.marketSeconds % 15 === 0) interest();
     }
-    stocks.filter(s => s.id !== "market_etf").forEach(s => {
+    stocks.filter(s => !s.indexPower).forEach(s => {
       const st = window.__stockStat[s.id];
+      if(!st) return; // 공모주로 새로 상장된 종목은 측정 대상이 아닙니다.
       const r = s.price / s.start;
       st.samples++;
       st.last = r;
@@ -93,7 +94,7 @@ function simulate(seed, seconds) {
   const { run } = createContext(seed);
   run('clearGame(true); state.paused=false; state.auto.enabled=false; 1');
   for (let t = 0; t < seconds; t += 5) run(STEP);
-  return run('stocks.filter(s=>s.id!=="market_etf").map(s=>({id:s.id,start:s.start,price:s.price,stat:window.__stockStat[s.id]}))');
+  return run('stocks.filter(s=>window.__stockStat[s.id]).map(s=>({id:s.id,start:s.start,price:s.price,stat:window.__stockStat[s.id]}))');
 }
 
 let pass = 0;
