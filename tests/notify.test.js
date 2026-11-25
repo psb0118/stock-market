@@ -169,6 +169,35 @@ function createGame(seed = 5) {
   check('최소 간격 저장·복원', g.run('state.notify.newsGap') === 20, g.run('state.notify.newsGap'));
 }
 
+// ── 토스트 표시 시간·최대 개수 ───────────────────
+{
+  const g = createGame();
+  check('기본 토스트 시간·개수(4.2초·3개)', g.run('state.notify.toastMs') === 4200 && g.run('state.notify.toastMax') === 3);
+
+  g.run("window.__toastMs=null; window.__origSetTimeout=setTimeout; setTimeout=(fn,ms)=>{window.__toastMs=ms; return 0;}; 1");
+  g.run("setNotifyNum('toastMs', 6000); showToast('제목','본문'); 1");
+  check('설정한 시간(6초)으로 사라짐', g.run('window.__toastMs') === 6000, g.run('window.__toastMs'));
+
+  const wrap = g.el('toastWrap');
+  g.run("state.notify.toastMs=4200; setNotifyNum('toastMax', 2); 1");
+  g.run("for(let i=0;i<5;i++) showToast('t'+i,'x'); 1");
+  check('최대 개수를 넘으면 오래된 토스트 제거', wrap.children.length === 2, wrap.children.length);
+
+  g.run("setNotifyNum('toastMax', 5); 1");
+  g.run("for(let i=0;i<7;i++) showToast('m'+i,'x'); 1");
+  check('최대 5개까지 동시 표시', wrap.children.length === 5, wrap.children.length);
+
+  g.run("setNotifyNum('toastMs', 1000); setNotifyNum('toastMax', 99); 1");
+  check('하한·상한 밖은 보정(2초·5개)', g.run('state.notify.toastMs') === 2000 && g.run('state.notify.toastMax') === 5);
+  g.run("setNotifyNum('toastMs', 99999); setNotifyNum('toastMax', 0); 1");
+  check('상한·하한 밖은 보정(8초·1개)', g.run('state.notify.toastMs') === 8000 && g.run('state.notify.toastMax') === 1);
+
+  g.run("setNotifyNum('toastMs', 5000); setNotifyNum('toastMax', 4); saveGame(); 1");
+  g.run("state.notify.toastMs=4200; state.notify.toastMax=3; loadGame(); 1");
+  check('토스트 설정 저장·복원', g.run('state.notify.toastMs') === 5000 && g.run('state.notify.toastMax') === 4);
+  g.run("setTimeout=window.__origSetTimeout; 1");
+}
+
 // ── 화면 렌더 ────────────────────────────────────
 {
   const g = createGame();
@@ -178,6 +207,7 @@ function createGame(seed = 5) {
   check('설정에 종류별 알림', settingsHtml.includes('종류별 알림') && settingsHtml.includes('주가 급등·급락') && settingsHtml.includes('시장 뉴스'));
   check('설정에 일괄 켜기/끄기 버튼', settingsHtml.includes('종류 모두 끄기') && settingsHtml.includes('종류 모두 켜기'));
   check('설정에 시황 속보 최소 간격 선택', settingsHtml.includes('시황 속보 최소 간격') && settingsHtml.includes('제한 없음') && settingsHtml.includes('<option value="30"'));
+  check('설정에 토스트 시간·개수 선택', settingsHtml.includes('토스트 표시 시간') && settingsHtml.includes('토스트 최대 개수') && settingsHtml.includes('<option value="8000"') && settingsHtml.includes('<option value="5"'));
 
   g.run("state.alerts=[]; notify('tax','세금','1원'); openNotifModal(); 1");
   const modal = g.run("document.getElementById('modalRoot').innerHTML");
