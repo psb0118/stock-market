@@ -567,7 +567,10 @@ const REBIRTH_UPGRADES=[
   {id:"private",name:"프라이빗 라운지", desc:"등급과 무관하게 프라이빗 뱅킹 해금",max:1,  base:8, step:0},
   {id:"offline",name:"야간 정산",       desc:"오프라인 정산 +2시간",             max:3,  base:4, step:2}
 ];
-const NOTIFY_DEFAULT={order:true,dividend:true,stock:true,maturity:true,loan:true,earnings:true,economy:true,goal:true,mission:true,achievement:true,grade:true,rebirth:true,tax:true,system:true,sound:false,haptic:false};
+// master: 모든 알림 끄기, toast: 화면 토스트, center: 알림 센터 기록, news: 시황 속보 배너
+const NOTIFY_DEFAULT={master:false,toast:true,center:true,news:true,order:true,dividend:true,stock:true,maturity:true,loan:true,earnings:true,economy:true,goal:true,mission:true,achievement:true,grade:true,rebirth:true,tax:true,system:true,sound:false,haptic:false};
+// 종류별 알림 목록(설정 화면과 알림 센터가 함께 사용)
+const NOTIFY_KINDS=[["order","지정가 체결"],["dividend","배당금"],["stock","주가 급등·급락"],["maturity","예금 만기"],["loan","대출 이자"],["earnings","실적 발표"],["economy","경제 이벤트"],["news","시장 뉴스"],["goal","목표 달성"],["mission","미션 완료"],["achievement","업적 달성"],["grade","등급 상승"],["rebirth","환생 가능"],["tax","세금"],["system","시스템"]];
 const SETTINGS_DEFAULT={theme:"light",confirmTrades:true,animations:true,effects:true,numberFormat:"full",autoSave:true};
 // 달성 목표(총자산 기준)와 일시금 보상
 const MILESTONES = [
@@ -990,19 +993,23 @@ function beep(kind){
 const notifySeen={};
 function notify(kind,title,text){
   const n=state.notify||{};
-  if(n[kind]===false) return;
+  if(n.master===true) return;      // 모든 알림 끄기
+  if(n[kind]===false) return;      // 종류별 끄기
+  if(n.toast===false && n.center===false) return; // 둘 다 끄면 기록도 토스트도 남기지 않습니다.
   // 같은 이벤트가 짧은 간격으로 반복되면 토스트·알림을 한 번만 남깁니다.
   const dedupeKey=kind+"|"+title+(kind==="stock"?"|"+(text||"").slice(0,24):"");
   const now=Date.now();
   if(notifySeen[dedupeKey] && now-notifySeen[dedupeKey]<15000) return;
   notifySeen[dedupeKey]=now;
-  if(!Array.isArray(state.alerts)) state.alerts=[];
-  state.alerts.unshift({at:Date.now(),kind,title,text,read:false});
-  if(state.alerts.length>40) state.alerts.pop();
-  showToast(title,text);
+  if(n.center!==false){
+    if(!Array.isArray(state.alerts)) state.alerts=[];
+    state.alerts.unshift({at:Date.now(),kind,title,text,read:false});
+    if(state.alerts.length>40) state.alerts.pop();
+    updateBell();
+  }
+  if(n.toast!==false) showToast(title,text);
   if(n.sound) beep(kind);
   if(n.haptic && typeof navigator!=="undefined" && navigator.vibrate) navigator.vibrate(25);
-  updateBell();
 }
 function showToast(title,text){
   const wrap=$("toastWrap"); if(!wrap || typeof wrap.appendChild!=="function") return;
@@ -1040,6 +1047,15 @@ function setNotify(k,v){
   if(!state.notify || typeof state.notify!=="object") state.notify=Object.assign({},NOTIFY_DEFAULT);
   state.notify[k]=!!v;
   saveGame(); updateBell();
+  // 모든 알림 끄기는 다른 스위치 상태까지 보여야 하므로 설정 화면을 다시 그립니다.
+  if(k==="master"){ try{ if(activePage()==="settings") settingsPage(); }catch(e){} }
+}
+// 종류별 알림을 한 번에 켜고 끕니다.
+function setAllNotify(on){
+  if(!state.notify || typeof state.notify!=="object") state.notify=Object.assign({},NOTIFY_DEFAULT);
+  NOTIFY_KINDS.forEach(([k])=>{ state.notify[k]=!!on; });
+  saveGame(); updateBell();
+  try{ if(activePage()==="settings") settingsPage(); }catch(e){}
 }
 function openNotifModal(){
   (state.alerts||[]).forEach(a=>{ a.read=true; });
@@ -1047,8 +1063,10 @@ function openNotifModal(){
   const n=state.notify||{};
   const sw=(k,label)=>`<label class="notify-toggle"><input type="checkbox" ${n[k]!==false?"checked":""} onchange="setNotify('${k}',this.checked)"><span>${label}</span></label>`;
   const rows=(state.alerts||[]).slice(0,30).map(a=>`<div class="journal" style="margin-bottom:8px"><div><b>${a.title}</b><span>${new Date(a.at).toLocaleTimeString("ko-KR")}</span></div><small class="muted-sm">${a.text||""}</small></div>`).join("")||`<p class="muted-sm">아직 알림이 없습니다.</p>`;
+  const masterOff=n.master===true;
   openModal("알림 센터",`
-    <div class="notify-grid" style="margin-bottom:12px">${[["order","지정가 체결"],["dividend","배당"],["stock","급등·급락"],["maturity","만기"],["loan","대출"],["earnings","실적"],["economy","경제"],["goal","목표"],["mission","미션"],["achievement","업적"],["grade","등급"],["rebirth","환생"],["tax","세금"],["system","시스템"]].map(([k,l])=>sw(k,l)).join("")}</div>
+    ${masterOff?`<p class="muted-sm" style="margin-bottom:8px;color:#b42318"><b>모든 알림이 꺼져 있습니다.</b> 아래에서 다시 켜거나 설정에서 한 번에 켤 수 있습니다.</p>`:""}
+    <div class="notify-grid" style="margin-bottom:12px">${NOTIFY_KINDS.map(([k,l])=>sw(k,l)).join("")}</div>
     <p class="muted-sm" style="margin-bottom:8px">최근 30건 · 설정은 저장 파일에 함께 보관됩니다.</p>
     ${rows}<button class="ghost" style="width:100%;margin-top:8px" onclick="closeModal();openSettings()">알림 설정 열기</button>`);
 }
@@ -3042,10 +3060,13 @@ function settingToggle(key,label,desc){
 function notifyToggle(key,label){
   return `<label class="notify-toggle"><input type="checkbox" ${state.notify[key]!==false?"checked":""} onchange="setNotify('${key}',this.checked)"><span>${label}</span></label>`;
 }
+function notifySoundToggle(key,label){
+  return `<label class="notify-toggle"><input type="checkbox" ${state.notify[key]?"checked":""} onchange="setNotify('${key}',this.checked)"><span>${label}</span></label>`;
+}
 function settingsPage(){
   const s=state.settings;
   const speedBtns=SPEEDS.map(n=>`<button class="speed-btn ${speedNow()===n&&!state.paused?"on":""}" data-speed="${n}" onclick="setSpeed(${n})">${n}x</button>`).join("");
-  const notifies=[["order","지정가 체결"],["dividend","배당금"],["stock","주가 급등·급락"],["maturity","예금 만기"],["loan","대출 이자"],["earnings","실적 발표"],["economy","경기 위기·호황"],["goal","목표 달성"],["mission","미션 완료"],["achievement","업적 달성"],["grade","등급 상승"],["rebirth","환생 가능"],["tax","세금"],["system","시스템"]];
+  const notifies=NOTIFY_KINDS;
   $("settings").innerHTML=`${pageHeader("PREFERENCES","설정","게임 속도·표시 방식·알림·자동화를 한곳에서 관리합니다.")}
     <section class="settings-section"><h3>일반</h3><div class="panel">
       ${settingRow("게임 속도","1~5배속 · 게임 시간 자체가 빨라집니다",`<div class="seg speed-seg">${speedBtns}</div>`)}
@@ -3057,7 +3078,22 @@ function settingsPage(){
       ${settingToggle("autoSave","자동 저장","10초마다 현재 진행을 저장합니다")}
       ${settingRow("지금 저장","진행 상황을 즉시 저장합니다",`<button class="buy" onclick="saveGame();notify('system','저장 완료','현재 진행 상황을 저장했습니다.')">저장</button>`)}
     </div></section>
-    <section class="settings-section"><h3>알림</h3><div class="panel"><p class="muted-sm" style="margin-bottom:10px">끈 알림은 토스트와 알림 센터에 쌓이지 않습니다. 설정은 즉시 적용됩니다.</p><div class="notify-grid">${notifies.map(([k,l])=>notifyToggle(k,l)).join("")}<label class="notify-toggle"><input type="checkbox" ${state.notify.sound?"checked":""} onchange="setNotify('sound',this.checked)"><span>효과음</span></label><label class="notify-toggle"><input type="checkbox" ${state.notify.haptic?"checked":""} onchange="setNotify('haptic',this.checked)"><span>진동</span></label></div></div></section>
+    <section class="settings-section"><h3>알림</h3><div class="panel">
+      <p class="muted-sm" style="margin-bottom:10px">화면에 뜨는 알림을 한 번에 또는 종류별로 끌 수 있습니다. 설정은 즉시 적용되고 저장 파일에 함께 보관됩니다.</p>
+      <div class="setting-row"><div class="setting-copy"><b>알림 표시 (모든 알림 끄기)</b><small>끄면 화면 토스트·알림 센터·시황 속보 배너가 한 번에 멈춥니다. 게임 진행과 뉴스 기록은 그대로입니다.</small></div><div class="setting-control"><label class="notify-toggle" style="min-width:96px"><input type="checkbox" ${state.notify.master?"":"checked"} onchange="setNotify('master',!this.checked)"><span>${state.notify.master?"모두 끔":"표시 중"}</span></label></div></div>
+      ${state.notify.master?`<p class="muted-sm" style="margin:8px 0;color:#b42318"><b>지금 모든 알림이 꺼져 있습니다.</b> 아래 종류별 설정은 다시 켜야 적용됩니다.</p>`:""}
+      <h4 style="margin:14px 0 8px;font-size:13px">표시 방식</h4>
+      <div class="notify-grid">
+        ${notifyToggle("toast","화면 토스트")}
+        ${notifyToggle("center","알림 센터 기록")}
+        ${notifyToggle("news","시황 속보 배너")}
+        ${notifySoundToggle("sound","효과음")}
+        ${notifySoundToggle("haptic","진동")}
+      </div>
+      <h4 style="margin:14px 0 8px;font-size:13px">종류별 알림</h4>
+      <div class="notify-grid">${notifies.map(([k,l])=>notifyToggle(k,l)).join("")}</div>
+      <div class="button-row" style="margin-top:12px"><button class="ghost" onclick="setAllNotify(false)">종류 모두 끄기</button><button class="ghost" onclick="setAllNotify(true)">종류 모두 켜기</button></div>
+    </div></section>
     <section class="settings-section"><h3>게임 플레이</h3><div class="panel">${autoPanelHtml()}</div></section>
     <section class="settings-section"><h3>데이터</h3><div class="panel">${savePanelHtml()}
       <div class="setting-row" style="margin-top:12px"><div class="setting-copy"><b>설정만 초기화</b><small>게임 진행 데이터는 그대로 두고 설정·알림만 기본값으로 되돌립니다.</small></div><div class="setting-control"><button class="ghost" onclick="resetSettings()">설정 초기화</button></div></div>
@@ -3385,7 +3421,8 @@ function applySaveData(data) {
   if(!state.achievements || typeof state.achievements!=="object") state.achievements={};
   ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
   state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
-  Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic") state.notify[k]=state.notify[k]!==false; });
+  Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic"&&k!=="master") state.notify[k]=state.notify[k]!==false; });
+  state.notify.master=state.notify.master===true;
   const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10,rebalance:false,rebStockPct:60,rebBand:5};
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
   state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
@@ -4091,6 +4128,11 @@ function guidePage(){
     ${section("13. 속도·저장", ul([
       "1~5배속은 게임 시간 자체를 빠르게 합니다. 5배속은 1초에 5틱(게임 시간 5초)이 흐릅니다.",
       "10초마다 자동 저장되고, 설정에서 즉시 저장하거나 세이브 파일을 내보낼 수 있습니다."]))}
+    ${section("14. 알림 설정", ul([
+      "설정 → 알림에서 <b>모든 알림 끄기</b> 하나로 토스트·알림 센터·시황 속보 배너를 한 번에 멈출 수 있습니다.",
+      "표시 방식을 따로 고를 수도 있습니다: 화면 토스트, 알림 센터 기록, 시황 속보 배너(둘 다 끄면 알림이 남지 않습니다).",
+      "종류별 알림(지정가 체결·배당·급등급락·경제 이벤트·목표·업적 등)은 각각 끄거나 '종류 모두 끄기/켜기'로 일괄 변경할 수 있습니다.",
+      "시황 속보 배너를 꺼도 뉴스 탭의 기록은 계속 쌓입니다."]))}
     ${section("자주 묻는 질문", ul([
       "<b>돈이 안 늘어요</b> — 시장이 휴장 중이거나, 수수료·세금이 이익보다 큰 경우입니다. 상단의 개장 상태를 확인하세요.",
       "<b>주식이 계속 떨어져요</b> — 이벤트·경기 국면에 따라 하락장이 있습니다. 인버스 ETF·공매도·현금 비중으로 대응할 수 있습니다.",
@@ -4569,15 +4611,18 @@ function marketEventsAndNews() {
 function publishBreakingNews(title, text){
   let fullText = `[${title}] ${text}`;
   state.news.unshift(fullText);
-  state.news=state.news.slice(0,25); // 최대 25개 저장
-  
-  const box=$("breaking");
+  state.news=state.news.slice(0,25); // 뉴스 목록에는 항상 쌓아 둡니다(최대 25개).
+
+  // 배너만 알림 설정을 따릅니다. 꺼도 뉴스 탭 기록은 그대로 남습니다.
+  const n=state.notify||{};
+  const bannerOn=(n.master!==true) && n.news!==false;
+  const box=bannerOn?$("breaking"):null;
   if(box){
     box.innerHTML=`<b>${title}</b> ${text}`;
     box.classList.add("show");
     setTimeout(()=>box.classList.remove("show"),5500);
   }
-  if(activePage()=="news") news();
+  if(activePage()==="news") news();
 }
 
 function interest(){
