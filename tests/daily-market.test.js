@@ -3,7 +3,8 @@
  * 하루 단위 시세 테스트
  *  - 게임 10분(600초)마다 하루가 지나고, 전일 종가에 새 일일 변동률이 복리로 적용되는지
  *  - 카드에 "시작가 대비"(누적)와 "오늘"(전일 종가 대비)이 함께 표시되는지
- *  - 저장·복원, ETF, 안전선(시작가 8%~6배), 토스트 미리보기 버튼
+ *  - 시작가 대비 8%·6배 벽 없이 계속되는 복리, 일차·다음 날 카운트다운
+ *  - 원하는 수량 매수·매도, 공모주 강제 알림, 저장·복원, ETF, 토스트 미리보기
  * 실행: node tests/daily-market.test.js
  */
 'use strict';
@@ -129,19 +130,99 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
   check('장중 등락은 시가 대비 ±15% 이내', r > 0.85 && r < 1.15, r.toFixed(4));
 }
 
-// ── 안전선(시작가 8% ~ 6배) ─────────────────────
+// ── 하한·상한 없이 복리 하락/상승 ─────────────
 {
   const g = createGame();
-  g.run('dailyMarketReturn=()=>0; dailyStockReturn=()=>-0.6; 1');
-  for (let d = 1; d <= 30; d++) g.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
-  const low = g.run(`{ const s=stocks[${DOMESTIC}]; s.price/s.start; }`);
-  check('폭락해도 시작가 8% 아래로는 내려가지 않음', low >= 0.0799 && low <= 0.09, low.toFixed(4));
+  g.run(`dailyMarketReturn=()=>0; dailyStockReturn=()=>-0.6; 1`);
+  g.run(`{ const s=stocks[${DOMESTIC}]; s.start=100000; s.price=100000; s.dayIndex=0; s.dayOpen=100000; s.prevClose=100000; } 1`);
+  const prices = [];
+  for (let d = 1; d <= 8; d++) {
+    g.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
+    prices.push(g.run(`stocks[${DOMESTIC}].price`));
+  }
+  check('하루 -60%가 시작가 8% 아래에서도 계속 적용', prices[7] > 0 && prices[7] < 8000, prices.join(' → '));
+  check('복리 하락은 매일 전일 종가 기준', prices[0] === 40000 && prices[1] === 16000 && prices[2] === 6400, `${prices[0]}/${prices[1]}/${prices[2]}`);
 
-  g.run('dailyStockReturn=()=>0.6; 1');
-  for (let d = 31; d <= 60; d++) g.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
-  const high = g.run(`{ const s=stocks[${DOMESTIC}]; s.price/s.start; }`);
-  check('폭등해도 시작가 6배 위로는 올라가지 않음', high <= 6.0001, high.toFixed(3));
-  check('모든 종목 가격이 유효한 양수', g.run('stocks.every(s=>Number.isFinite(s.price)&&s.price>0)') === true);
+  const g2 = createGame();
+  g2.run(`dailyMarketReturn=()=>0; dailyStockReturn=()=>0.6; 1`);
+  g2.run(`{ const s=stocks[${DOMESTIC}]; s.start=100000; s.price=100000; s.dayIndex=0; s.dayOpen=100000; s.prevClose=100000; } 1`);
+  const ups = [];
+  for (let d = 1; d <= 6; d++) {
+    g2.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
+    ups.push(g2.run(`stocks[${DOMESTIC}].price`));
+  }
+  check('복리 상승도 시작가 6배 위까지 계속 적용', ups[5] > 600000, ups.join(' → '));
+  check('모든 종목 가격이 유효한 양수', g2.run('stocks.every(s=>Number.isFinite(s.price)&&s.price>0)') === true);
+  check('국내 저가주는 1원 아래로 내려가지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},0.1)') === 1);
+  check('최소 1원에서도 가격이 깨지지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},1)') === 1);
+}
+
+// ── 며칠째인지 · 다음 날까지 남은 시간 ────────────
+{
+  const g = createGame();
+  g.run('state.paused=false; state.speed=1; state.marketSeconds=0; 1');
+  check('1일차 표시', g.run('marketDayNumber()') === 1, g.run('marketDayNumber()'));
+  check('1일차 남은 시간은 600초', g.run('marketDaySecondsLeft()') === 600, g.run('marketDaySecondsLeft()'));
+  g.run('state.marketSeconds=650; 1');
+  check('650초는 2일차', g.run('marketDayNumber()') === 2, g.run('marketDayNumber()'));
+  check('다음 날까지 550초', g.run('marketDaySecondsLeft()') === 550, g.run('marketDaySecondsLeft()'));
+  check('시계 문자열', g.run('clockText(550)') === '9분 10초', g.run('clockText(550)'));
+  check('주식 화면 문구에 일차·남은 시간', /2일차/.test(g.run('marketDayText()')) && /9분 10초/.test(g.run('marketDayText()')), g.run('marketDayText()'));
+  g.run('state.speed=5; 1');
+  check('배속에 맞춘 실제 남은 시간', /1분 50초/.test(g.run('marketDayText()')), g.run('marketDayText()'));
+  g.run('state.paused=true; 1');
+  check('일시정지 중에도 일차·남은 시간 유지', /2일차/.test(g.run('marketDayText()')) && /1분 50초/.test(g.run('marketDayText()')) && /일시정지/.test(g.run('marketDayText()')), g.run('marketDayText()'));
+  g.run('state.paused=false; 1');
+  check('주식 화면에 일차 표시 영역', /data-market-day/.test(g.run('marketDayBarHTML()')) === true, g.run('marketDayBarHTML()'));
+}
+
+// ── 원하는 수량만큼 매수·매도 ────────────────────
+{
+  const g = createGame();
+  g.run(`state.cash=10000000; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.achievements={}; ACHIEVEMENTS.forEach(a=>{ state.achievements[a.id]=true; });
+    { const s=stocks.find(x=>x.id==="future_ai"); s.price=1000; s.own=0; s.avgBuy=0; }
+    document.getElementById("qty-future_ai").value="7"; 1`);
+  g.run('buyQty("future_ai"); 1');
+  check('입력한 7주만큼 매수', g.run('stock("future_ai").own') === 7, g.run('stock("future_ai").own'));
+  check('매수 후 현금이 수수료 포함 차감', g.run('state.cash') < 10000000 && g.run('state.cash') > 9900000, Math.round(g.run('state.cash')));
+
+  g.run('document.getElementById("qty-future_ai").value="3"; sellQty("future_ai"); 1');
+  check('입력한 3주만큼 매도', g.run('stock("future_ai").own') === 4, g.run('stock("future_ai").own'));
+
+  g.run('document.getElementById("qty-future_ai").value="99"; sellQty("future_ai"); 1');
+  check('보유량보다 많이 매도하면 거부', g.run('stock("future_ai").own') === 4, g.run('stock("future_ai").own'));
+
+  g.run('setTradeQty("future_ai","max"); 1');
+  const maxQty = g.run('maxBuyQty(stock("future_ai"))');
+  check('최대 매수 버튼이 최대 수량을 채움', g.run('document.getElementById("qty-future_ai").value') === String(maxQty) && maxQty > 0, `${maxQty}`);
+  g.run('setTradeQty("future_ai","own"); 1');
+  check('보유 전량 버튼이 보유 수량을 채움', g.run('document.getElementById("qty-future_ai").value') === '4', g.run('document.getElementById("qty-future_ai").value'));
+  check('큰 수량은 만 단위로 짧게 표시', g.run('qtyText(148974)') === '14.9만주', g.run('qtyText(148974)'));
+}
+
+// ── 공모주 알림은 설정과 무관하게 반드시 표시 ────────
+{
+  const g = createGame();
+  g.run('setNotify("master",true); state.notify.toast=false; state.marketSeconds=0; state.ipo={offer:null,nextAt:0,history:[]}; 1');
+  g.run('tickIPO(); 1');
+  const wrap = g.el('toastWrap');
+  const offer = g.run('state.ipo.offer && state.ipo.offer.name');
+  check('알림을 모두 꺼도 공모주 시작 알림 표시', wrap.children.length >= 1 && /공모주 청약 시작/.test(wrap.children[0].innerHTML), wrap.children[0] && wrap.children[0].innerHTML);
+  check('공모주 알림에 종목명·청약 안내', !!offer && wrap.children[0].innerHTML.includes(offer) && /청약/.test(wrap.children[0].innerHTML), offer);
+  check('공모주 토스트는 클릭으로 청약 화면 이동', typeof wrap.children[0].onclick === 'function', typeof wrap.children[0].onclick);
+
+  g.run('setNotifyNum("toastMax",1); showToast("일반 알림","테스트"); 1');
+  check('공모주 알림은 일반 토스트에 밀리지 않음', wrap.children.some(c=>/공모주 청약 시작/.test(c.innerHTML)), wrap.children.map(c=>c.innerHTML).join(" / "));
+
+  g.run('state.marketSeconds=state.ipo.offer.closesAt-20; tickIPO(); 1');
+  check('마감 30초 전 알림도 강제 표시', /마감 임박/.test(wrap.children[wrap.children.length - 1].innerHTML), wrap.children[wrap.children.length - 1].innerHTML);
+}
+
+// ── 알림은 문서 흐름을 밀지 않는 오버레이 ────────────
+{
+  check('시황 속보가 fixed 오버레이', /\.breaking\{[^}]*position:fixed/.test(html) === true);
+  check('토스트도 fixed 오버레이', /\.toast-wrap\{[^}]*position:fixed/.test(html) === true);
 }
 
 // ── ETF도 전일 종가·시가를 가짐 ─────────────────

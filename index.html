@@ -22,8 +22,9 @@ body{margin:0;font-family:Arial,"Noto Sans KR",sans-serif;background:#f5f3ee;col
 button{border:0;border-radius:7px;min-height:38px;padding:0 12px;cursor:pointer;background:#1f2937;color:white}
 button:disabled{opacity:.45;cursor:not-allowed}
 main{padding:22px}
-.breaking{display:none;margin-bottom:14px;border-radius:8px;padding:13px 14px;background:#111827;color:white;border-left:7px solid #f7c948;box-shadow:0 10px 28px #0002}
-.breaking.show{display:block}
+/* 시황 속보는 문서 흐름에서 빼서 화면이 위아래로 밀리지 않게 합니다(작은 오버레이 알림). */
+.breaking{display:none;position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:80;margin:0;width:max-content;max-width:min(560px,calc(100vw - 24px));pointer-events:none;border-radius:8px;padding:13px 14px;background:#111827;color:white;border-left:7px solid #f7c948;box-shadow:0 10px 28px #0005}
+.breaking.show{display:block;animation:toastIn .18s ease-out}
 .breaking b{color:#f7c948}
 .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .box,.card,.product,.news,.row{background:#fffdf8;border:1px solid #d8ded4;border-radius:8px;padding:14px;box-shadow:0 10px 28px #0001}
@@ -44,6 +45,10 @@ p{margin:0;color:#667085;line-height:1.45}
 .mini div,.product-grid div{border:1px solid #d8ded4;background:#fafafa;border-radius:7px;padding:8px}
 .mini small,.product-grid small{display:block;color:#667085;margin-bottom:5px}
 .trade{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.trade.trade-qty{grid-template-columns:minmax(64px,1fr) 1fr 1fr}
+.trade .qty-input{width:100%}
+.quick-trade{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+.quick-trade button{min-height:32px;font-size:12px;padding:0 6px}
 .bank-trade{grid-template-columns:1fr 1fr}
 .bank-trade input{grid-column:1 / -1}
 .buy{background:#0f766e}.sell{background:#b42318}.ghost{background:#e7ebef;color:#18212f}
@@ -139,6 +144,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
   .bb-nav button{background:transparent;color:#cbd5e1;font-size:12px;min-height:34px;white-space:nowrap;padding:0 4px}
   .bb-nav button.on{background:#f7c948;color:#17202b;font-weight:800}
   .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
+  .breaking{left:12px;right:12px;top:8px;transform:none;width:auto;max-width:none}
 }
 @media(max-width:540px){.kpis{grid-template-columns:1fr 1fr}.ach{grid-template-columns:1fr}.ach div{line-height:1.5}}
 .alloc-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#edf2f7}
@@ -154,7 +160,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 @media(max-width:540px){.rival-row{grid-template-columns:1fr auto}.rival-row b{grid-column:1/-1}.rival-row button{grid-column:2;grid-row:2/4}}
 @media(max-width:1200px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible;padding-bottom:0}.nav button{white-space:nowrap;min-height:34px;padding:0 8px;font-size:12px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
-@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stats .box:last-child{grid-column:1/-1}.head{display:block}.trade{grid-template-columns:1fr 1fr}}
+@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stats .box:last-child{grid-column:1/-1}.head{display:block}.trade{grid-template-columns:1fr 1fr}.quick-trade{grid-template-columns:1fr 1fr 1fr}}
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
@@ -278,6 +284,9 @@ input,select{min-height:40px;border:1px solid #d5dbe3;border-radius:8px;backgrou
 input:focus,select:focus{outline:2px solid #f2c14e66;border-color:#c9a53d}
 .pill{background:#f1f4f7;border:1px solid #e4e8ee;color:#475467;font-size:11px;font-weight:650;padding:5px 9px}
 .notice{background:#f8fafc;border:1px solid var(--line);color:#475467;font-size:12px;border-radius:10px;padding:11px 13px;margin-bottom:12px}
+.market-day{background:#eaf6ff;border-color:#bae6fd;color:#0b4a6f;font-weight:700;line-height:1.45;padding:8px 11px;word-break:keep-all;overflow-wrap:break-word}
+.toast.toast-ipo{cursor:pointer;border-left-color:#38bdf8}
+.toast.toast-ipo b{color:#7dd3fc}
 .breaking{border-radius:10px;border-left:4px solid var(--gold);box-shadow:none;padding:12px 14px;font-size:13px}
 .page.on{animation:fadeUp .18s ease}
 .subtabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 14px;padding-bottom:2px}
@@ -440,6 +449,7 @@ body.no-effects *{box-shadow:none!important}
   .modal-box .notify-grid{grid-template-columns:1fr 1fr;gap:6px}
   .modal-box .notify-toggle{font-size:11px;padding:7px 8px;min-height:38px}
   .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
+  .breaking{left:12px;right:12px;top:8px;transform:none;width:auto;max-width:none}
 }
 @media(max-width:360px){
   .nav{flex-wrap:wrap;overflow:visible;gap:4px;padding-right:0}
@@ -667,21 +677,55 @@ const isIndexFund=s=>!!(s&&s.indexPower);
 // 예) 1,000원 → -90% = 100원, 다음 날 변동률은 100원을 기준으로 적용됩니다.
 const MARKET_DAY_SECONDS=600;
 function marketDayIndex(sec){ return Math.floor(Math.max(0,Number.isFinite(+sec)?+sec:0)/MARKET_DAY_SECONDS); }
+function marketDayNumber(){ return marketDayIndex(state.marketSeconds)+1; }
+// 이번 하루가 끝날 때까지 남은 게임 초(방금 시작한 날은 600초입니다).
+function marketDaySecondsLeft(){
+  const sec=Math.max(0,+state.marketSeconds||0);
+  const mod=sec%MARKET_DAY_SECONDS;
+  return mod===0?MARKET_DAY_SECONDS:MARKET_DAY_SECONDS-mod;
+}
+function clockText(sec){
+  const total=Math.max(0,Math.round(+sec||0));
+  const m=Math.floor(total/60), s=total%60;
+  return m?`${m}분 ${s}초`:`${s}초`;
+}
+// 주식 화면 상단에 지금 며칠째인지와 다음 날까지 남은 실제 시간을 보여 줍니다.
+function marketDayText(){
+  const offer=state.ipo&&state.ipo.offer;
+  const tail=offer?` · 📢 ${offer.name} 청약 중`:"";
+  const clock=`다음 날까지 실제 ${clockText(realSeconds(marketDaySecondsLeft()))} (${speedNow()}x)`;
+  return `📅 ${marketDayNumber()}일차 · ${clock}${state.paused?" · 일시정지":""}${tail}`;
+}
+function marketDayBarHTML(){ return `<div class="notice market-day" data-market-day>${marketDayText()}</div>`; }
+function updateMarketDayBar(){
+  const text=marketDayText();
+  document.querySelectorAll("[data-market-day]").forEach(el=>{ el.textContent=text; });
+}
 function dayChangePct(s){
   const base=(+s.prevClose>0)?+s.prevClose:(+s.start>0?s.start:1);
   return (s.price-base)/base;
 }
-// 시작가 대비 꼬리 위험만 막는 안전 장치(8% ~ 6배). 일일 변동 자체는 제한하지 않습니다.
-function clampStockPrice(s,v){
-  const foreign=["foreign","mega","special"].includes(s.group);
-  const p=Math.max(s.start*.08,Math.min(s.start*6,v));
-  return foreign ? Math.max(1,Math.round(p*100)/100) : Math.max(100,Math.round(p/100)*100);
+// 국내 주식 호가 단위: 가격이 낮아질수록 촘촘하게 해 복리 하락이 반올림으로 멈추지 않게 합니다.
+function domesticTickSize(price){
+  if(price>=10000) return 100;
+  if(price>=1000) return 10;
+  return 1;
 }
-// 그날 시장 전체에 적용되는 변동률(경기·금리·이벤트 반영)
+// 시작가 대비 하한·상한을 두지 않습니다. 복리 하락/상승이 계속 이어지고,
+// 0원이 되지 않도록 최소 1원(해외 0.01달러)만 지킵니다.
+function clampStockPrice(s,v){
+  const raw=(Number.isFinite(+v)&&+v>0)?+v:1;
+  const p=Math.min(1e12,raw); // 사실상 무제한. 숫자 폭주만 막는 안전 상한입니다.
+  if(["foreign","mega","special"].includes(s.group)) return Math.max(0.01,Math.round(p*100)/100);
+  const tick=domesticTickSize(p);
+  return Math.max(1,Math.round(p/tick)*tick);
+}
+// 그날 시장 전체에 적용되는 변동률(경기·금리·이벤트 반영).
+// 장기 보유 보상이 너무 낮지 않도록 시장 자체에 완만한 우상향 드리프트를 둡니다.
 function dailyMarketReturn(){
   const e=state.economy||{};
   const phase=e.phase==="호황"?1:e.phase==="불황"?-1:0;
-  let r=(Math.random()-.5)*.055;
+  let r=(Math.random()-.48)*.06 + .0018;
   r += phase*.006;
   r += ((Number.isFinite(+e.gdpGrowth)?+e.gdpGrowth:.02)-.02)*.6;
   r -= ((Number.isFinite(+e.baseRate)?+e.baseRate:.03)-.03)*.8;
@@ -691,11 +735,12 @@ function dailyMarketReturn(){
   if(state.currentEvent==="BUBBLE_SHOCK") r-=.015;
   return Math.max(-.3,Math.min(.3,r));
 }
-// 종목별 하루 변동률: 시장 변동 + 종목 변동성 + 가끔 뉴스성 급등·급락
+// 종목별 하루 변동률: 시장 변동 + 종목 고유 성장 드리프트 + 변동성 + 가끔 뉴스성 급등·급락
 function dailyStockReturn(s, marketR){
   const dayVol=Math.max(.015,Math.min(.12,.02+(+s.vol||.02)*2.2));
-  let r=marketR + (Math.random()-.5)*2*dayVol;
-  if(Math.random()<.06) r += (Math.random()<.5?-1:1)*(.06+Math.random()*.14);
+  const trend=Math.max(0,Math.min(.0025,+s.drift||0));
+  let r=marketR + .0015 + trend*.7 + (Math.random()-.485)*2*dayVol;
+  if(Math.random()<.05) r += (Math.random()<.5?-1:1)*(.06+Math.random()*.14);
   return Math.max(-.6,Math.min(.6,r));
 }
 
@@ -1011,7 +1056,7 @@ function visibleStocks(group){
 function applyStockView(group){
   const box=$("grid-"+group); if(!box) return;
   const list=visibleStocks(group);
-  box.innerHTML=list.length?list.map(card).join("")
+  box.innerHTML=list.length?list.map(s=>card(s,group)).join("")
     :`<div class="row" style="grid-template-columns:1fr"><b>조건에 맞는 종목이 없습니다</b><span>검색어를 지우거나 필터를 해제해 보세요.</span></div>`;
   const count=$("count-"+group); if(count) count.textContent=list.length+"개";
 }
@@ -1055,16 +1100,46 @@ function toastDurationMs(){
 function toastLimit(){
   return Math.max(1,Math.min(5,Math.round(+((state.notify||{}).toastMax)||3)));
 }
-function showToast(title,text){
+function showToast(title,text,opts){
   const wrap=$("toastWrap"); if(!wrap || typeof wrap.appendChild!=="function") return;
   const el=document.createElement("div");
-  el.className="toast";
+  el.className="toast"+((opts&&opts.className)?" "+opts.className:"");
   el.innerHTML=`<b>${title}</b>${text||""}`;
+  if(opts&&typeof opts.onClick==="function"){
+    el.onclick=opts.onClick;
+    el.style.cursor="pointer";
+    if(typeof el.setAttribute==="function") el.setAttribute("role","button");
+  }
   wrap.appendChild(el);
   // 설정한 개수만 보여 줍니다(넘치면 오래된 토스트부터 사라집니다).
+  // 공모주처럼 놓치면 안 되는 알림은 다른 토스트에 밀리지 않도록 마지막에 지웁니다.
   const limit=toastLimit();
-  while(wrap.children && wrap.children.length>limit) wrap.removeChild(wrap.children[0]);
-  setTimeout(()=>{ try{ wrap.removeChild(el); }catch(e){} },toastDurationMs());
+  while(wrap.children && wrap.children.length>limit){
+    let victim=null;
+    for(let i=0;i<wrap.children.length;i++){
+      const c=wrap.children[i];
+      const pinned=c&&String(c.className||"").split(/\s+/).includes("toast-ipo");
+      if(!pinned){ victim=c; break; }
+    }
+    if(!victim) break; // 공모주 알림만 남아 있으면 일반 알림을 잠시 보류합니다.
+    wrap.removeChild(victim);
+  }
+  const ms=(opts&&Number.isFinite(+opts.durationMs))?Math.max(2000,Math.min(20000,+opts.durationMs)):toastDurationMs();
+  setTimeout(()=>{ try{ wrap.removeChild(el); }catch(e){} },ms);
+}
+// 알림 설정과 관계없이 반드시 보여 주는 알림입니다(공모주 청약처럼 놓치면 참여 기회가 사라지는 이벤트).
+// 토스트는 fixed 오버레이라 문서 흐름을 밀지 않고, 누르면 해당 화면으로 이동합니다.
+function notifyAlways(title,text,opts){
+  const n=state.notify||{};
+  if(n.center!==false){
+    if(!Array.isArray(state.alerts)) state.alerts=[];
+    state.alerts.unshift({at:Date.now(),kind:"system",title,text,read:false});
+    if(state.alerts.length>40) state.alerts.pop();
+    updateBell();
+  }
+  showToast(title,text,Object.assign({className:"toast-ipo",durationMs:Math.max(8000,toastDurationMs())},opts||{}));
+  if(n.sound) beep("system");
+  if(n.haptic && typeof navigator!=="undefined" && navigator.vibrate) navigator.vibrate(25);
 }
 // 지금 설정한 표시 시간·최대 개수를 한 줄로 보여 줍니다.
 function toastPreviewLabel(){
@@ -1791,10 +1866,23 @@ function ensureListedStock(def,price){
   return s;
 }
 function resetListedStocks(){ stocks=stocks.filter(s=>!s.ipo); state.listedIds=[]; }
+function announceIPO(o, urgent){
+  const left=clockText(realSeconds(Math.max(0,o.closesAt-state.marketSeconds)));
+  const title=urgent?"⏰ 공모주 청약 마감 임박":"📢 공모주 청약 시작";
+  // 알림 설정을 꺼 두었어도 반드시 표시합니다. 토스트를 누르면 바로 청약 화면으로 이동합니다.
+  notifyAlways(title,`${o.name}(${o.ticker}) · 공모가 ${won(o.price)} · ${left} 남음 · 눌러서 청약하기`,{
+    durationMs:urgent?10000:Math.min(20000,Math.max(8000,realSeconds(Math.max(0,o.closesAt-state.marketSeconds))*1000)),
+    onClick:()=>show("ipo")
+  });
+}
 function tickIPO(){
   const ipo=ensureIPO();
   if(ipo.offer){
     if(state.marketSeconds>=ipo.offer.closesAt) closeIPO();
+    else if(!ipo.offer.reminded && ipo.offer.closesAt-state.marketSeconds<=30){
+      ipo.offer.reminded=true;
+      announceIPO(ipo.offer,true);
+    }
     return;
   }
   if(state.marketSeconds<ipo.nextAt) return;
@@ -1802,9 +1890,17 @@ function tickIPO(){
   if(!pool.length){ ipo.nextAt=state.marketSeconds+300; return; }
   const d=pool[Math.floor(Math.random()*pool.length)];
   const price=Math.max(100,Math.round(d.price*(0.9+Math.random()*0.2)/100)*100);
-  ipo.offer={id:d.id,name:d.name,ticker:d.ticker,group:"domestic",theme:d.theme,vol:d.vol,price,qty:60000,closesAt:state.marketSeconds+120,subscribed:0,mine:0};
+  ipo.offer={id:d.id,name:d.name,ticker:d.ticker,group:"domestic",theme:d.theme,vol:d.vol,price,qty:60000,closesAt:state.marketSeconds+120,subscribed:0,mine:0,reminded:false};
   publishBreakingNews("📢 공모주 청약", `${d.name}(${d.ticker}) 공모가 ${won(price)} · 120초간 청약 접수 중`);
-  notify("system","공모주 청약 시작",`${d.name} · 공모가 ${won(price)}`);
+  announceIPO(ipo.offer,false);
+}
+function setIPOAmount(mode){
+  const o=ensureIPO().offer, el=$("ipo-amount"); if(!o||!el) return;
+  let amount=Math.max(0,Math.floor(+state.cash||0));
+  if(mode==="half") amount=Math.floor(amount/2);
+  amount=Math.floor(amount/10000)*10000;
+  el.value=String(Math.max(10000,Math.min(amount,Math.floor(+state.cash||0))));
+  return amount;
 }
 function subscribeIPO(){
   const ipo=ensureIPO(),o=ipo.offer; if(!o) return alert("진행 중인 공모주가 없습니다.");
@@ -2241,6 +2337,7 @@ function realSeconds(gameSeconds){
   return Math.max(0,Math.ceil(sec/speedNow()));
 }
 function renderMarketBar(){
+  updateMarketDayBar();
   const bar=$("marketTimeBar"); if(!bar) return;
   if(state.paused){
     bar.style.background="#fef3c7";
@@ -2653,8 +2750,8 @@ function repayLoanFull(){
 
 // ── 배당·실적 발표 ───────────────────────────────
 function applyShock(s, move){
-  const next = s.price * (1 + move);
-  s.price = isForeignStock(s) ? Math.max(1, Math.round(next * 100) / 100) : Math.max(100, Math.round(next / 100) * 100);
+  // 장중 충격도 시작가 8% 같은 하한에 막히지 않고, 최소 1원까지만 지킵니다.
+  s.price = clampStockPrice(s, s.price * (1 + move));
   s.lastMove = move;
 }
 
@@ -3695,9 +3792,10 @@ const escAttr=v=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&l
 
 function stockPage(group,title,desc){
   const page=$(group); if(!page) return;
-  page.innerHTML=`${pageHeader("MARKET",title,desc,`<span class="pill">5초마다 갱신 · 하루 10분</span>`)}
+  page.innerHTML=`${marketDayBarHTML()}
+  ${pageHeader("MARKET",title,desc,`<span class="pill">5초마다 갱신 · 하루 10분</span>`)}
   ${marketTabs(group)}
-  <div class="notice">가격은 5초마다 갱신되고, 게임 10분마다 하루가 지나 전일 종가에 새 변동률이 적용됩니다(복리). 거래 시 ${(stockFeeRate()*100).toFixed(2)}%의 수수료와 매도 거래세 ${(tradeTaxRate()*100).toFixed(2)}%가 적용되며, 휴장 중에는 거래가 제한됩니다.</div>
+  <div class="notice">가격은 5초마다 갱신되고, 게임 10분마다 하루가 지나 전일 종가에 새 변동률이 복리로 적용됩니다. 시작가 대비 하한·상한이 없어 장기간 크게 오르거나 내릴 수 있습니다. 거래 수량을 직접 입력할 수 있고, 수수료 ${(stockFeeRate()*100).toFixed(2)}%와 매도 거래세 ${(tradeTaxRate()*100).toFixed(2)}%가 적용되며 휴장 중에는 거래가 제한됩니다.</div>
   <div class="toolbar">
     <input type="search" placeholder="종목명·티커·테마 검색" value="${escAttr(stockView.query)}" oninput="stockView.query=this.value; applyStockView('${group}')">
     <select onchange="stockView.sort=this.value; applyStockView('${group}')">${SORT_OPTIONS.map(([v,l])=>`<option value="${v}" ${stockView.sort===v?"selected":""}>${l}</option>`).join("")}</select>
@@ -3708,26 +3806,37 @@ function stockPage(group,title,desc){
   applyStockView(group);
 }
 
-function card(s){
+function card(s, group){
   const isForeign = ["foreign","mega","special"].includes(s.group);
+  const ctx=group||"";
+  const qid=qtyInputId(s.id,ctx);
+  // 일시정지 중에 화면을 새로 그려도 0.00%가 아니라 현재 값을 바로 보여 줍니다.
+  const basePct=(s.price-s.start)/s.start;
+  const dayC=dayChangePct(s);
+  const roi=(s.own>0&&s.avgBuy>0)?(s.price-s.avgBuy)/s.avgBuy:0;
+  const maxBuy=maxBuyQty(s);
   return `<article class="card">
     <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><div style="display:flex;gap:6px;align-items:flex-start"><span class="pill">${s.market}</span><button class="star ${isWatched(s.id)?"on":""}" onclick="toggleWatch('${s.id}')" aria-label="관심종목" title="관심종목">★</button></div></div>
-    <div class="price" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
-    <p data-change="${s.id}">시작가 대비 +0.00% · 오늘 +0.00%</p>
-    <div class="spark" data-spark="${s.id}"></div>
+    <div class="price ${dayC>=0?"up":"down"}" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
+    <p class="${dayC>=0?"up":"down"}" data-change="${s.id}">시작가 대비 ${pct(basePct)} · 오늘 ${pct(dayC)}</p>
+    <div class="spark" data-spark="${s.id}">${sparklineSVG(s)}</div>
     <div style="margin-top:8px; font-size:12px; color:#475569;">
-      평단(수수료포함): <span data-avg="${s.id}">-</span> | 수익률: <span data-roipct="${s.id}">0%</span>
+      평단(수수료포함): <span data-avg="${s.id}">${s.own>0?(isForeign?usdStr(s.avgBuy):won(s.avgBuy)):"-"}</span> | 수익률: <span class="${roi>=0?"up":"down"}" data-roipct="${s.id}">${s.own>0?pct(roi):"0%"}</span>
     </div>
     <div class="mini">
-      <div><small>보유</small><b data-own="${s.id}">0주</b></div>
-      <div><small>풀매수 가능</small><b data-maxbuy="${s.id}">0주</b></div>
-      <div><small>풀매도 가능</small><b data-maxsell="${s.id}">0주</b></div>
+      <div><small>보유</small><b data-own="${s.id}">${qtyText(s.own)}</b></div>
+      <div><small>풀매수 가능</small><b data-maxbuy="${s.id}">${qtyText(maxBuy)}</b></div>
+      <div><small>풀매도 가능</small><b data-maxsell="${s.id}">${qtyText(s.own)}</b></div>
     </div>
-    <div class="trade">
-      <button class="ghost" onclick="fullBuy('${s.id}')">풀매수</button>
-      <button class="buy" onclick="buy('${s.id}')">매수</button>
-      <button class="ghost" onclick="fullSell('${s.id}')">풀매도</button>
-      <button class="sell" onclick="sell('${s.id}')">매도</button>
+    <div class="trade trade-qty">
+      <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 거래 수량">
+      <button class="buy" onclick="buyQty('${s.id}','${ctx}')">매수</button>
+      <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
+    </div>
+    <div class="quick-trade">
+      <button class="ghost" onclick="setTradeQty('${s.id}','one','${ctx}')">1주</button>
+      <button class="ghost" onclick="setTradeQty('${s.id}','max','${ctx}')">최대 매수</button>
+      <button class="ghost" onclick="setTradeQty('${s.id}','own','${ctx}')">보유 전량</button>
     </div>
   </article>`;
 }
@@ -4125,6 +4234,11 @@ function shortPage(){
 }
 
 // ── 공모주 화면 ────────────────────────────────
+function updateIPOUI(){
+  const o=ensureIPO().offer; if(!o) return;
+  const el=$("ipoRemain"); if(!el) return;
+  el.textContent=clockText(realSeconds(Math.max(0,o.closesAt-state.marketSeconds)));
+}
 function ipoPage(){
   const ipo=ensureIPO(), o=ipo.offer;
   const remain=o?Math.max(0,o.closesAt-state.marketSeconds):0;
@@ -4132,16 +4246,18 @@ function ipoPage(){
   const ratio=o&&o.qty>0?demandShares/o.qty:0;
   const offerHtml=o?`<div class="panel">
       <div class="company-head"><div><span class="pill">청약 진행 중</span> <span class="pill">${o.ticker}</span><h2>${escHtml(o.name)}</h2><div class="muted-sm">${o.theme} · 공모 ${o.qty.toLocaleString("ko-KR")}주</div></div><div class="company-value"><small>공모가</small><b>${won(o.price)}</b></div></div>
-      <div class="kpis" style="margin-top:10px"><div class="kpi"><small>마감까지</small><b>${remain}초</b></div><div class="kpi"><small>청약 경쟁률</small><b>${(ratio*100).toFixed(0)}%</b></div><div class="kpi"><small>내 청약</small><b>${won(o.mine||0)}</b></div><div class="kpi"><small>예상 배정</small><b>${Math.max(0,Math.floor(((o.mine||0)/o.price)*Math.min(1,o.qty/Math.max(1,demandShares*1.5)))).toLocaleString("ko-KR")}주</b></div></div>
+      <div class="kpis" style="margin-top:10px"><div class="kpi"><small>마감까지 (실제)</small><b id="ipoRemain">${clockText(realSeconds(remain))}</b></div><div class="kpi"><small>청약 경쟁률</small><b>${(ratio*100).toFixed(0)}%</b></div><div class="kpi"><small>내 청약</small><b>${won(o.mine||0)}</b></div><div class="kpi"><small>예상 배정</small><b>${Math.max(0,Math.floor(((o.mine||0)/o.price)*Math.min(1,o.qty/Math.max(1,demandShares*1.5)))).toLocaleString("ko-KR")}주</b></div></div>
       <div class="inline-form" style="margin-top:10px">
         <label>청약 금액 (원)<input id="ipo-amount" type="number" min="10000" step="10000" placeholder="예: 1000000"></label>
         <label>&nbsp;<button class="buy" onclick="subscribeIPO()">청약하기</button></label>
+        <label>&nbsp;<button class="ghost" onclick="setIPOAmount('max')">전액 채우기</button></label>
         ${(o.mine||0)>0?'<label>&nbsp;<button class="ghost" onclick="cancelIPO()">청약 취소</button></label>':""}
       </div>
       <p class="muted-sm">청약이 몰리면 공모 수량만큼만 배정되고 나머지 금액은 자동 환불됩니다. 상장 첫날 가격은 공모가 대비 -10% ~ +25% 사이에서 결정됩니다.</p>
     </div>`:`<div class="panel"><div class="empty-state small"><b>진행 중인 공모주가 없습니다</b><p>시장이 열려 있으면 5~10분 간격으로 새 공모주가 등장합니다.</p></div></div>`;
   const hist=ipo.history.length?ipo.history.map(h=>`<div class="holding-row compact"><b>${escHtml(h.name)}</b><span>공모가 ${won(h.price)}</span><span>시초가 ${won(h.open)}</span><span class="${h.open>=h.price?"up":"down"}">${pct((h.open-h.price)/h.price)}</span><span>${h.alloc?`${h.alloc.toLocaleString("ko-KR")}주 배정`:"미참여"}</span></div>`).join(""):`<div class="muted-sm">아직 신규 상장 기록이 없습니다.</div>`;
-  $("ipo").innerHTML=`${pageHeader("MARKET","공모주 청약","신규 상장 종목을 공모가에 청약합니다. 상장 후에는 일반 종목처럼 사고팔 수 있습니다.")}
+  $("ipo").innerHTML=`${marketDayBarHTML()}
+  ${pageHeader("MARKET","공모주 청약","신규 상장 종목을 공모가에 청약합니다. 상장 후에는 일반 종목처럼 사고팔 수 있습니다.")}
   ${marketTabs("ipo")}
   ${offerHtml}
   <section class="section"><h3>최근 상장</h3><div class="panel stack">${hist}</div></section>`;
@@ -4162,8 +4278,10 @@ function guidePage(){
       "매수·매도 수수료 0.15%, 매도 시 거래세 0.2%가 붙습니다. 등급과 환생 업그레이드로 수수료를 줄일 수 있습니다.",
       "시장은 게임 시간 180초 개장 · 60초 휴장을 반복합니다. 휴장 중에는 거래가 제한됩니다.",
       "가격은 매 틱(5초) 갱신되지만 큰 흐름은 <b>하루(게임 10분)</b>마다 정해집니다. 하루가 지나면 전일 종가에 새 일일 변동률이 적용되고(복리), 그 값이 다음 날의 기준이 됩니다.",
-      "카드에는 <b>시작가 대비</b>(처음 가격 대비 누적)와 <b>오늘</b>(전일 종가 대비) 변동률이 함께 표시됩니다. 예) 1,000원 → -90% = 100원이면, 다음 날 -20%는 100원 기준이라 80원이 됩니다.",
-      "장중에는 오늘 시가 근처에서 작은 등락이 생기고, 호황·침체·환율 같은 대형 이벤트가 발생합니다. 상·하한은 없고, 폭락 시에도 시작가의 8%까지만 내려갑니다.",
+      "카드에는 <b>시작가 대비</b>(처음 가격 대비 누적)와 <b>오늘</b>(전일 종가 대비) 변동률이 함께 표시됩니다. 예) 1,000원 → -90% = 100원이면, 다음 날 -90%는 100원 기준이라 10원이 됩니다.",
+      "주식 화면 위쪽에 <b>지금 며칠째인지</b>와 <b>다음 날까지 남은 실제 시간</b>이 표시됩니다. 하루는 게임 10분이고, 배속이 높을수록 실제 대기 시간은 짧아집니다.",
+      "카드의 수량 칸에 원하는 주수를 직접 입력해 매수·매도할 수 있습니다. <b>1주·최대 매수·보유 전량</b> 버튼으로 수량을 빠르게 채울 수도 있습니다.",
+      "장중에는 오늘 시가 근처에서 작은 등락이 생기고, 호황·침체·환율 같은 대형 이벤트가 발생합니다. 시작가 대비 하한·상한은 없고 최소 1원까지만 내려갑니다(복리 하락 계속 적용).",
       "지수 ETF 3종: 시장지수 ETF(지수 1배), 2X 레버리지(지수 2배), 인버스(지수 반대로). 하락장에서는 인버스가 오릅니다.",
       "배당은 일정 주기로 지급되고, 실적 발표일에 주가가 크게 움직입니다."]))}
     ${section("3. 공매도", ul([
@@ -4171,7 +4289,7 @@ function guidePage(){
       "포지션 가치의 30% 이상 현금이 필요하고, 가격이 진입가보다 30% 오르면 마진콜로 강제 청산됩니다.",
       "지수 ETF는 공매도할 수 없고, 환매 시 수수료가 붙습니다."]))}
     ${section("4. 공모주(IPO)", ul([
-      "5~10분 간격으로 새 종목이 공모를 시작합니다. 120초 동안 청약할 수 있습니다.",
+      "5~10분 간격으로 새 종목이 공모를 시작합니다. 120초 동안 청약할 수 있고, 시작·마감 직전 알림은 설정과 관계없이 반드시 표시됩니다(토스트를 누르면 청약 화면).",
       "청약이 몰리면 공모 수량만큼만 배정되고 나머지는 자동 환불됩니다.",
       "상장 첫날 가격은 공모가 대비 -10% ~ +25%에서 결정되고, 이후 일반 종목처럼 거래됩니다."]))}
     ${section("5. 예약 주문 4종", ul([
@@ -4412,6 +4530,68 @@ function sell(id){
   update();
 }
 
+// 현재 잔고로 살 수 있는 최대 수량(수수료 포함)입니다. 카드 표시와 수량 채우기에 함께 씁니다.
+function maxBuyQty(s){
+  if(!s || !(+s.price>0)) return 0;
+  const unit=+s.price*(1+stockFeeRate());
+  if(!(unit>0)) return 0;
+  const balance=isForeignStock(s)?(+state.usd||0):(+state.cash||0);
+  return Math.max(0,Math.floor(balance/unit));
+}
+// 같은 종목 카드가 국내·관심 화면에 동시에 있을 수 있어 화면(context)별로 수량 칸을 구분합니다.
+function qtyInputId(id,ctx){ return "qty-"+id+(ctx?"-"+ctx:""); }
+// 카드의 좁은 칸에서도 큰 수량이 보기 좋게 한 줄에 들어가도록 만 단위로 줄입니다.
+function qtyText(n){
+  const v=Math.max(0,Math.floor(+n||0));
+  if(v>=10000){
+    const man=v/10000;
+    return `${man>=100?man.toFixed(0):man.toFixed(1).replace(/\.0$/,"")}만주`;
+  }
+  return v.toLocaleString("ko-KR")+"주";
+}
+function tradeQtyValue(id,ctx){
+  const el=$(qtyInputId(id,ctx));
+  const raw=(el && el.value!==undefined)?el.value:1;
+  return Math.floor(+raw||0);
+}
+// 카드의 수량 칸을 1주·최대 매수·보유 전량으로 채웁니다(바로 주문하지는 않음).
+function setTradeQty(id,mode,ctx){
+  const s=stock(id), el=$(qtyInputId(id,ctx)); if(!s||!el) return;
+  let q=1;
+  if(mode==="max") q=Math.max(1,maxBuyQty(s));
+  else if(mode==="own") q=Math.max(1,Math.floor(+s.own||0));
+  el.value=String(q);
+  return q;
+}
+// 카드에 입력한 수량만큼 매수합니다.
+function buyQty(id,ctx){
+  if(!checkMarketOpen()) return;
+  const s=stock(id); if(!s) return;
+  const qty=tradeQtyValue(id,ctx);
+  if(qty<=0) return alert("매수 수량을 1주 이상 입력해 주세요.");
+  const max=maxBuyQty(s);
+  if(max<=0) return alert(isForeignStock(s)?"수수료 포함 달러 잔고가 부족합니다.":"수수료 포함 현금이 부족합니다.");
+  if(qty>max) return alert(`지금은 최대 ${max.toLocaleString("ko-KR")}주까지 매수할 수 있습니다.`);
+  const cost=s.price*(1+stockFeeRate())*qty;
+  if(!confirmTrade("매수",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${isForeignStock(s)?usdStr(cost):won(cost)}`)) return;
+  if(!marketBuyShares(s,qty)) return alert("주문을 처리하지 못했습니다. 잔고를 확인해 주세요.");
+  addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매수 (${isForeignStock(s)?usdStr(s.price):won(s.price)}, 수수료 포함)`);
+  saveGame(); update();
+}
+// 카드에 입력한 수량만큼 매도합니다.
+function sellQty(id,ctx){
+  if(!checkMarketOpen()) return;
+  const s=stock(id); if(!s) return;
+  const qty=tradeQtyValue(id,ctx);
+  if(qty<=0) return alert("매도 수량을 1주 이상 입력해 주세요.");
+  if(s.own<qty) return alert(`보유한 ${s.own.toLocaleString("ko-KR")}주까지만 매도할 수 있습니다.`);
+  const revenue=s.price*(1-stockFeeRate()-tradeTaxRate())*qty;
+  if(!confirmTrade("매도",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${isForeignStock(s)?usdStr(revenue):won(revenue)} (수수료·세금 반영)`)) return;
+  if(!marketSellShares(s,qty)) return alert("주문을 처리하지 못했습니다. 보유 수량을 확인해 주세요.");
+  addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매도 (${isForeignStock(s)?usdStr(s.price):won(s.price)})`);
+  saveGame(); update();
+}
+
 function fullBuy(id){
   if(!checkMarketOpen()) return;
   let s=stock(id);
@@ -4597,14 +4777,17 @@ function tickMarket(){
       s.dayRet=0;
     } else {
       // 장중: 오늘 시가로 되돌아가려는 힘 + 작은 잡음 + 대형 이벤트 온도
+      // 저가주에서도 가격이 튀지 않도록 되돌림과 한 틱 변동 폭을 제한합니다.
       const noise=(Math.random()-.5)*s.vol*.55;
-      const pull=(s.dayOpen-s.price)/Math.max(1,s.price)*.06;
+      const gap=(s.dayOpen-s.price)/Math.max(1,s.dayOpen);
+      const pull=Math.max(-.02,Math.min(.02,gap*.06));
       let bias=0;
       if(state.currentEvent==="AI_BOOM"){ bias+=.0012; if(s.theme.includes("AI")||s.theme.includes("반도체")) bias+=.0028; }
       if(state.currentEvent==="SEMI_STRONG"){ bias+=.0008; if(s.theme.includes("반도체")) bias+=.0022; }
       if(state.currentEvent==="MARKET_CRASH") bias-=.0022;
       if(state.currentEvent==="BUBBLE_SHOCK") bias-=.0008;
-      s.price=clampStockPrice(s, s.price*(1+noise+pull+bias));
+      const step=Math.max(-.25,Math.min(.25,noise+pull+bias));
+      s.price=clampStockPrice(s, s.price*(1+step));
     }
     s.lastMove=(s.price-old)/old;
     s.hist.push(s.price);
@@ -4766,6 +4949,8 @@ function update(){
   $("stockValue").textContent=won(svWon);
   $("productValue").textContent=won(pv);
   $("totalValue").textContent=won(totalAssetsKRW());
+  updateMarketDayBar();
+  updateIPOUI();
 
   stocks.forEach(s=>{
     let c=(s.price-s.start)/s.start;
@@ -4794,12 +4979,11 @@ function update(){
         re.className = "";
       }
     });
-    document.querySelectorAll(`[data-own="${s.id}"]`).forEach(el=>{ el.textContent=s.own+"주"; });
+    document.querySelectorAll(`[data-own="${s.id}"]`).forEach(el=>{ el.textContent=qtyText(s.own); });
     document.querySelectorAll(`[data-maxbuy="${s.id}"]`).forEach(mb=>{
-      const singleCost = s.price * (1 + stockFeeRate());
-      mb.textContent=isForeign ? Math.floor(state.usd/singleCost)+"주" : Math.floor(state.cash/singleCost)+"주";
+      mb.textContent=qtyText(maxBuyQty(s));
     });
-    document.querySelectorAll(`[data-maxsell="${s.id}"]`).forEach(ms=>{ ms.textContent=s.own+"주"; });
+    document.querySelectorAll(`[data-maxsell="${s.id}"]`).forEach(ms=>{ ms.textContent=qtyText(s.own); });
     document.querySelectorAll(`[data-spark="${s.id}"]`).forEach(sp=>{ sp.innerHTML=sparklineSVG(s); });
   });
 

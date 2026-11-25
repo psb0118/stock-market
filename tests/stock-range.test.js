@@ -18,8 +18,6 @@ const source = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
 
 const OLD_FLOOR = 0.8;   // 예전 하한(시작가의 80% = -20%)
 const OLD_CAP = 2.2;     // 예전 상한(시작가의 2.2배 = +120%)
-const HARD_FLOOR = 0.08; // 현재 최후 지지선
-const HARD_CAP = 6;      // 현재 안전 상한
 
 function mulberry32(a) {
   return function () {
@@ -62,7 +60,7 @@ const STEP = `
     if (!window.__stockStat) {
       window.__stockStat = {};
       stocks.filter(s => !s.indexPower).forEach(s => {
-        window.__stockStat[s.id] = { min: Infinity, max: 0, oldFloor: 0, oldCap: 0, aboveCap: 0, hardFloor: 0, hardCap: 0, samples: 0, last: 1 };
+        window.__stockStat[s.id] = { min: Infinity, max: 0, oldFloor: 0, oldCap: 0, aboveCap: 0, samples: 0, last: 1 };
       });
     }
     for (let i = 0; i < 5; i++) {
@@ -83,8 +81,6 @@ const STEP = `
       if (Math.abs(r - ${OLD_FLOOR}) < 0.004) st.oldFloor++;
       if (Math.abs(r - ${OLD_CAP}) < 0.004) st.oldCap++;
       if (r > ${OLD_CAP} + 0.1) st.aboveCap++;
-      if (r <= ${HARD_FLOOR} + 1e-9) st.hardFloor++;
-      if (r >= ${HARD_CAP} - 1e-9) st.hardCap++;
     });
     return 1;
   })()
@@ -116,7 +112,6 @@ let finalsCount = 0;
 let oldFloorRate = 0;
 let oldCapRate = 0;
 let aboveCapRate = 0;
-let hardRate = 0;
 let oddPrices = 0;
 let samples = 0;
 const spread = [];
@@ -132,7 +127,6 @@ for (const seed of seeds) {
   const max = Math.max(...rows.map(r => r.stat.max));
   const floorTicks = rows.reduce((a, r) => a + r.stat.oldFloor, 0);
   const capTicks = rows.reduce((a, r) => a + r.stat.oldCap, 0);
-  const hardTicks = rows.reduce((a, r) => a + r.stat.hardFloor + r.stat.hardCap, 0);
   const n = rows.reduce((a, r) => a + r.stat.samples, 0);
 
   allMin = Math.min(allMin, min);
@@ -140,7 +134,6 @@ for (const seed of seeds) {
   oldFloorRate += floorTicks;
   oldCapRate += capTicks;
   aboveCapRate += rows.reduce((a, r) => a + r.stat.aboveCap, 0);
-  hardRate += hardTicks;
   samples += n;
   oddPrices += rows.filter(r => !Number.isFinite(r.price) || r.price <= 0).length;
   const mean = finals.reduce((a, b) => a + b, 0) / finals.length;
@@ -158,8 +151,9 @@ check('주가가 +120% 위에 머무는 표본이 있다', aboveCapRate / sample
 // 3) 벽에 붙어 머무는 시간이 사실상 없어야 합니다.
 check('-20% 경계에 머무는 표본 3% 미만', oldFloorRate / samples < 0.03, `${(oldFloorRate / samples * 100).toFixed(2)}%`);
 check('+120% 경계에 머무는 표본 3% 미만', oldCapRate / samples < 0.03, `${(oldCapRate / samples * 100).toFixed(2)}%`);
-// 4) 현재 안전선(8%·6배)도 상시 붙는 벽이 아니어야 합니다.
-check('안전 상·하한에 머무는 표본 5% 미만', hardRate / samples < 0.05, `${(hardRate / samples * 100).toFixed(2)}%`);
+// 4) 시작가 대비 8%·6배 벽이 없어야 합니다(복리 하락/상승 계속 적용).
+check('시작가 8% 아래 가격도 허용', createContext(1).run('clampStockPrice({group:"domestic",start:100000},1000)') === 1000);
+check('시작가 6배 위 가격도 허용', createContext(1).run('clampStockPrice({group:"domestic",start:100000},1000000)') === 1000000);
 // 5) 종목별 결과가 한 가격대로 수렴하지 않고 흩어져야 합니다.
 check('종목별 최종 주가가 다양하게 갈린다', Math.max(...spread) > 0.15, `최대 표준편차 ${Math.max(...spread).toFixed(2)}`);
 // 6) 가격이 0이나 NaN으로 깨지지 않아야 합니다.
