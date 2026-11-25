@@ -656,10 +656,48 @@ let stocks = stockDefinitions.map(x=>{
   const isForeign = ["foreign","mega","special"].includes(x[4]);
   let initPrice = isForeign ? Math.round(x[5]/START_FX) : Math.round(x[5]/100)*100;
   const baseRevenue=Math.max(100000000,Math.round(initPrice*10000));
-  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice],revenue:baseRevenue,opProfit:Math.round(baseRevenue*.12),indexPower:INDEX_POWERS[x[0]]||0};
+  return {id:x[0],name:x[1],ticker:x[2],market:x[3],group:x[4],price:initPrice,start:initPrice,drift:x[6],vol:x[7],theme:x[8],own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[initPrice],revenue:baseRevenue,opProfit:Math.round(baseRevenue*.12),indexPower:INDEX_POWERS[x[0]]||0,
+    prevClose:initPrice,dayOpen:initPrice,dayRet:0,dayIndex:0};
 });
 // 지수 연동 ETF(지수·2X·인버스)는 랜덤워크 대신 시장 지수를 따라 움직입니다.
 const isIndexFund=s=>!!(s&&s.indexPower);
+
+// ── 하루 단위 시세 ─────────────────────────────────────────
+// 게임 10분 = 하루. 하루가 지나면 "전일 종가"에 새 일일 변동률을 적용합니다(복리).
+// 예) 1,000원 → -90% = 100원, 다음 날 변동률은 100원을 기준으로 적용됩니다.
+const MARKET_DAY_SECONDS=600;
+function marketDayIndex(sec){ return Math.floor(Math.max(0,Number.isFinite(+sec)?+sec:0)/MARKET_DAY_SECONDS); }
+function dayChangePct(s){
+  const base=(+s.prevClose>0)?+s.prevClose:(+s.start>0?s.start:1);
+  return (s.price-base)/base;
+}
+// 시작가 대비 꼬리 위험만 막는 안전 장치(8% ~ 6배). 일일 변동 자체는 제한하지 않습니다.
+function clampStockPrice(s,v){
+  const foreign=["foreign","mega","special"].includes(s.group);
+  const p=Math.max(s.start*.08,Math.min(s.start*6,v));
+  return foreign ? Math.max(1,Math.round(p*100)/100) : Math.max(100,Math.round(p/100)*100);
+}
+// 그날 시장 전체에 적용되는 변동률(경기·금리·이벤트 반영)
+function dailyMarketReturn(){
+  const e=state.economy||{};
+  const phase=e.phase==="호황"?1:e.phase==="불황"?-1:0;
+  let r=(Math.random()-.5)*.055;
+  r += phase*.006;
+  r += ((Number.isFinite(+e.gdpGrowth)?+e.gdpGrowth:.02)-.02)*.6;
+  r -= ((Number.isFinite(+e.baseRate)?+e.baseRate:.03)-.03)*.8;
+  if(state.currentEvent==="AI_BOOM") r+=.015;
+  if(state.currentEvent==="SEMI_STRONG") r+=.01;
+  if(state.currentEvent==="MARKET_CRASH") r-=.03;
+  if(state.currentEvent==="BUBBLE_SHOCK") r-=.015;
+  return Math.max(-.3,Math.min(.3,r));
+}
+// 종목별 하루 변동률: 시장 변동 + 종목 변동성 + 가끔 뉴스성 급등·급락
+function dailyStockReturn(s, marketR){
+  const dayVol=Math.max(.015,Math.min(.12,.02+(+s.vol||.02)*2.2));
+  let r=marketR + (Math.random()-.5)*2*dayVol;
+  if(Math.random()<.06) r += (Math.random()<.5?-1:1)*(.06+Math.random()*.14);
+  return Math.max(-.6,Math.min(.6,r));
+}
 
 // 가입 금액(amount)과 별개로, 가입 당시 확정된 연이율(rate)을 함께 보관합니다.
 // rate가 0이면 미가입 상태이며, 가입하는 순간의 등급 이율이 그 값으로 고정됩니다.
@@ -966,7 +1004,7 @@ function visibleStocks(group){
   if(stockView.watchOnly) list=list.filter(s=>isWatched(s.id));
   if(stockView.sort==="name") list.sort((a,b)=>a.name.localeCompare(b.name,"ko"));
   else if(stockView.sort==="price") list.sort((a,b)=>stockPriceKRW(b)-stockPriceKRW(a));
-  else if(stockView.sort==="change") list.sort((a,b)=>b.lastMove-a.lastMove);
+  else if(stockView.sort==="change") list.sort((a,b)=>dayChangePct(b)-dayChangePct(a));
   else if(stockView.sort==="own") list.sort((a,b)=>b.own-a.own);
   return list;
 }
@@ -1027,6 +1065,19 @@ function showToast(title,text){
   const limit=toastLimit();
   while(wrap.children && wrap.children.length>limit) wrap.removeChild(wrap.children[0]);
   setTimeout(()=>{ try{ wrap.removeChild(el); }catch(e){} },toastDurationMs());
+}
+// 지금 설정한 표시 시간·최대 개수를 한 줄로 보여 줍니다.
+function toastPreviewLabel(){
+  const sec=(toastDurationMs()/1000).toFixed(1).replace(/\.0$/,"");
+  return `${sec}초 · ${toastLimit()}개`;
+}
+// 설정 화면의 '토스트 미리보기' — 현재 설정 그대로 토스트를 띄워 확인합니다.
+// (알림을 꺼 둔 상태에서도 미리보기는 보여 줍니다. 설정을 확인하는 용도이기 때문입니다.)
+function previewToasts(){
+  const n=toastLimit();
+  const sec=(toastDurationMs()/1000).toFixed(1).replace(/\.0$/,"");
+  for(let i=1;i<=n;i++) showToast(`토스트 미리보기 ${i}/${n}`, `지금 설정은 ${sec}초 동안 최대 ${n}개입니다.`);
+  return n;
 }
 function updateBell(){
   const n=state.notify||{};
@@ -1734,7 +1785,8 @@ function ensureListedStock(def,price){
   const exist=stocks.find(s=>s.id===def.id); if(exist) return exist;
   const p=Math.max(100,Math.round((+price||def.price||1000)/100)*100);
   const revenue=Math.max(100000000,Math.round(p*10000));
-  const s={id:def.id,name:def.name,ticker:def.ticker||def.id.toUpperCase(),market:"국내",group:"domestic",price:p,start:p,drift:.001,vol:def.vol||.035,theme:def.theme||"신규 상장",own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[p],revenue,opProfit:Math.round(revenue*.12),indexPower:0,ipo:true};
+  const s={id:def.id,name:def.name,ticker:def.ticker||def.id.toUpperCase(),market:"국내",group:"domestic",price:p,start:p,drift:.001,vol:def.vol||.035,theme:def.theme||"신규 상장",own:0,lastMove:0,avgBuy:0,realizedProfit:0,hist:[p],revenue,opProfit:Math.round(revenue*.12),indexPower:0,ipo:true,
+    prevClose:p,dayOpen:p,dayRet:0,dayIndex:marketDayIndex(state.marketSeconds)};
   stocks.push(s);
   return s;
 }
@@ -3102,6 +3154,7 @@ function settingsPage(){
       </div>
       ${settingRow("토스트 표시 시간","알림 토스트가 화면에 머무는 시간입니다",`<select onchange="setNotifyNum('toastMs',this.value)">${[2,3,4,5,6,7,8].map(sec=>`<option value="${sec*1000}" ${Math.round(+state.notify.toastMs||4200)===sec*1000?"selected":""}>${sec}초</option>`).join("")}</select>`)}
       ${settingRow("토스트 최대 개수","동시에 보이는 토스트 수입니다. 넘치면 오래된 것부터 사라집니다",`<select onchange="setNotifyNum('toastMax',this.value)">${[1,2,3,4,5].map(n=>`<option value="${n}" ${Math.round(+state.notify.toastMax||3)===n?"selected":""}>${n}개</option>`).join("")}</select>`)}
+      ${settingRow("토스트 미리보기","현재 표시 시간·최대 개수로 실제 토스트를 띄워 확인합니다",`<button class="ghost" onclick="previewToasts()">미리보기 (${toastPreviewLabel()})</button>`)}
       ${settingRow("시황 속보 최소 간격","배너가 이 간격보다 자주 뜨지 않습니다. 뉴스 탭 기록은 항상 남습니다.",`<select onchange="setNotifyGap(this.value)">${[0,5,10,15,30,60].map(sec=>`<option value="${sec}" ${Math.round(+state.notify.newsGap||0)===sec?"selected":""}>${sec?sec+"초":"제한 없음"}</option>`).join("")}</select>`)}
       <h4 style="margin:14px 0 8px;font-size:13px">종류별 알림</h4>
       <div class="notify-grid">${notifies.map(([k,l])=>notifyToggle(k,l)).join("")}</div>
@@ -3349,7 +3402,8 @@ function buildSaveData() {
     costBasisIncludesFee: true, // 평단가가 매수 수수료를 포함한 취득원가 형식인지 표시(구버전 데이터 마이그레이션용)
     state: state,
     fx: fx,
-    stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove, revenue:s.revenue, opProfit:s.opProfit})),
+    stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove, revenue:s.revenue, opProfit:s.opProfit,
+      prevClose:s.prevClose, dayOpen:s.dayOpen, dayRet:s.dayRet, dayIndex:s.dayIndex})),
     products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate, bank:p.bank||null, startedAt:Number.isFinite(p.startedAt)?p.startedAt:null, matured:!!p.matured}))
   };
 }
@@ -3399,6 +3453,11 @@ function applySaveData(data) {
       s.lastMove = ls.lastMove || 0;
       if(Number.isFinite(+ls.revenue)&&+ls.revenue>0) s.revenue=+ls.revenue;
       if(Number.isFinite(+ls.opProfit)&&+ls.opProfit>=0) s.opProfit=+ls.opProfit;
+      // 일일 시세(전일 종가·시가·변동률) 복원 · 구버전 세이브는 현재가 기준으로 보정
+      s.prevClose=(Number.isFinite(+ls.prevClose)&&+ls.prevClose>0)?+ls.prevClose:s.price;
+      s.dayOpen=(Number.isFinite(+ls.dayOpen)&&+ls.dayOpen>0)?+ls.dayOpen:s.price;
+      s.dayRet=Number.isFinite(+ls.dayRet)?+ls.dayRet:0;
+      s.dayIndex=Number.isFinite(+ls.dayIndex)?+ls.dayIndex:marketDayIndex(state.marketSeconds);
     });
   }
   if(data.products) {
@@ -3572,6 +3631,10 @@ function clearGame(skipConfirm) {
     s.revenue = Math.max(100000000,Math.round(s.start*10000));
     s.opProfit = Math.round(s.revenue*.12);
     s.hist = [s.start];
+    s.prevClose = s.start;
+    s.dayOpen = s.start;
+    s.dayRet = 0;
+    s.dayIndex = marketDayIndex(state.marketSeconds);
   });
   products.forEach(p => { p.amount = 0; p.rate = 0; p.bank=null; p.startedAt=null; p.matured=false; });
   state.seasonBaseIndex = marketIndex();
@@ -3632,9 +3695,9 @@ const escAttr=v=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&l
 
 function stockPage(group,title,desc){
   const page=$(group); if(!page) return;
-  page.innerHTML=`${pageHeader("MARKET",title,desc,`<span class="pill">5초마다 갱신</span>`)}
+  page.innerHTML=`${pageHeader("MARKET",title,desc,`<span class="pill">5초마다 갱신 · 하루 10분</span>`)}
   ${marketTabs(group)}
-  <div class="notice">거래 시 ${(stockFeeRate()*100).toFixed(2)}%의 수수료와 매도 거래세 ${(tradeTaxRate()*100).toFixed(2)}%가 적용됩니다. 휴장 중에는 주식 거래가 제한됩니다.</div>
+  <div class="notice">가격은 5초마다 갱신되고, 게임 10분마다 하루가 지나 전일 종가에 새 변동률이 적용됩니다(복리). 거래 시 ${(stockFeeRate()*100).toFixed(2)}%의 수수료와 매도 거래세 ${(tradeTaxRate()*100).toFixed(2)}%가 적용되며, 휴장 중에는 거래가 제한됩니다.</div>
   <div class="toolbar">
     <input type="search" placeholder="종목명·티커·테마 검색" value="${escAttr(stockView.query)}" oninput="stockView.query=this.value; applyStockView('${group}')">
     <select onchange="stockView.sort=this.value; applyStockView('${group}')">${SORT_OPTIONS.map(([v,l])=>`<option value="${v}" ${stockView.sort===v?"selected":""}>${l}</option>`).join("")}</select>
@@ -3650,7 +3713,7 @@ function card(s){
   return `<article class="card">
     <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><div style="display:flex;gap:6px;align-items:flex-start"><span class="pill">${s.market}</span><button class="star ${isWatched(s.id)?"on":""}" onclick="toggleWatch('${s.id}')" aria-label="관심종목" title="관심종목">★</button></div></div>
     <div class="price" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
-    <p data-change="${s.id}">시작가 대비 +0.00%</p>
+    <p data-change="${s.id}">시작가 대비 +0.00% · 오늘 +0.00%</p>
     <div class="spark" data-spark="${s.id}"></div>
     <div style="margin-top:8px; font-size:12px; color:#475569;">
       평단(수수료포함): <span data-avg="${s.id}">-</span> | 수익률: <span data-roipct="${s.id}">0%</span>
@@ -4098,7 +4161,9 @@ function guidePage(){
       "국내·해외·초대형·특별·공모주·관심종목 탭으로 나뉩니다. 카드의 ★를 누르면 관심종목에 담깁니다.",
       "매수·매도 수수료 0.15%, 매도 시 거래세 0.2%가 붙습니다. 등급과 환생 업그레이드로 수수료를 줄일 수 있습니다.",
       "시장은 게임 시간 180초 개장 · 60초 휴장을 반복합니다. 휴장 중에는 거래가 제한됩니다.",
-      "가격은 매 틱(5초) 변동하며, 호황·침체·환율 같은 대형 이벤트가 발생합니다. 상·하한은 없고, 폭락 시에도 시작가의 8%까지만 내려갑니다.",
+      "가격은 매 틱(5초) 갱신되지만 큰 흐름은 <b>하루(게임 10분)</b>마다 정해집니다. 하루가 지나면 전일 종가에 새 일일 변동률이 적용되고(복리), 그 값이 다음 날의 기준이 됩니다.",
+      "카드에는 <b>시작가 대비</b>(처음 가격 대비 누적)와 <b>오늘</b>(전일 종가 대비) 변동률이 함께 표시됩니다. 예) 1,000원 → -90% = 100원이면, 다음 날 -20%는 100원 기준이라 80원이 됩니다.",
+      "장중에는 오늘 시가 근처에서 작은 등락이 생기고, 호황·침체·환율 같은 대형 이벤트가 발생합니다. 상·하한은 없고, 폭락 시에도 시작가의 8%까지만 내려갑니다.",
       "지수 ETF 3종: 시장지수 ETF(지수 1배), 2X 레버리지(지수 2배), 인버스(지수 반대로). 하락장에서는 인버스가 오릅니다.",
       "배당은 일정 주기로 지급되고, 실적 발표일에 주가가 크게 움직입니다."]))}
     ${section("3. 공매도", ul([
@@ -4151,6 +4216,7 @@ function guidePage(){
       "시황 속보 배너를 꺼도 뉴스 탭의 기록은 계속 쌓입니다.",
       "배너가 너무 자주 뜨면 설정에서 '최소 표시 간격'(제한 없음~60초)을 고를 수 있습니다.",
       "토스트가 답답하면 표시 시간(2~8초)과 동시에 보이는 최대 개수(1~5개)를 바로 조절할 수 있습니다.",
+      "설정 → 알림의 <b>토스트 미리보기</b> 버튼을 누르면 지금 설정한 시간·개수로 실제 토스트가 떠서 바로 확인할 수 있습니다.",
       "알림 센터 기록을 끄면 종 아이콘의 읽지 않은 개수 배지도 숨겨집니다."]))}
     ${section("자주 묻는 질문", ul([
       "<b>돈이 안 늘어요</b> — 시장이 휴장 중이거나, 수수료·세금이 이익보다 큰 경우입니다. 상단의 개장 상태를 확인하세요.",
@@ -4500,68 +4566,45 @@ function economicMarketBias(){
 }
 function tickMarket(){
   state.tick++;
-  const idx=marketIndex();
+  const dayIndex=marketDayIndex(state.marketSeconds);
+  let marketR=null;
   stocks.forEach(s=>{
-    let old=s.price;
-    // 지수 ETF는 랜덤워크 대신 시장 지수를 추종합니다(2X는 제곱, 인버스는 역수).
-    if(isIndexFund(s)){
-      const mult=Math.pow(idx/1000,s.indexPower);
-      s.price=Math.max(100,Math.min(1000000,Math.round(s.start*mult/100)*100));
-      s.lastMove=(s.price-old)/old;
+    const old=s.price;
+    const newDay=(!Number.isFinite(s.dayIndex)) || s.dayIndex!==dayIndex;
+
+    if(newDay){
+      // 하루가 지나면 어제 종가에 새 변동률을 적용합니다(복리).
+      const prev=(+s.price>0)?+s.price:(+s.start>0?s.start:1);
+      s.prevClose=prev;
+      s.dayIndex=dayIndex;
+      if(!isIndexFund(s)){
+        if(marketR===null) marketR=dailyMarketReturn();
+        s.dayRet=dailyStockReturn(s, marketR);
+        s.price=clampStockPrice(s, prev*(1+s.dayRet));
+      }
+      s.dayOpen=s.price;
+      s.lastMove=(s.price-prev)/prev;
       s.hist.push(s.price); if(s.hist.length>60) s.hist.shift();
+      if(isIndexFund(s)) return; // ETF는 아래 지수 추종 계산을 이어서 합니다.
       return;
     }
-    let noise=(Math.random()-.50)*s.vol;
-    
-    // 기본 크래시 및 급등 확률: 5초 틱에서 기대 상승/하락을 서로 상쇄합니다.
-    let crash=Math.random()<.04 ? -(Math.random()*.04+.01) : 0;
-    let surge=Math.random()<.04 ? Math.random()*.04+.01 : 0;
-    
-    // 장기 성장 유동성 바이어스(시간 압축 대비 완만하게)
-    let longBias=.0006+Math.random()*.0002+economicMarketBias();
-    let recovery=s.price<s.start ? .001 : 0;
-    
-    // [시장 대형 이벤트 시스템 반영]
-    // 호황·침체 모두 시장 전체에 작은 방향성을 주고, 테마 종목에만 추가 온도를 더합니다.
-    // (예전에는 하락 이벤트만 전 종목에 -4%/틱을 걸어 시장이 만성 하락했고,
-    //  이를 시작가 80% 지지선으로 막아 -20%가 하한처럼 보였습니다.)
-    if(state.currentEvent === "AI_BOOM") {
-      longBias += 0.005;
-      if(s.theme.includes("AI") || s.theme.includes("반도체")) {
-        longBias += 0.01;
-        if(Math.random() < 0.2) surge += 0.03;
-      }
-    }
-    if(state.currentEvent === "SEMI_STRONG") {
-      longBias += 0.003;
-      if(s.theme.includes("반도체")) longBias += 0.008;
-    }
-    if(state.currentEvent === "MARKET_CRASH") {
-      longBias -= 0.008;
-      if(Math.random() < 0.15) crash -= 0.03;
-    }
-    if(state.currentEvent === "BUBBLE_SHOCK") {
-      longBias -= 0.004;
-      noise *= 1.5; // 변동성 확장
-    }
-    // 시작가 대비 과열 폭이 커질수록 차익 실현 압력을 키워 추세가 스스로 꺾이게 합니다.
-    // 고정된 천장(+120%)을 없애 대신, 3배 부근에서는 되돌림이 폭등을 확실히 눌러줍니다.
-    const ratio=s.price/s.start;
-    if(ratio>1.8) longBias -= Math.min(.01, (ratio-1.8)*.003);
 
-    let next=s.price*(1+noise+crash+surge+longBias+recovery);
-    // 수십 배 폭등 같은 비정상 수치만 막는 안전장치(시작가 6배)입니다.
-    next=Math.min(next, s.start*6);
-    
-    // 하한은 시간이 지나도 올라가지 않는 최후의 지지선(시작가 8%)입니다.
-    // 예전에는 시작가의 80%까지 끌어올려 모든 종목이 -20%에서 멈춰 하방 리스크가 사라졌습니다.
-    let hardFloor=s.start*.08;
-    
-    const isForeign = ["foreign","mega","special"].includes(s.group);
-    if(isForeign){
-      s.price=Math.max(1,Math.round(Math.max(next,hardFloor)*100)/100);
-    }else{
-      s.price=Math.max(100,Math.round(Math.max(next,hardFloor)/100)*100);
+    if(isIndexFund(s)){
+      // 지수 ETF는 랜덤워크 대신 시장 지수를 추종합니다(2X는 제곱, 인버스는 역수).
+      const idx=marketIndex();
+      const mult=Math.pow(idx/1000,s.indexPower);
+      s.price=Math.max(100,Math.min(1000000,Math.round(s.start*mult/100)*100));
+      s.dayRet=0;
+    } else {
+      // 장중: 오늘 시가로 되돌아가려는 힘 + 작은 잡음 + 대형 이벤트 온도
+      const noise=(Math.random()-.5)*s.vol*.55;
+      const pull=(s.dayOpen-s.price)/Math.max(1,s.price)*.06;
+      let bias=0;
+      if(state.currentEvent==="AI_BOOM"){ bias+=.0012; if(s.theme.includes("AI")||s.theme.includes("반도체")) bias+=.0028; }
+      if(state.currentEvent==="SEMI_STRONG"){ bias+=.0008; if(s.theme.includes("반도체")) bias+=.0022; }
+      if(state.currentEvent==="MARKET_CRASH") bias-=.0022;
+      if(state.currentEvent==="BUBBLE_SHOCK") bias-=.0008;
+      s.price=clampStockPrice(s, s.price*(1+noise+pull+bias));
     }
     s.lastMove=(s.price-old)/old;
     s.hist.push(s.price);
@@ -4616,14 +4659,14 @@ function marketEventsAndNews() {
 
   // 일반 종목 속보 뉴스 생성
   if(stocks.length === 0) return;
-  let sorted=[...stocks].sort((a,b)=>Math.abs(b.lastMove)-Math.abs(a.lastMove));
+  let sorted=[...stocks].sort((a,b)=>Math.abs(dayChangePct(b))-Math.abs(dayChangePct(a)));
   let s=sorted[0];
   if(!s) return;
-  let up=s.lastMove>=0;
+  let up=dayChangePct(s)>=0;
   let reasons=up?["공격적인 분기 실적 기대감이 커지며","해외 기관들의 대규모 순매수세가 포착되며","신규 특허 취득 및 상용화 파트너십 소식에","장기 공급 계약 모멘텀이 시장에서 조명받으며"]:["고점 돌파 실패에 따른 실망 매물이 가중되며","단기 변동성 오버슈팅에 의한 매도세 유출로","일부 루머성 악재 지적에 거래 심리가 냉각되며","해외 거시 리스크 부담이 반영되며"];
   // 속보 내용이 실제 가격에도 반영되도록 같은 방향으로 소폭 충격을 가합니다.
   applyShock(s, (up?1:-1) * (0.004 + Math.random()*0.012));
-  let text=`${s.name} (${s.ticker}) 측은 ${reasons[Math.floor(Math.random()*reasons.length)]} 전일 대비 ${pct(s.lastMove)} ${up?"상승":"하락"} 흐름을 연출 중입니다.`;
+  let text=`${s.name} (${s.ticker}) 측은 ${reasons[Math.floor(Math.random()*reasons.length)]} 전일 대비 ${pct(dayChangePct(s))} ${up?"상승":"하락"} 흐름을 연출 중입니다.`;
   publishBreakingNews("시황 속보", text);
 }
 
@@ -4655,6 +4698,7 @@ function setNotifyNum(k,v){
   if(k==="toastMs") state.notify.toastMs=Number.isFinite(n)?Math.max(2000,Math.min(8000,n)):4200;
   else if(k==="toastMax") state.notify.toastMax=Number.isFinite(n)?Math.max(1,Math.min(5,n)):3;
   saveGame();
+  try{ if(activePage()==="settings") settingsPage(); }catch(e){}
 }
 // 시황 속보 배너의 최소 표시 간격(초). 0이면 제한 없이 매번 표시합니다.
 function setNotifyGap(v){
@@ -4725,15 +4769,17 @@ function update(){
 
   stocks.forEach(s=>{
     let c=(s.price-s.start)/s.start;
+    // 오늘 변동률은 전일 종가 대비입니다(장 마감 뒤 새 변동률이 적용되므로 다음 날 기준가가 됩니다).
+    const dayC=dayChangePct(s);
     const isForeign = ["foreign","mega","special"].includes(s.group);
     // 관심종목 페이지 등 같은 종목 카드가 여러 곳에 있을 수 있어 전부 갱신합니다.
     document.querySelectorAll(`[data-price="${s.id}"]`).forEach(pe=>{
       pe.textContent=isForeign ? usdStr(s.price) : won(s.price);
-      pe.className="price "+(s.lastMove>=0?"up":"down");
+      pe.className="price "+(dayC>=0?"up":"down");
     });
     document.querySelectorAll(`[data-change="${s.id}"]`).forEach(ce=>{
-      ce.textContent="시작가 대비 "+pct(c)+" · 최근 "+pct(s.lastMove);
-      ce.className=c>=0?"up":"down";
+      ce.textContent="시작가 대비 "+pct(c)+" · 오늘 "+pct(dayC);
+      ce.className=dayC>=0?"up":"down";
     });
     document.querySelectorAll(`[data-avg="${s.id}"]`).forEach(ae=>{
       ae.textContent = s.own > 0 ? (isForeign ? usdStr(s.avgBuy) : won(s.avgBuy)) : "-";
