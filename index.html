@@ -3218,10 +3218,12 @@ function init(){
   if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
     // 새 배포가 첫 로드에 보이도록 서비스워커 스크립트도 HTTP 캐시를 건너뛰고 확인합니다.
     const hadController=!!navigator.serviceWorker.controller;
-    let swReloaded=false;
     navigator.serviceWorker.addEventListener("controllerchange",()=>{
-      if(!hadController||swReloaded) return; // 첫 설치 때는 새로고침하지 않습니다.
-      swReloaded=true;
+      if(!hadController) return; // 첫 설치 때는 새로고침하지 않습니다.
+      // 서비스워커가 직접 탭을 다시 불러오는 경우와 겹치지 않게 5초 안에는 한 번만 새로고침합니다.
+      let last=0; try{ last=+(sessionStorage.getItem("swReloadAt")||0); }catch(e){}
+      if(Date.now()-last<5000) return;
+      try{ sessionStorage.setItem("swReloadAt",String(Date.now())); }catch(e){}
       try{ location.reload(); }catch(e){}
     });
     navigator.serviceWorker.register("sw.js",{updateViaCache:"none"})

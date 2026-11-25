@@ -4,7 +4,11 @@
 const CACHE = "mpg-v3";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 
+// 설치 시점에 이미 활동 중인 서비스워커가 있으면 "업데이트"입니다.
+let isUpdate = false;
+
 self.addEventListener("install", event => {
+  isUpdate = !!(self.registration.active || self.registration.waiting);
   event.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(ASSETS).catch(() => {}))
@@ -17,6 +21,12 @@ self.addEventListener("activate", event => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+      // 업데이트라면 열려 있는 탭을 새 버전으로 다시 불러옵니다.
+      // (이전 버전 페이지에는 새로고침 코드가 없어도 바로 반영됩니다.)
+      .then(() => isUpdate ? self.clients.matchAll({ type: "window" }) : [])
+      .then(clients => Promise.all(clients.map(c => {
+        try { return c.navigate(c.url); } catch (e) { return null; }
+      })))
   );
 });
 
