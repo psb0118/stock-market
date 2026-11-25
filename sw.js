@@ -20,12 +20,16 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-      // 업데이트라면 열려 있는 탭을 새 버전으로 다시 불러옵니다.
-      // (이전 버전 페이지에는 새로고침 코드가 없어도 바로 반영됩니다.)
+      // 첫 설치에서만 바로 제어를 가져옵니다. 업데이트 때는 열린 탭의 저장을 깨뜨리지 않도록
+      // 제어를 빼앗지 않고(controllerchange 강제 새로고침 방지) 알림만 보냅니다.
+      .then(() => (isUpdate ? null : self.clients.claim()))
+      // 업데이트라면 열린 탭에 "새 버전 준비됨"을 알립니다.
+      // 강제로 새로고침하지 않고, 페이지가 저장을 마친 뒤 안전한 시점에 직접 갱신합니다.
+      // (백그라운드 탭·주문 입력 중인 탭은 다음 포커스 때 갱신됩니다.)
       .then(() => isUpdate ? self.clients.matchAll({ type: "window" }) : [])
       .then(clients => Promise.all(clients.map(c => {
-        try { return c.navigate(c.url); } catch (e) { return null; }
+        try { c.postMessage({ type: "MPG_SW_UPDATE", version: CACHE }); } catch (e) {}
+        return null;
       })))
   );
 });
@@ -58,3 +62,4 @@ self.addEventListener("fetch", event => {
       .catch(() => caches.match(event.request).then(r => r || caches.match("./index.html")))
   );
 });
+

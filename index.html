@@ -3218,19 +3218,51 @@ function init(){
   if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
     // 새 배포가 첫 로드에 보이도록 서비스워커 스크립트도 HTTP 캐시를 건너뛰고 확인합니다.
     const hadController=!!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener("controllerchange",()=>{
-      if(!hadController) return; // 첫 설치 때는 새로고침하지 않습니다.
-      // 서비스워커가 직접 탭을 다시 불러오는 경우와 겹치지 않게 5초 안에는 한 번만 새로고침합니다.
-      let last=0; try{ last=+(sessionStorage.getItem("swReloadAt")||0); }catch(e){}
-      if(Date.now()-last<5000) return;
-      try{ sessionStorage.setItem("swReloadAt",String(Date.now())); }catch(e){}
-      try{ location.reload(); }catch(e){}
+    navigator.serviceWorker.addEventListener("message",e=>{
+      const d=e&&e.data||{};
+      if(d.type==="MPG_SW_UPDATE") swUpdateNotify();
     });
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{
+      if(hadController) swUpdateNotify(); // 첫 설치 때는 새로고침하지 않습니다.
+    });
+    if(typeof document!=="undefined" && document.addEventListener){
+      // 백그라운드·입력 중이면 미루고, 화면으로 돌아왔을 때 적용합니다.
+      document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") swUpdateApply(); });
+      document.addEventListener("pointerdown",swUpdateMarkInput,{passive:true});
+      document.addEventListener("keydown",swUpdateMarkInput,{passive:true});
+    }
+    // 입력이 멈춘 뒤에도 적용되지 못한 경우를 위해 지연 재시도합니다(저장 후 새로고침).
+    setInterval(()=>{ if(swUpdateReady&&!swUpdateApplied) swUpdateApply(); },4000);
     navigator.serviceWorker.register("sw.js",{updateViaCache:"none"})
       .then(reg=>{ try{ reg.update(); }catch(e){} })
       .catch(()=>{});
   }
 }
+
+// ── 새 버전 적용: 저장을 먼저 보장하고, 거래·입력 중에는 다음 기회로 미룹니다 ──
+let swUpdateReady=false, swUpdateApplied=false, swLastInput=0;
+function swUpdateMarkInput(){ swLastInput=Date.now(); }
+function swUpdateBusy(){
+  try{
+    if(typeof document==="undefined") return false;
+    if(document.visibilityState && document.visibilityState!=="visible") return true; // 백그라운드 탭
+    if(typeof multiTab!=="undefined" && multiTab) return true; // 다른 탭이 저장 중이라 이 탭은 저장이 잠김
+    if(document.querySelector && document.querySelector("dialog[open], .modal.show, .modal-backdrop")) return true; // 확인·주문 창
+    const el=document.activeElement, tag=(el&&el.tagName)||"";
+    if(/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return true; // 주문 입력 중
+    if(swLastInput && Date.now()-swLastInput<2500) return true; // 막 누른 직후
+  }catch(e){}
+  return false;
+}
+function swUpdateApply(){
+  if(!swUpdateReady||swUpdateApplied) return false;
+  if(swUpdateBusy()) return false;
+  swUpdateApplied=true;
+  try{ saveGame(); }catch(e){}
+  try{ if(typeof location!=="undefined" && location.reload) location.reload(); }catch(e){}
+  return true;
+}
+function swUpdateNotify(){ swUpdateReady=true; swUpdateApply(); }
 
 let loopsStarted=false;
 function startLoops(){

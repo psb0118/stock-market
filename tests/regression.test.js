@@ -565,7 +565,9 @@ const RESET = total => `
   check('서비스워커가 HTML을 HTTP 캐시 없이 새로 받음', /cache:\s*"no-store"/.test(swSource) && swSource.includes('request.mode === "navigate"'));
   check('서비스워커 등록이 HTTP 캐시를 건너뜀', html.includes('updateViaCache:"none"'));
   check('새 서비스워커 적용 시 새로고침', html.includes('controllerchange'));
-  check('업데이트된 서비스워커가 열린 탭을 새로고침', swSource.includes('clients.matchAll') && swSource.includes('c.navigate(c.url)'));
+  check('업데이트된 서비스워커가 열린 탭에 알림', swSource.includes('clients.matchAll') && swSource.includes('c.postMessage(') && !swSource.includes('c.navigate('));
+  check('새 버전은 저장 후 안전한 시점에 적용', html.includes('swUpdateApply') && html.includes('MPG_SW_UPDATE') && html.includes('function swUpdateBusy'));
+  check('업데이트 때는 열린 탭의 제어를 빼앗지 않음', swSource.includes('isUpdate ? null : self.clients.claim()'));
   check('PWA 아이콘', fs.existsSync(path.join(root, 'icon.svg')));
   check('index.html PWA 연결', html.includes('rel="manifest"') && html.includes('serviceWorker'));
 }
