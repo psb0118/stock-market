@@ -30,6 +30,12 @@ function makeElement(tag = 'DIV') {
 }
 
 function createEnv({ visibility = 'visible', modal = null, activeElement = null } = {}) {
+  // 실제 DOM처럼: 게임 모달은 #modalRoot에 .on 클래스가 붙어 열립니다.
+  const matchesModal = sel => String(sel).split(',').map(s => s.trim()).some(s => {
+    if (s === '#modalRoot.on' || s === '.modal.on') return modal === 'open';
+    if (s === 'dialog[open]' || s === '.modal.show' || s === '.modal-backdrop') return modal === 'dialog';
+    return false;
+  });
   const store = {};
   const listeners = { doc: {}, nav: {} };
   const calls = { reload: 0, messages: [] };
@@ -44,7 +50,7 @@ function createEnv({ visibility = 'visible', modal = null, activeElement = null 
     head: makeElement('HEAD'),
     getElementById: getEl,
     querySelectorAll: () => [],
-    querySelector: sel => (sel.includes('dialog') || sel.includes('.modal') ? modal : null),
+    querySelector: sel => (matchesModal(sel) ? { tagName: 'DIV' } : null),
     createElement: tag => makeElement(String(tag).toUpperCase()),
     addEventListener(type, fn) { (listeners.doc[type] = listeners.doc[type] || []).push(fn); }
   };
@@ -131,10 +137,10 @@ function createEnv({ visibility = 'visible', modal = null, activeElement = null 
 }
 
 {
-  const env = createEnv({ modal: { tagName: 'DIALOG' } });
+  const env = createEnv({ modal: 'open' });
   env.run('1');
   env.run('swUpdateNotify(); 1');
-  check('주문·확인 창이 열려 있으면 기다림', env.calls.reload === 0);
+  check('게임 모달(#modalRoot.on)이 열려 있으면 기다림', env.calls.reload === 0);
   env.doc.querySelector = () => null;
   env.run('swUpdateApply(); 1');
   check('창을 닫으면 새로고침', env.calls.reload === 1);

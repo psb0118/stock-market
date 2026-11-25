@@ -3247,7 +3247,7 @@ function swUpdateBusy(){
     if(typeof document==="undefined") return false;
     if(document.visibilityState && document.visibilityState!=="visible") return true; // 백그라운드 탭
     if(typeof multiTab!=="undefined" && multiTab) return true; // 다른 탭이 저장 중이라 이 탭은 저장이 잠김
-    if(document.querySelector && document.querySelector("dialog[open], .modal.show, .modal-backdrop")) return true; // 확인·주문 창
+    if(document.querySelector && document.querySelector("#modalRoot.on, .modal.on, dialog[open], .modal.show, .modal-backdrop")) return true; // 확인·주문·노동 창
     const el=document.activeElement, tag=(el&&el.tagName)||"";
     if(/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return true; // 주문 입력 중
     if(swLastInput && Date.now()-swLastInput<2500) return true; // 막 누른 직후
