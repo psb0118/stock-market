@@ -498,16 +498,27 @@ body.no-effects *{box-shadow:none!important}
 .lot-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,auto);gap:8px;align-items:center;border:1px solid #e4e8ee;border-radius:8px;padding:8px 9px;font-size:12px;min-width:0}
 .lot-row b{overflow-wrap:anywhere}
 .tax-account-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:8px;margin-top:10px}
+@media(max-width:520px){
+  .section-head.tax-sec-head{flex-wrap:wrap;align-items:flex-start;gap:4px}
+  .section-head.tax-sec-head h3{flex:1 1 100%}
+  .section-head.tax-sec-head .pill{max-width:100%;white-space:normal}
+}
 .tax-account-card{border:1px solid #e4e8ee;border-radius:9px;padding:10px;display:grid;gap:5px;min-width:0;background:#fafafa;font-size:12px}
 .tax-account-card.on{border-color:#0f766e;background:#f0fdf4}
 .tax-account-card small{display:block;color:#667085;font-size:10px}
 .tax-account-card b,.tax-account-card span{overflow-wrap:anywhere}
 .mini-tag{display:inline-block;padding:1px 5px;border-radius:5px;background:#eef2f6;color:#475467;font-size:10px;white-space:nowrap}
 .tax-preview-result{margin-top:8px;display:grid;gap:6px}
+.tax-preview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-width:0}
+.tax-preview-head b,.tax-preview-head span{overflow-wrap:anywhere}
+.tax-preview-line{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;border-top:1px dashed #e4e8ee;padding-top:6px;font-size:12px;min-width:0}
+.tax-preview-line>span{color:#667085;flex:0 0 auto}
+.tax-preview-line>b{text-align:right;overflow-wrap:anywhere}
+.tax-preview-line.total{border-top-style:solid;font-size:13px}
 .alloc-account{display:grid;gap:7px;margin-top:7px}
 .alloc-account .section-head{margin:0;font-size:12px}
 .alloc-account small{display:block;color:#667085;font-size:11px;margin-top:3px}
-#mobileTradeInfo{display:none;grid-column:1/-1;font-size:11px;line-height:1.45;color:#b9c7d8;overflow-wrap:anywhere}
+#mobileTradeInfo{display:none;grid-column:1/-1;font-size:11px;line-height:1.45;color:#b9c7d8;word-break:keep-all}
 #mobileTradeBar.on #mobileTradeInfo{display:block}
 .risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:8px}
 .risk-card{border:1px solid #e4e8ee;border-radius:9px;padding:11px;background:#fafafa;min-width:0}
@@ -533,6 +544,7 @@ body.no-effects *{box-shadow:none!important}
 }
 body.dark .intel-row,body.dark .lot-row,body.dark .risk-card,body.dark .challenge-card,body.dark .tax-account-card{border-color:#2a3a4d;background:#0f1a26}
 body.dark .tax-account-card.on{border-color:#2dd4bf;background:#0d2b26}
+body.dark .tax-preview-line{border-color:#2a3a4d}
 body.dark .mini-tag{background:#1c2b3a;color:#cbd5e1}
 body.dark .flow-line b{color:#dbe4ef}
 
@@ -3362,8 +3374,9 @@ function renderTaxPreview(){
   const p=taxPreviewFor(s,qty,state.tax.mode);
   if(!p.ok){ box.innerHTML=`<span class="down">${escHtml(p.reason)}</span>`; return; }
   const foreign=isForeignStock(s), basisKRW=foreign?p.basis*fx.usd:p.basis;
-  const taxLine=p.account==="pension"?`<span>인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}</span>`:`<span>예상 세금 <b>${won(p.tax)}</b></span>`;
-  box.innerHTML=`<div class="lot-row"><b>${p.qty}주 매도</b><span>매도대금 ${won(p.revenueKRW)}</span><span>취득원가 ${won(basisKRW)}</span></div><div class="lot-row"><span>평가손익 <b class="${p.profitKRW>=0?"up":"down"}">${p.profitKRW>=0?"+":""}${won(p.profitKRW)}</b></span>${taxLine}<span>세후 ${won(p.netKRW)}</span></div>${p.carryUsed>0?`<div class="muted-sm">이월 손실 ${won(p.carryUsed)} 차감 적용</div>`:""}`;
+  const taxLabel=p.account==="pension"?"인출세 이연":"예상 세금";
+  const taxValue=p.account==="pension"?won(Math.max(0,p.profitKRW*.055)):won(p.tax);
+  box.innerHTML=`<div class="tax-preview-head"><b>${p.qty}주 매도</b><span>${taxModeLabel(p.account)}</span></div><div class="tax-preview-line"><span>매도대금</span><b>${won(p.revenueKRW)}</b></div><div class="tax-preview-line"><span>취득원가</span><b>${won(basisKRW)}</b></div><div class="tax-preview-line"><span>평가손익</span><b class="${p.profitKRW>=0?"up":"down"}">${p.profitKRW>=0?"+":""}${won(p.profitKRW)}</b></div><div class="tax-preview-line"><span>${taxLabel}</span><b>${taxValue}</b></div><div class="tax-preview-line total"><span>세후</span><b>${won(p.netKRW)}</b></div>${p.carryUsed>0?`<div class="muted-sm">이월 손실 ${won(p.carryUsed)} 차감 적용</div>`:""}`;
 }
 function taxTransferStock(){
   const t=ensureAdvancedState().tax, s=stock($("tax-transfer-stock")?$("tax-transfer-stock").value:"");
@@ -3685,8 +3698,8 @@ function renderMobileTradeInfo(){
   const acct=state.tax.mode, max=maxBuyQty(s), available=accountQty(s,acct);
   const qty=Math.max(1,Math.floor(+((($("mobile-trade-qty")||{}).value)||1)||1));
   const p=taxPreviewFor(s,Math.min(qty,Math.max(1,available)),acct);
-  const taxText=available>0&&p.ok?(acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`):"";
-  box.innerHTML=`${taxModeLabel(acct)} · 매수 가능 ${max.toLocaleString("ko-KR")}주 · 매도 가능 ${available.toLocaleString("ko-KR")}주${taxText}`;
+  const taxText=available>0&&p.ok?`<div>${acct==="pension"?`인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:`예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`}</div>`:"";
+  box.innerHTML=`<div>${taxModeLabel(acct)} · 매수 가능 ${max.toLocaleString("ko-KR")}주 · 매도 가능 ${available.toLocaleString("ko-KR")}주</div>${taxText}`;
 }
 function mobileTradeSelect(id){
   ensureAdvancedState();
@@ -5441,14 +5454,14 @@ function taxPanelHtml(){
     ${taxAccountSummaryHtml()}
     <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>이번 연도 납부</small><b>${won(yearPaid)}</b></div><div class="kpi"><small>누적 납부</small><b>${won(state.taxPaid||0)}</b></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b><span class="delta">차감 가능 ${won(t.carryLossBase||0)}</span></div></div>
     ${t.mode==="pension"?`<div class="notice" style="margin-top:10px">인출 시 5.5% 세금이 적용됩니다. <button class="ghost small" onclick="withdrawPensionTax()">연금 세금 납부 (${won((t.pensionDeferred||0)*.055)})</button></div>`:""}
-    <div class="section-head" style="margin-top:14px"><h3>매도 전 세후 미리보기</h3><span class="pill">현재 계좌 · FIFO</span></div>
+    <div class="section-head tax-sec-head" style="margin-top:14px"><h3>매도 전 세후 미리보기</h3><span class="pill">현재 계좌 · FIFO</span></div>
     ${taxPreviewHtml()}
-    <div class="section-head" style="margin-top:14px"><h3>계좌 간 보유 로트 이체</h3><span class="pill">취득원가 유지</span></div>
+    <div class="section-head tax-sec-head" style="margin-top:14px"><h3>계좌 간 보유 로트 이체</h3><span class="pill">취득원가 유지</span></div>
     ${taxTransferHtml()}
-    <div class="section-head" style="margin-top:14px"><h3>절세 손실 확정</h3><span class="pill">평가손실 종목 ${losers.length}개</span></div>
+    <div class="section-head tax-sec-head" style="margin-top:14px"><h3>절세 손실 확정</h3><span class="pill">평가손실 종목 ${losers.length}개</span></div>
     <p class="muted-sm">평가손실이 난 종목을 현재 계좌에서 매도하면 손실이 확정되어 연간 실현손익과 세금이 줄어듭니다.</p>
     <div class="stack" style="margin-top:8px">${losers.length?losers.map(s=>{const qty=accountQty(s,t.mode);return `<div class="holding-row compact"><b>${escHtml(s.name)}</b><span>${qty}주</span><span class="down">${pct((s.price-s.avgBuy)/s.avgBuy)}</span><button class="ghost" onclick="harvestLoss('${s.id}')">손실 확정</button></div>`;}).join("")||`<div class="muted-sm">현재 평가손실 종목이 없습니다.</div>`:"<div class=\"muted-sm\">현재 평가손실 종목이 없습니다.</div>"}</div>
-    <div class="section-head" style="margin-top:14px"><h3>보유 로트 (FIFO)</h3><span class="pill">계좌 태그 · 오래된 취득분부터 매도</span></div>
+    <div class="section-head tax-sec-head" style="margin-top:14px"><h3>보유 로트 (FIFO)</h3><span class="pill">계좌 태그 · 오래된 취득분부터 매도</span></div>
     ${taxLotsHtml()}
   </div>`;
 }
