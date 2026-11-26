@@ -538,9 +538,8 @@ const RESET = total => `
   // 시장 지수·ETF
   g.run("stocks.forEach(s=>{s.price=s.start}); 1");
   check('시장 지수 기준 1000', Math.abs(g.run('marketIndex()') - 1000) < 1e-9, g.run('marketIndex()'));
-  const idxBefore = g.run('marketIndex()');
   g.run('tickMarket(); 1');
-  check('ETF가 지수를 추종', Math.abs(g.run("stock('market_etf').price") - Math.max(100, Math.round(idxBefore*10/100)*100)) < 1, g.run("stock('market_etf').price"));
+  check('ETF가 지수를 추종', Math.abs(g.run("stock('market_etf').price") - Math.max(100, Math.round(g.run('marketIndex()')*10/100)*100)) < 1, g.run("stock('market_etf').price"));
 
   // 확장 필드 저장/복원
   g.run("state.watch=['future_ai']; state.auto={enabled:true,stockPct:40,minCash:500000,every:60}; state.notify.sound=true; state.journal=[{side:'buy',name:'x',qty:1,valueKRW:1,profit:0}]; state.achievements={x:true}; saveGame(); state.watch=[]; state.auto.enabled=false; state.journal=[]; state.achievements={}; state.notify.sound=false; loadGame(); 1");
@@ -783,16 +782,20 @@ const RESET = total => `
   check('쿨다운 중 중복 노동 차단', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1, g.run('state.cash'));
 
   g.run("workLabor('cafe'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
-  check('두 번째 기본 노동으로 최소 생활비 달성', g.run('state.cash') === 105000 && g.run('state.labor.shifts') === 2 && g.run('laborEmergency()') === false, g.run('state.cash'));
+  check('두 번째 기본 노동으로 최소 생활비 달성', g.run('state.cash') === 110000 && g.run('state.labor.shifts') === 2 && g.run('laborEmergency()') === false, g.run('state.cash'));
 
   g.run("workLabor('delivery'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
-  check('경력 2회에 퀵배달 해금', g.run('state.cash') === 190000 && g.run('state.labor.shifts') === 3, g.run('state.cash'));
+  check('경력 2회에 퀵배달 해금', g.run('state.cash') === 210000 && g.run('state.labor.shifts') === 3, g.run('state.cash'));
 
   // 작업을 모두 놓치면 일당도 경력도 없고, 바로 재도전할 수 있습니다.
   const gf = createGame();
   gf.run("clearGame(true); state.cash=0; state.labor={shifts:0,earned:0,lastAt:{},warned:false}; workLabor('convenience'); laborStopAt(0); laborStopAt(0); laborStopAt(0); 1");
   check('전부 실패하면 일당·경력 없음', gf.run('state.cash') === 0 && gf.run('state.labor.shifts') === 0, gf.run('state.cash'));
   check('실패 후 쿨다운 없이 재도전', gf.run("laborRemaining(laborJob('convenience'))") === 0 && gf.run("workLabor('convenience')") === true);
+
+  const gh = createGame();
+  gh.run("clearGame(true); state.cash=0; state.labor={shifts:10,earned:0,lastAt:{},warned:false}; workLabor('freelance'); laborStopAt(0); laborStopAt(0); laborStopAt(0); 1");
+  check('고임금 노동 실패는 복귀 쿨다운', gh.run('state.cash') === 0 && gh.run('state.labor.shifts') === 10 && gh.run("laborRemaining(laborJob('freelance'))") > 0, gh.run("laborRemaining(laborJob('freelance'))"));
 
   // 표시선이 중앙에서 시작하면 열자마자 3연타로 만점이 나왔으므로 왼쪽 끝에서 출발합니다.
   check('노동 시작 위치는 왼쪽 끝', gf.run('laborSession.pos') === 0 && gf.run("laborRoundResult(laborJob('convenience'),laborSession.pos).grade") === 'miss', gf.run('laborSession.pos'));
@@ -803,13 +806,13 @@ const RESET = total => `
 
   // 경력이 쌓이면 고소득 노동이 열립니다.
   g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
-  check('경력 10회에 긴급 외주 해금', g.run('state.cash') === 490000 && g.run('state.labor.shifts') === 11, g.run('state.cash'));
-  check('노동 경력·수입 저장', g.run('buildSaveData().state.labor.shifts') === 11 && g.run('buildSaveData().state.labor.earned') === 490000);
+  check('경력 10회에 긴급 외주 해금', g.run('state.cash') === 610000 && g.run('state.labor.shifts') === 11, g.run('state.cash'));
+  check('노동 경력·수입 저장', g.run('buildSaveData().state.labor.shifts') === 11 && g.run('buildSaveData().state.labor.earned') === 610000);
 
   const saved = JSON.parse(JSON.stringify(g.run('buildSaveData()')));
   const g2 = createGame();
   g2.run('applySaveData(' + JSON.stringify(saved) + '); 1');
-  check('노동 저장 복원', g2.run('state.labor.shifts') === 11 && g2.run('state.labor.earned') === 490000, g2.run('state.labor.shifts'));
+  check('노동 저장 복원', g2.run('state.labor.shifts') === 11 && g2.run('state.labor.earned') === 610000, g2.run('state.labor.shifts'));
 
   g2.run('clearGame(true); 1');
   check('초기화 시 노동 경력 리셋', g2.run('state.labor.shifts') === 0 && g2.run('state.labor.earned') === 0);
@@ -905,6 +908,8 @@ const RESET = total => `
   g.run('for(let i=0;i<120;i++) gameLoop(); 1');
   check('신규 게임 120초 무활동 현금 불변', g.run('state.cash') === g.run('START_CASH'), g.run('state.cash'));
   check('무활동 상태에서 총자산 불변', g.run('grossAssetsKRW()') === g.run('START_CASH'), g.run('grossAssetsKRW()'));
+  check('첫 시작 자금은 0원', g.run('START_CASH') === 0 && g.run('state.cash') === 0, g.run('state.cash'));
+  check('환생 업그레이드 없으면 시작 자금도 0원', g.run('rebirthStartCash()') === 0, g.run('rebirthStartCash()'));
 
   // 총자산·순자산 공식
   g.run(`

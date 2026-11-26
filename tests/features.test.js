@@ -63,9 +63,32 @@ function check(name, ok, detail) {
     return { idx:Math.round(marketIndex()), etf:stock('market_etf').price, x2:stock('market_2x').price, inv:stock('market_inv').price };
   })()`);
   check('지수 ETF가 지수를 추종', Math.abs(tracked.etf - Math.round(tracked.idx * 10 / 100) * 100) < 1, `${tracked.etf} / 지수 ${tracked.idx}`);
-  check('2X ETF가 지수 2배', Math.abs(tracked.x2 - Math.round(10000 * Math.pow(tracked.idx / 1000, 2) / 100) * 100) < 1, tracked.x2);
+  const x2Raw = Math.round(10000 * Math.pow(tracked.idx / 1000, 2) / 100) * 100;
+  check('2X ETF가 지수 2배(±30% 한도)', Math.abs(tracked.x2 - Math.min(13000, x2Raw)) < 1, tracked.x2);
   check('인버스 ETF가 지수 반대', tracked.inv < 10000 && tracked.idx > 1000, tracked.inv);
   check('지수 계산에서 ETF 제외', g.run('stocks.filter(s=>!isIndexFund(s)).length') === g.run('stocks.length') - 3, g.run('stocks.length'));
+}
+
+// ── 보유 주식 모아보기(매도 전용) ─────────────────
+{
+  const g = createGame(13);
+  g.run("const s=stock('future_ai'); s.own=10; s.avgBuy=s.price; const f=stock('nova_sys'); f.own=2; f.avgBuy=f.price; holdingsPage(); 1");
+  const html = g.run("document.getElementById('holdings').innerHTML");
+  check('보유 탭에 모든 보유 종목을 모음', html.includes('보유 주식') && html.includes('미래AI전자') && html.includes('Nova Systems'), html.length);
+  check('보유 탭은 매도 전용', html.includes('매도') && html.includes('전량 매도') && !html.includes('buyQty') && !html.includes('>매수<'), 'no buy');
+  check('보유 탭에 평가액·평가손익 표시', html.includes('data-hold-value="future_ai"') && html.includes('data-hold-pnl="future_ai"'));
+  check('보유 탭 수량 입력칸은 화면별로 구분', html.includes('qty-future_ai-holdings'));
+  g.run("state.marketOpen=true; state.settings.confirmTrades=false; state.cash=0; document.getElementById('qty-future_ai-holdings').value='3'; sellQty('future_ai','holdings'); 1");
+  check('보유 탭에서 입력 수량만큼 매도', g.run("stock('future_ai').own") === 7 && g.run('state.cash') > 0, g.run("stock('future_ai').own"));
+}
+
+// ── 그래프 호버 가격 ─────────────────────────────
+{
+  const g = createGame(14);
+  const point = g.run(`(()=>{ const s=stock('future_ai'); s.start=100; s.hist=[100,120,90]; return sparkPointAt(s,.5); })()`);
+  check('그래프 중간 위치의 실제 가격', point.price === 120 && point.index === 1, JSON.stringify(point));
+  check('그래프 툴팁 마크업 포함', g.run("sparklineHTML(stock('future_ai')).includes('spark-tip')") === true);
+  check('그래프 툴팁은 시작가 대비 수익률 계산', Math.abs(point.pct - 0.2) < 1e-9, point.pct);
 }
 
 // ── 공매도 ─────────────────────────────────────
@@ -152,6 +175,18 @@ function check(name, ok, detail) {
   check('기업 삭제는 보상 없이 삭제', deleted.company === null && Math.abs(deleted.cash) < 1, deleted.cash);
 }
 
+// ── 노동 난이도 ─────────────────────────────────
+{
+  const g = createGame(15);
+  const jobs = g.run('LABOR_JOBS.map(j=>({pay:j.pay,zone:j.zone,speed:j.speed,diff:j.diff}))');
+  const high = jobs.slice(2);
+  check('고임금 노동일수록 성공 구간이 좁아짐', high.every((j,i) => i === 0 || j.zone <= high[i-1].zone), high.map(j=>j.zone).join(','));
+  check('고임금 노동일수록 표시선이 빨라짐', high.every((j,i) => i === 0 || j.speed >= high[i-1].speed), high.map(j=>j.speed).join(','));
+  check('노동 난이도 별점 표시', jobs.every(j=>j.diff>=1&&j.diff<=5));
+  check('회차가 쌓이면 피로로 빨라짐', g.run('laborSpeedMultiplier({results:[{grade:"perfect"},{grade:"perfect"}]})') > 1);
+  check('실패하면 다음 작업이 더 빨라짐', g.run('laborSpeedMultiplier({results:[{grade:"perfect"},{grade:"miss"}]})') > g.run('laborSpeedMultiplier({results:[{grade:"perfect"},{grade:"good"}]})'));
+}
+
 // ── 공모주 ─────────────────────────────────────
 {
   const g = createGame(15);
@@ -217,7 +252,7 @@ function check(name, ok, detail) {
   const g = createGame(18);
   const rendered = g.run(`(()=>{
     const out={};
-    ['short','ipo','guide','company','orders','banking'].forEach(id=>{
+    ['short','ipo','holdings','guide','company','orders','banking'].forEach(id=>{
       try{ renderPage(id); const el=document.getElementById(id);
         out[id]={ len:(el.innerHTML||'').length, bad:/NaN|undefined/.test(el.innerHTML||'') };
       }catch(e){ out[id]={ error:e.message }; }

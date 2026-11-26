@@ -81,7 +81,7 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
     `${g.run('marketDayIndex(0)')}/${g.run('marketDayIndex(599)')}/${g.run('marketDayIndex(600)')}/${g.run('marketDayIndex(1250)')}`);
 }
 
-// ── 첫날 -90% → 다음 날은 떨어진 값 기준으로 새 변동률 ─────
+// ── 첫날 -90% 요청도 -30% 상한 → 다음 날은 떨어진 값 기준으로 새 변동률 ─────
 {
   const g = createGame();
   g.run(`dailyMarketReturn=()=>0; dailyStockReturn=()=>-0.9; state.marketSeconds=600;
@@ -89,15 +89,22 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
     1`);
   g.run('tickMarket(); 1');
   const s1 = g.run(`{ const s=stocks[${DOMESTIC}]; ({price:s.price, prev:s.prevClose, ret:s.dayRet, open:s.dayOpen, idx:s.dayIndex}); }`);
-  check('첫날 -90%: 100,000원 → 10,000원', s1.price === 10000, s1.price);
-  check('첫날 종가가 다음 날 기준가로 기록', s1.prev === 100000 && s1.ret === -0.9 && s1.open === 10000 && s1.idx === 1, JSON.stringify(s1));
+  check('첫날 -90%는 -30%로 제한(70,000원)', s1.price === 70000, s1.price);
+  check('첫날 종가가 다음 날 기준가로 기록', s1.prev === 100000 && Math.abs(s1.ret + 0.3) < 1e-9 && s1.open === 70000 && s1.idx === 1, JSON.stringify(s1));
 
   g.run(`dailyStockReturn=()=>0.50; state.marketSeconds=1200; 1`);
   g.run('tickMarket(); 1');
   const s2 = g.run(`{ const s=stocks[${DOMESTIC}]; ({price:s.price, prev:s.prevClose, dayC:dayChangePct(s), base:(s.price-s.start)/s.start}); }`);
-  check('다음 날 +50%는 10,000원 기준(15,000원)', s2.price === 15000, s2.price);
-  check('전일 종가 대비 오늘 변동률 +50%', Math.abs(s2.dayC - 0.50) < 1e-9, s2.dayC);
-  check('시작가(100,000원) 대비 누적 -85%', Math.abs(s2.base + 0.85) < 1e-9, s2.base);
+  check('다음 날 +50%도 +30%로 제한(91,000원)', s2.price === 91000, s2.price);
+  check('전일 종가 대비 오늘 변동률 +30%', Math.abs(s2.dayC - 0.30) < 1e-9, s2.dayC);
+  check('시작가(100,000원) 대비 누적 -9%', Math.abs(s2.base + 0.09) < 1e-9, s2.base);
+  check('하루 상한·하한 상수는 ±30%', g.run('MAX_DAILY_MOVE') === 0.30);
+  const strict = g.run(`(()=>{ const s={group:"domestic",prevClose:15,price:15,start:15}; return [clampDailyPrice(s,100),clampDailyPrice(s,0.01)]; })()`);
+  check('호가 단위와 무관하게 ±30%를 넘지 않음', strict[0] <= 19.5 && strict[1] >= 10.5, strict.join('/'));
+  g.run(`{ const s=stocks[${DOMESTIC}]; s.price=100000; s.prevClose=100000; applyShock(s,.9); window.__up=s.price; applyShock(s,-.9); window.__down=s.price; } 1`);
+  check('장중 충격도 상한·하한을 지킴', g.run('window.__up') <= 130000 && g.run('window.__down') >= 70000, `${g.run('window.__up')}/${g.run('window.__down')}`);
+  const fxLimit = g.run(`(()=>{ const s={group:"foreign",prevClose:.5,price:.5,start:.5}; return [clampDailyPrice(s,10),clampDailyPrice(s,.001)]; })()`);
+  check('해외 주식도 센트 단위로 ±30% 제한', fxLimit[0] <= .65 && fxLimit[1] >= .35, fxLimit.join('/'));
 }
 
 // ── 카드 표시: 시작가 대비 + 오늘 ─────────────────
@@ -140,18 +147,18 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
     g.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
     prices.push(g.run(`stocks[${DOMESTIC}].price`));
   }
-  check('하루 -60%가 시작가 8% 아래에서도 계속 적용', prices[7] > 0 && prices[7] < 8000, prices.join(' → '));
-  check('복리 하락은 매일 전일 종가 기준', prices[0] === 40000 && prices[1] === 16000 && prices[2] === 6400, `${prices[0]}/${prices[1]}/${prices[2]}`);
+  check('하루 -30%가 계속 복리로 적용', prices[7] > 0 && prices[7] < 8000, prices.join(' → '));
+  check('복리 하락은 매일 전일 종가 기준', prices[0] === 70000 && prices[1] === 49000 && prices[2] === 34300, `${prices[0]}/${prices[1]}/${prices[2]}`);
 
   const g2 = createGame();
   g2.run(`dailyMarketReturn=()=>0; dailyStockReturn=()=>0.6; 1`);
   g2.run(`{ const s=stocks[${DOMESTIC}]; s.start=100000; s.price=100000; s.dayIndex=0; s.dayOpen=100000; s.prevClose=100000; } 1`);
   const ups = [];
-  for (let d = 1; d <= 6; d++) {
+  for (let d = 1; d <= 7; d++) {
     g2.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
     ups.push(g2.run(`stocks[${DOMESTIC}].price`));
   }
-  check('복리 상승도 시작가 6배 위까지 계속 적용', ups[5] > 600000, ups.join(' → '));
+  check('복리 상승도 하루 +30%씩 계속 적용', ups[6] > 600000, ups.join(' → '));
   check('모든 종목 가격이 유효한 양수', g2.run('stocks.every(s=>Number.isFinite(s.price)&&s.price>0)') === true);
   check('국내 저가주는 1원 아래로 내려가지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},0.1)') === 1);
   check('최소 1원에서도 가격이 깨지지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},1)') === 1);
