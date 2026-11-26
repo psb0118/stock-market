@@ -64,7 +64,7 @@ function check(name, ok, detail) {
   })()`);
   check('지수 ETF가 지수를 추종', Math.abs(tracked.etf - Math.round(tracked.idx * 10 / 100) * 100) < 1, `${tracked.etf} / 지수 ${tracked.idx}`);
   const x2Raw = Math.round(10000 * Math.pow(tracked.idx / 1000, 2) / 100) * 100;
-  check('2X ETF가 지수 2배(±30% 한도)', Math.abs(tracked.x2 - Math.min(13000, x2Raw)) < 1, tracked.x2);
+  check('2X ETF가 지수 2배(±50% 한도)', Math.abs(tracked.x2 - Math.min(15000, x2Raw)) < 1, tracked.x2);
   check('인버스 ETF가 지수 반대', tracked.inv < 10000 && tracked.idx > 1000, tracked.inv);
   check('지수 계산에서 ETF 제외', g.run('stocks.filter(s=>!isIndexFund(s)).length') === g.run('stocks.length') - 3, g.run('stocks.length'));
 }
@@ -88,7 +88,7 @@ function check(name, ok, detail) {
   const point = g.run(`(()=>{ const s=stock('future_ai'); s.start=100; s.hist=[100,120,90]; return sparkPointAt(s,.5); })()`);
   check('그래프 중간 위치의 실제 가격', point.price === 120 && point.index === 1, JSON.stringify(point));
   check('그래프 툴팁 마크업 포함', g.run("sparklineHTML(stock('future_ai')).includes('spark-tip')") === true);
-  check('그래프 툴팁은 시작가 대비 수익률 계산', Math.abs(point.pct - 0.2) < 1e-9, point.pct);
+  check('그래프 툴팁은 차트 시작 대비 수익률 계산', Math.abs(point.pct - 0.2) < 1e-9, point.pct);
 }
 
 // ── 공매도 ─────────────────────────────────────

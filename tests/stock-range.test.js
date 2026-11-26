@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * 주가가 시작가 대비 -20%·+120%에 다시 고정되지 않는지 확인하는 장기 회귀 테스트
+ * 주가가 시작가 대비 -60%·+200% 범위를 지키면서도 종목별로 다양하게 움직이는지 확인하는 장기 회귀 테스트
  * 실행: node tests/stock-range.test.js [게임시간(초) = 21600] [시드 = 11,22,33]
  *
  * 배경: 예전에는 시작가의 80%까지 올라가는 지지선과 시작가 2.2배 천장 때문에
- *       주식 카드의 "시작가 대비"가 항상 -20% ~ +120% 안에 갇혀 있었습니다.
- *       이 테스트는 게임 루프를 몇 시간 분량 돌려 그 벽이 되살아나지 않았는지 봅니다.
+ *       이 테스트는 게임 루프를 몇 시간 분량 돌려 극단적인 -99%·+2,300%가
+ *       다시 발생하지 않는지, 종목별 등락이 한 가격대로 붙지 않는지 봅니다.
  */
 'use strict';
 
@@ -147,13 +147,15 @@ console.log('');
 // 1) 하한: 예전 코드에서는 몇 시간만 지나면 모든 종목이 -20% 지지선 위에 갇혔습니다.
 check('최종 주가가 -20% 아래에 남는 종목이 있다', belowOldFloor > 0, `${belowOldFloor}/${finalsCount}종목 · 구간 최저 ${(allMin * 100).toFixed(1)}%`);
 // 2) 상한: 예전 코드는 속보 충격으로 잠깐 넘어도 다음 틱에 2.2배로 되돌려졌습니다.
-check('주가가 +120% 위에 머무는 표본이 있다', aboveCapRate / samples > 0.01, `+130% 초과 ${(aboveCapRate / samples * 100).toFixed(2)}% · 구간 최고 ${(allMax * 100).toFixed(1)}%`);
+check('주가가 +120% 위로도 움직이는 표본이 있다', aboveCapRate / samples > 0.005, `+130% 초과 ${(aboveCapRate / samples * 100).toFixed(2)}% · 구간 최고 ${(allMax * 100).toFixed(1)}%`);
 // 3) 벽에 붙어 머무는 시간이 사실상 없어야 합니다.
 check('-20% 경계에 머무는 표본 3% 미만', oldFloorRate / samples < 0.03, `${(oldFloorRate / samples * 100).toFixed(2)}%`);
 check('+120% 경계에 머무는 표본 3% 미만', oldCapRate / samples < 0.03, `${(oldCapRate / samples * 100).toFixed(2)}%`);
-// 4) 시작가 대비 8%·6배 벽이 없어야 합니다(복리 하락/상승 계속 적용).
-check('시작가 8% 아래 가격도 허용', createContext(1).run('clampStockPrice({group:"domestic",start:100000},1000)') === 1000);
-check('시작가 6배 위 가격도 허용', createContext(1).run('clampStockPrice({group:"domestic",start:100000},1000000)') === 1000000);
+// 4) 장기 가격 범위: 시작가의 40%~300%를 벗어나지 않아야 합니다.
+check('시작가 40% 아래로 내려가지 않음', createContext(1).run('clampStockPrice({group:"domestic",start:100000},1000)') === 40000);
+check('시작가 300% 위로 올라가지 않음', createContext(1).run('clampStockPrice({group:"domestic",start:100000},1000000)') === 300000);
+check('모든 표본이 -60% 이상', allMin >= 0.4 - 1e-9, `${(allMin * 100).toFixed(1)}%`);
+check('모든 표본이 +200% 이하', allMax <= 3 + 1e-9, `${(allMax * 100).toFixed(1)}%`);
 // 5) 종목별 결과가 한 가격대로 수렴하지 않고 흩어져야 합니다.
 check('종목별 최종 주가가 다양하게 갈린다', Math.max(...spread) > 0.15, `최대 표준편차 ${Math.max(...spread).toFixed(2)}`);
 // 6) 가격이 0이나 NaN으로 깨지지 않아야 합니다.

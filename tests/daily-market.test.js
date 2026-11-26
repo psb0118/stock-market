@@ -2,8 +2,8 @@
 /**
  * 하루 단위 시세 테스트
  *  - 게임 10분(600초)마다 하루가 지나고, 전일 종가에 새 일일 변동률이 복리로 적용되는지
- *  - 카드에 "시작가 대비"(누적)와 "오늘"(전일 종가 대비)이 함께 표시되는지
- *  - 시작가 대비 8%·6배 벽 없이 계속되는 복리, 일차·다음 날 카운트다운
+ *  - 카드에 오늘(전일 종가 대비) 변동률만 표시되는지
+ *  - 하루 -30%~+50% 제한, 시작가 대비 -60%~+200% 장기 범위, 일차·다음 날 카운트다운
  *  - 원하는 수량 매수·매도, 공모주 강제 알림, 저장·복원, ETF, 토스트 미리보기
  * 실행: node tests/daily-market.test.js
  */
@@ -95,25 +95,25 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
   g.run(`dailyStockReturn=()=>0.50; state.marketSeconds=1200; 1`);
   g.run('tickMarket(); 1');
   const s2 = g.run(`{ const s=stocks[${DOMESTIC}]; ({price:s.price, prev:s.prevClose, dayC:dayChangePct(s), base:(s.price-s.start)/s.start}); }`);
-  check('다음 날 +50%도 +30%로 제한(91,000원)', s2.price === 91000, s2.price);
-  check('전일 종가 대비 오늘 변동률 +30%', Math.abs(s2.dayC - 0.30) < 1e-9, s2.dayC);
-  check('시작가(100,000원) 대비 누적 -9%', Math.abs(s2.base + 0.09) < 1e-9, s2.base);
-  check('하루 상한·하한 상수는 ±30%', g.run('MAX_DAILY_MOVE') === 0.30);
+  check('다음 날 +50%는 +50%로 제한(105,000원)', s2.price === 105000, s2.price);
+  check('전일 종가 대비 오늘 변동률 +50%', Math.abs(s2.dayC - 0.50) < 1e-9, s2.dayC);
+  check('시작가(100,000원) 대비 누적 +5%', Math.abs(s2.base - 0.05) < 1e-9, s2.base);
+  check('하루 상한 +50%·하한 -30%', g.run('MAX_DAILY_GAIN') === 0.50 && g.run('MAX_DAILY_LOSS') === 0.30);
   const strict = g.run(`(()=>{ const s={group:"domestic",prevClose:15,price:15,start:15}; return [clampDailyPrice(s,100),clampDailyPrice(s,0.01)]; })()`);
-  check('호가 단위와 무관하게 ±30%를 넘지 않음', strict[0] <= 19.5 && strict[1] >= 10.5, strict.join('/'));
+  check('호가 단위와 무관하게 +50%·-30%를 넘지 않음', strict[0] <= 22.5 && strict[1] >= 10.5, strict.join('/'));
   g.run(`{ const s=stocks[${DOMESTIC}]; s.price=100000; s.prevClose=100000; applyShock(s,.9); window.__up=s.price; applyShock(s,-.9); window.__down=s.price; } 1`);
-  check('장중 충격도 상한·하한을 지킴', g.run('window.__up') <= 130000 && g.run('window.__down') >= 70000, `${g.run('window.__up')}/${g.run('window.__down')}`);
+  check('장중 충격도 상한·하한을 지킴', g.run('window.__up') <= 150000 && g.run('window.__down') >= 70000, `${g.run('window.__up')}/${g.run('window.__down')}`);
   const fxLimit = g.run(`(()=>{ const s={group:"foreign",prevClose:.5,price:.5,start:.5}; return [clampDailyPrice(s,10),clampDailyPrice(s,.001)]; })()`);
-  check('해외 주식도 센트 단위로 ±30% 제한', fxLimit[0] <= .65 && fxLimit[1] >= .35, fxLimit.join('/'));
+  check('해외 주식도 센트 단위로 -30%~+50% 제한', fxLimit[0] <= .75 && fxLimit[1] >= .35, fxLimit.join('/'));
 }
 
-// ── 카드 표시: 시작가 대비 + 오늘 ─────────────────
+// ── 카드 표시: 오늘(전일 종가)만 ─────────────────
 {
   const g = createGame();
   g.run(`dailyMarketReturn=()=>0; dailyStockReturn=()=>-0.5; state.marketSeconds=600; window.__ceId=stocks[${DOMESTIC}].id; 1`);
   g.run('tickMarket(); update(); 1');
   const text = g.run('window.__ce.textContent');
-  check('카드에 시작가 대비·오늘 변동률 동시 표시', /시작가 대비 -?\d+\.\d+%/.test(text) && /오늘 -?\d+\.\d+%/.test(text), text);
+  check('카드에 오늘 변동률만 표시', /오늘 -?\d+\.\d+%/.test(text) && /전일 종가 기준/.test(text) && !/시작가 대비/.test(text), text);
   check('하락이면 하락 색상', g.run('window.__ce.className') === 'down', g.run('window.__ce.className'));
 }
 
@@ -147,8 +147,8 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
     g.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
     prices.push(g.run(`stocks[${DOMESTIC}].price`));
   }
-  check('하루 -30%가 계속 복리로 적용', prices[7] > 0 && prices[7] < 8000, prices.join(' → '));
-  check('복리 하락은 매일 전일 종가 기준', prices[0] === 70000 && prices[1] === 49000 && prices[2] === 34300, `${prices[0]}/${prices[1]}/${prices[2]}`);
+  check('하루 -30%가 반복되어도 시작가의 40% 하한을 지킴', prices[2] === 40000 && prices[7] === 40000, prices.join(' → '));
+  check('복리 하락은 매일 전일 종가 기준이며 하한에서 멈춤', prices[0] === 70000 && prices[1] === 49000 && prices[2] === 40000, `${prices[0]}/${prices[1]}/${prices[2]}`);
 
   const g2 = createGame();
   g2.run(`dailyMarketReturn=()=>0; dailyStockReturn=()=>0.6; 1`);
@@ -158,10 +158,35 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
     g2.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
     ups.push(g2.run(`stocks[${DOMESTIC}].price`));
   }
-  check('복리 상승도 하루 +30%씩 계속 적용', ups[6] > 600000, ups.join(' → '));
+  check('상승도 하루 +50%씩 적용되다 시작가의 300% 상한에서 멈춤', ups[2] === 300000 && ups[6] === 300000, ups.join(' → '));
   check('모든 종목 가격이 유효한 양수', g2.run('stocks.every(s=>Number.isFinite(s.price)&&s.price>0)') === true);
-  check('국내 저가주는 1원 아래로 내려가지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},0.1)') === 1);
-  check('최소 1원에서도 가격이 깨지지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},1)') === 1);
+  check('국내 저가주는 시작가의 40% 아래로 내려가지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},0.1)') === 40000);
+  check('국내 고가주는 시작가의 300% 위로 올라가지 않음', g2.run('clampStockPrice({group:"domestic",start:100000},1000000)') === 300000);
+}
+
+// ── 장기 범위와 하루 등락의 분산 ───────────────────
+{
+  const g = createGame();
+  g.run('dailyMarketReturn=()=>-0.08; dailyStockReturn=()=>-0.9; 1');
+  for (let d = 1; d <= 30; d++) g.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
+  const ratios = g.run('stocks.filter(s=>!isIndexFund(s)).map(s=>s.price/s.start)');
+  check('30일 연속 하락에도 -60%보다 아래로 내려가지 않음', Math.min(...ratios) >= 0.4 - 1e-9, Math.min(...ratios));
+  check('30일 연속 하락에도 -99%가 나오지 않음', ratios.every(r => r > 0.39), Math.min(...ratios));
+
+  const g2 = createGame();
+  g2.run('dailyMarketReturn=()=>0.08; dailyStockReturn=()=>0.9; 1');
+  for (let d = 1; d <= 30; d++) g2.run(`state.marketSeconds=${d * 600}; tickMarket(); 1`);
+  const ratios2 = g2.run('stocks.filter(s=>!isIndexFund(s)).map(s=>s.price/s.start)');
+  check('30일 연속 상승에도 +200% 위로 올라가지 않음', Math.max(...ratios2) <= 3 + 1e-9, Math.max(...ratios2));
+  check('30일 연속 상승에도 +2,300%가 나오지 않음', ratios2.every(r => r < 3.01), Math.max(...ratios2));
+}
+
+// ── 모든 종목이 같은 방향으로만 움직이지 않음 ───────
+{
+  const g = createGame();
+  g.run('dailyMarketReturn=()=>0; dailyStockReturn=()=>-0.5; state.marketSeconds=600; tickMarket(); 1');
+  const rets = g.run('stocks.filter(s=>!isIndexFund(s)).map(s=>s.dayRet)');
+  check('전 종목 하락일에도 일부 종목은 상승', rets.some(r => r > 0) && rets.some(r => r < 0), rets.map(r => (r * 100).toFixed(1)).join(','));
 }
 
 // ── 며칠째인지 · 다음 날까지 남은 시간 ────────────
@@ -268,7 +293,8 @@ const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
   });
   g.run(`applySaveData(${old}); 1`);
   const r = g.run(`{ const s=stocks.find(x=>x.id===${JSON.stringify(oldId)}); ({price:s.price, prev:s.prevClose, open:s.dayOpen, ret:s.dayRet, idx:s.dayIndex}); }`);
-  check('구버전 세이브: 전일 종가·시가를 현재가로 보정', r.prev === 12345 && r.open === 12345 && r.ret === 0, JSON.stringify(r));
+  const expected = g.run(`(()=>{ const s=stocks.find(x=>x.id===${JSON.stringify(oldId)}); return clampStockPrice(s,0); })()`);
+  check('구버전 세이브: 극단 가격을 장기 범위로 보정', r.price === expected && r.prev === expected && r.open === expected && r.ret === 0, `${JSON.stringify(r)} / expected ${expected}`);
   check('구버전 세이브: 일차는 현재 게임 시간', Number.isFinite(r.idx), r.idx);
 }
 
