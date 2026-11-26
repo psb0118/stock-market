@@ -191,6 +191,45 @@ function check(name, ok, detail) {
   check('세금 로트·계좌 저장/복원', saved.lots === 6 && saved.mode === 'pension', JSON.stringify(saved));
 }
 
+// ── 5-1. 계좌 전환 후 매도: 일반 세금에 ISA·연금 손익이 섞이지 않음 ──
+{
+  const g = createGame(11);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
+    state.tax={mode:'isa',carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0};
+    state.marketOpen=true; state.settings.confirmTrades=false;
+    const gainSell=(id)=>{
+      const s=stock(id);
+      s.price=100000; s.prevClose=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+      marketBuyShares(s,100);
+      s.price=130457; s.prevClose=130457;
+      marketSellShares(s,100);
+      return s.realizedProfit;
+    };
+    const isaProfit=gainSell('future_ai');
+    const afterIsa={general:state.realizedYTD,isa:state.tax.isaGains,paid:state.taxPaid,profit:isaProfit};
+    setTaxAccount('general');
+    const generalProfit=gainSell('hanbit_semi');
+    const afterGeneral={general:state.realizedYTD,isa:state.tax.isaGains,paid:state.taxPaid,taxable:state.taxedProfit,profit:generalProfit};
+    setTaxAccount('isa');
+    const isaProfit2=gainSell('core_net');
+    const afterIsa2={general:state.realizedYTD,isa:state.tax.isaGains,profit:isaProfit2};
+    return {afterIsa,afterGeneral,afterIsa2};
+  })()`);
+  const isa = r.afterIsa, general = r.afterGeneral, isa2 = r.afterIsa2;
+  check('ISA 매도는 일반 계좌 손익을 건드리지 않음', isa.general === 0 && isa.isa > 2000000, JSON.stringify(isa));
+  check('일반 전환 후 매도는 ISA 손익을 과세하지 않음', general.general > 2500000 && general.general < 3500000 && general.isa === isa.isa, JSON.stringify(general));
+  check('일반 계좌 과세표준은 자기 매도분만 반영', general.taxable < 1000000, general.taxable);
+  check('일반 계좌 세금도 자기 과세표준에만 적용', Math.abs((general.paid - isa.paid) - general.taxable * 0.22) < 1, `${general.paid - isa.paid} / ${general.taxable * 0.22}`);
+  check('ISA로 재전환해도 일반 손익 유지', isa2.general === general.general && isa2.isa > general.isa, JSON.stringify(isa2));
+  const legacy = g.run(`(()=>{
+    state.tax={mode:'general',carryLoss:0,pensionDeferred:1000000,isaGains:3000000,isaTaxed:0};
+    state.realizedYTD=6000000; ensureAdvancedState();
+    return {general:state.realizedYTD,split:state.tax.splitVersion};
+  })()`);
+  check('구버전 합산 손익을 계좌별로 1회 분리', legacy.general === 2000000 && legacy.split === 1, JSON.stringify(legacy));
+}
+
 // ── 6. 노동 경력·컨디션·스킬 ─────────────────────
 {
   const g = createGame(6);
