@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Firebase Console → Firestore → 규칙에 붙여 넣거나,
+// firebase deploy --only firestore:rules 로 배포하세요.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // 클라우드 저장은 본인만 읽고 쓸 수 있습니다.
+    match /saves/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // 리더보드는 공개 읽기, 쓰기는 본인 문서만 허용합니다.
+    // 점수는 클라이언트가 계산하므로 규칙은 형식과 상한만 검사합니다.
+    match /scores/{docId} {
+      allow read: if true;
+      allow create, update: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.season is string
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 1000000000000000;
+      allow delete: if false;
+    }
+  }
+}

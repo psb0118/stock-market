@@ -185,6 +185,15 @@ function check(name, ok, detail) {
   check('노동 난이도 별점 표시', jobs.every(j=>j.diff>=1&&j.diff<=5));
   check('회차가 쌓이면 피로로 빨라짐', g.run('laborSpeedMultiplier({results:[{grade:"perfect"},{grade:"perfect"}]})') > 1);
   check('실패하면 다음 작업이 더 빨라짐', g.run('laborSpeedMultiplier({results:[{grade:"perfect"},{grade:"miss"}]})') > g.run('laborSpeedMultiplier({results:[{grade:"perfect"},{grade:"good"}]})'));
+
+  const modes = g.run('LABOR_JOBS.map(j=>j.mode)');
+  check('노동 미니게임 4종', new Set(modes).size === 4, modes.join(','));
+  check('연타 일자리는 목표 횟수가 있음', g.run("LABOR_JOBS.filter(j=>j.mode==='tap').every(j=>j.tapTarget>=10)"));
+  check('계산 문제는 정답 포함 4개 보기', g.run('(()=>{const q=laborMakeMath();return q.options.length===4&&q.options.includes(q.answer)})()'));
+  const memLen = g.run("(()=>{laborSession={job:laborJob('research'),mode:'memory',round:0,results:[],paid:false};laborBeginRound();const n=laborSession.seq.length;laborAbortShift(true);return n;})()");
+  check('기억 게임은 3개부터 시작', memLen === 3, memLen);
+  const tapGrade = g.run("(()=>{laborSession={job:{tapTarget:10},mode:'tap',taps:10,results:[],round:0,paid:false};laborTapEnd();const g=laborSession.results[0].grade;laborAbortShift(true);return g;})()");
+  check('연타 목표 달성은 완벽 판정', tapGrade === 'perfect', tapGrade);
 }
 
 // ── 공모주 ─────────────────────────────────────
@@ -268,6 +277,19 @@ function check(name, ok, detail) {
   check('신규 페이지가 NaN·undefined 없이 렌더', ok, detail.join(' '));
   check('도움말 페이지에 게임 방법 안내', g.run("document.getElementById('guide').innerHTML.includes('게임 방법')") === true);
   check('기업 페이지에 이득/위협 안내', g.run("document.getElementById('company').innerHTML.includes('위협')") === true);
+}
+
+// ── Firebase 미설정 · 가격 알림 ─────────────────
+{
+  const g = createGame(19);
+  check('Firebase 미설정 시 로컬 저장 유지', g.run('firebaseConfigured()') === false, g.run('firebaseConfigured()'));
+  check('Firebase 설정 안내 표시', g.run("firebasePanelHtml().includes('Firebase 설정')") === true);
+  const hit = g.run(`(()=>{
+    state.priceAlerts=[{stockId:'future_ai',price:1,dir:'above',armed:true}];
+    const n=checkPriceAlerts();
+    return {n, armed:state.priceAlerts[0].armed, alert:(state.alerts||[]).some(a=>a.title==='가격 알림')};
+  })()`);
+  check('가격 알림 1회 발동 후 해제', hit.n === 1 && hit.armed === false && hit.alert === true, JSON.stringify(hit));
 }
 
 console.log('');

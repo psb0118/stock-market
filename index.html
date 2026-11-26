@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#17202b" />
 <!-- 클라우드 저장·리더보드 Worker 주소. 비워 두면 기능이 꺼집니다. -->
 <meta name="cloud-api" content="" />
+<!-- Firebase 웹 앱 설정(Google 로그인·클라우드 저장·리더보드). 비워 두면 기능이 꺼집니다. -->
+<meta name="firebase-config" content="" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <title>머니 플레이그라운드</title>
@@ -40,7 +42,9 @@ p{margin:0;color:#667085;line-height:1.45}
 .top{display:flex;justify-content:space-between;gap:8px}
 .pill{display:inline-flex;align-items:center;border-radius:999px;background:#edf2f7;color:#334155;font-size:12px;padding:5px 8px;white-space:nowrap}
 .price{font-size:25px;font-weight:900;margin:12px 0 3px}
-.up{color:#0f766e}.down{color:#b42318}
+/* 국내 증권 표기: 상승은 빨강, 하락은 파랑. 색을 구분하지 못해도 화살표로 방향을 알 수 있습니다. */
+.up{color:#d92d20}.down{color:#1d4ed8}
+.up::before{content:"▲ ";font-size:.8em}.down::before{content:"▼ ";font-size:.8em}
 .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0}
 .mini div,.product-grid div{border:1px solid #d8ded4;background:#fafafa;border-radius:7px;padding:8px}
 .mini small,.product-grid small{display:block;color:#667085;margin-bottom:5px}
@@ -241,6 +245,7 @@ body.dark .product-grid div,body.dark .mini div{background:#0f1a26;border-color:
 body.dark .toast{background:#1b2a3a;color:#e2e8f0}
 body.dark .trend{background:#0f1a26;border-color:#2a3a4d}
 body.dark .breaking{background:#060b12}
+body.dark .up{color:#ff8a80}body.dark .down{color:#8ab4f8}
 /* ── 2026 UI 리디자인: 금융 대시보드 ───────────────────────── */
 :root{
   --bg:#f2f4f7; --surface:#ffffff; --surface-2:#f8fafc; --ink:#101828; --muted:#667085;
@@ -547,6 +552,23 @@ body.dark .tax-account-card.on{border-color:#2dd4bf;background:#0d2b26}
 body.dark .tax-preview-line{border-color:#2a3a4d}
 body.dark .mini-tag{background:#1c2b3a;color:#cbd5e1}
 body.dark .flow-line b{color:#dbe4ef}
+/* 모바일 대시보드: 핵심 지표 아래의 보조 섹션은 접어 둘 수 있습니다. */
+.dash-more[hidden]{display:none}
+.dash-toggle{min-height:34px;font-size:12px}
+/* 종목 비교 표(가로 스크롤) */
+.compare-wrap{overflow-x:auto}
+.compare-table{width:100%;border-collapse:collapse;font-size:12px}
+.compare-table th,.compare-table td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:right;white-space:nowrap}
+.compare-table th:first-child,.compare-table td:first-child{text-align:left}
+.compare-table th{color:var(--muted);font-weight:650}
+/* 노동 미니게임: 타이밍·연타·기억·계산 4종 */
+.labor-mode{font-size:11px}
+.labor-tap-count{font-size:30px;font-weight:900;text-align:center;margin:12px 0 4px}
+.labor-tap-time{text-align:center;color:var(--muted);font-size:12px}
+.labor-seq{display:flex;justify-content:center;gap:8px;font-size:26px;min-height:40px;margin:12px 0}
+.labor-options{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.labor-options button{min-height:46px;font-size:18px}
+.labor-math-q{font-size:26px;font-weight:900;text-align:center;margin:14px 0}
 
 </style>
 </head>
@@ -892,14 +914,18 @@ const METALS=[
 // 쿨다운은 게임 배속과 무관한 실제 시간 기준이라 10배속에서도 반복 수익이 폭주하지 않습니다.
 const LABOR_MIN_CASH = 100000;
 const LABOR_JOBS=[
-// 일당은 미니게임 성과에 비례합니다. zone(성공 구간 폭의 절반)·speed(초당 이동량)로 난이도를 조절합니다.
-// 일당이 높을수록 성공 구간이 좁고 표시선이 빨라져, 실제 노동처럼 집중력이 더 필요합니다.
-{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,desc:"야간 계산·매장 정리",zone:.20,speed:.80,diff:2},
-{id:"cafe",name:"카페 서빙",icon:"☕",pay:50000,cooldown:25,req:0,desc:"주문 접수·음료 서빙",zone:.22,speed:.72,diff:2},
-{id:"delivery",name:"퀵배달",icon:"🛵",pay:100000,cooldown:35,req:2,desc:"도심 단거리 배달",zone:.145,speed:1.15,diff:3},
-{id:"logistics",name:"물류센터",icon:"📦",pay:170000,cooldown:50,req:4,desc:"상하차·택배 분류",zone:.115,speed:1.35,diff:4},
-{id:"tutoring",name:"과외",icon:"📚",pay:260000,cooldown:70,req:7,desc:"중학생 수학 과외",zone:.095,speed:1.50,diff:4},
-{id:"freelance",name:"긴급 외주",icon:"💻",pay:400000,cooldown:100,req:10,desc:"간단한 웹·디자인 수정",zone:.080,speed:1.70,diff:5}
+// 일당은 미니게임 성과에 비례합니다. mode로 작업 방식을 고르고, 각 방식의 난이도는
+// zone(성공 구간)·speed(표시선 속도)·tapTarget(목표 연타 수)으로 조절합니다.
+// 기본 일자리는 타이밍, 상위 일자리는 연타·기억·계산으로 바뀌어 반복감을 줄입니다.
+{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,mode:"timing",desc:"야간 계산·매장 정리",zone:.20,speed:.80,diff:2},
+{id:"cafe",name:"카페 서빙",icon:"☕",pay:50000,cooldown:25,req:0,mode:"timing",desc:"주문 접수·음료 서빙",zone:.22,speed:.72,diff:2},
+{id:"delivery",name:"퀵배달",icon:"🛵",pay:100000,cooldown:35,req:2,mode:"timing",desc:"도심 단거리 배달",zone:.145,speed:1.15,diff:3},
+{id:"logistics",name:"물류센터",icon:"📦",pay:170000,cooldown:50,req:4,mode:"timing",desc:"상하차·택배 분류",zone:.115,speed:1.35,diff:4},
+{id:"tutoring",name:"과외",icon:"📚",pay:260000,cooldown:70,req:7,mode:"timing",desc:"중학생 수학 과외",zone:.095,speed:1.50,diff:4},
+{id:"freelance",name:"긴급 외주",icon:"💻",pay:400000,cooldown:100,req:10,mode:"timing",desc:"간단한 웹·디자인 수정",zone:.080,speed:1.70,diff:5},
+{id:"data",name:"데이터 입력",icon:"⌨️",pay:450000,cooldown:110,req:12,mode:"tap",tapTarget:20,desc:"주문서 입력·검수",zone:.075,speed:1.80,diff:5},
+{id:"research",name:"리서치 보조",icon:"🔬",pay:550000,cooldown:130,req:14,mode:"memory",desc:"자료 정리·출처 대조",zone:.070,speed:1.90,diff:5},
+{id:"consulting",name:"전략 컨설팅",icon:"📈",pay:700000,cooldown:150,req:16,mode:"math",desc:"시장 분석·제안서",zone:.065,speed:2.00,diff:5}
 ];
 // 가상 기업: 설립 → 확장 → 인수합병
 const COMPANY_LEVELS=[
@@ -1008,6 +1034,7 @@ const state={
   watch: [],        // 관심종목 id
   journal: [],      // 최근 거래 200건
   alerts: [],       // 알림 30건
+  priceAlerts: [],  // 종목별 가격 도달 알림(1회성)
   achievements: {}, // 달성한 업적
   loanTotal: 0,     // 누적 대출 실행액(상환 업적 판정)
   dividendTotal: 0, // 누적 배당 수령액
@@ -1016,7 +1043,7 @@ const state={
   auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0, autoSell:false, takeProfit:20, stopLoss:10, rebalance:false, rebStockPct:60, rebBand:5, taxAware:false, taxBudget:0},
   // 환생(영구 성장) 데이터. 일반 진행 초기화와 분리되어 유지됩니다.
   rebirth: {count:0, points:0, spent:0, upgrades:{}, bestNet:0, history:[], notified:false},
-  ui: {assetTab:"overview", mobileStock:""},
+  ui: {assetTab:"overview", mobileStock:"", dashMore:null},
   labor: {shifts:0, earned:0, lastAt:{}, warned:false, xp:0, points:0, stamina:100, skills:{focus:0, stamina:0, service:0}}, // 단기 노동 경력·컨디션·스킬
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
@@ -1558,7 +1585,7 @@ function laborJobCard(job){
   const l=ensureLabor(), locked=l.shifts<job.req, remain=laborRemaining(job);
   const label=locked?`🔒 노동 ${job.req}회 필요`:(remain>0?`${Math.ceil(remain/1000)}초 후`:"일하기");
   return `<article class="labor-card${locked?" locked":""}">
-    <div class="labor-top"><b>${job.icon} ${job.name}</b><span class="pill">최대 +${won(job.pay)}</span></div>
+    <div class="labor-top"><b>${job.icon} ${job.name}</b><span class="pill labor-mode">${laborModeLabel(laborModeOf(job))} · 최대 +${won(job.pay)}</span></div>
     <small>${job.desc} · 난이도 ${"★".repeat(job.diff||1)}${"☆".repeat(Math.max(0,5-(job.diff||1)))} · 실제 ${job.cooldown}초</small>
     <div class="labor-meta"><span>누적 ${l.shifts}회</span><span>총 ${won(l.earned)}</span></div>
     <button class="${locked?"ghost":"buy"}" data-labor-btn="${job.id}" onclick="workLabor('${job.id}')" ${locked?"disabled":""}>${label}</button>
@@ -1590,19 +1617,163 @@ function laborShiftPay(job,results,condition){
   const skill=1+.02*(l.skills.service||0);
   return {pay:Math.max(0,Math.round(base*rate*bonus*cond*skill/1000)*1000),perfect,good,miss,rate,bonus,condition:cond,skill};
 }
+function laborModeOf(job){ return (job&&job.mode)||"timing"; }
+function laborModeLabel(mode){ return {timing:"타이밍",tap:"연타",memory:"기억",math:"계산"}[mode]||"타이밍"; }
 function laborGameHtml(job){
+  const mode=laborModeOf(job);
   const zone=laborZoneFor(job)*100, perfect=zone*.35;
   const band=(left,width,cls)=>`<span class="labor-target${cls?" "+cls:""}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></span>`;
+  const intro={
+    timing:"표시선이 초록 구간을 지나갈 때 <b>멈추기</b>를 누르세요. 3번의 작업을 마치면 일당이 지급되고, 놓친 만큼 깎입니다.",
+    tap:"3초 동안 목표 횟수만큼 <b>빠르게 누르세요</b>. 목표에 가까울수록 일당이 커집니다.",
+    memory:"먼저 보여 주는 순서를 기억한 뒤 <b>같은 순서로</b> 누르세요. 두 번 틀리면 실패입니다.",
+    math:"6초 안에 정답을 고르세요. 빨리 맞힐수록 높은 판정을 받습니다."
+  }[mode];
+  const commonMeta=`<div class="labor-game-meta"><span>${laborModeLabel(mode)} · 작업 <b id="labor-round">1 / ${LABOR_ROUNDS}</b></span><span id="labor-grades">⭐ 완벽 · ✅ 성공 · ❌ 실패</span></div>`;
+  let body="", action="";
+  if(mode==="timing"){
+    body=`<div class="labor-track" role="img" aria-label="노동 타이밍 바">${band(50-zone,zone*2,"")}${band(50-perfect,perfect*2,"perfect")}<span class="labor-cursor" id="labor-cursor" style="left:0%"></span></div>`;
+    action=`<button id="labor-stop-btn" class="buy" onclick="laborStop()">멈추기</button>`;
+  } else if(mode==="tap"){
+    body=`<div class="labor-tap-count" id="labor-tap-count">0 / ${job.tapTarget||12}</div><div class="labor-tap-time" id="labor-tap-time">3.0초</div>`;
+    action=`<button id="labor-stop-btn" class="buy" onclick="laborTap()">빠르게 누르기</button>`;
+  } else if(mode==="memory"){
+    body=`<div class="labor-seq" id="labor-seq"></div><div class="labor-options" id="labor-options"></div>`;
+    action=`<span class="muted-sm">제시된 순서를 그대로 누르세요.</span>`;
+  } else {
+    body=`<div class="labor-math-q" id="labor-question">-</div><div class="labor-options" id="labor-options"></div>`;
+    action=`<span class="muted-sm">정답을 고르면 다음 문제로 넘어갑니다.</span>`;
+  }
   return `<div class="labor-game">
-    <p>작업대의 표시선이 초록 구간을 지나갈 때 <b>멈추기</b>를 누르세요. 작업 ${LABOR_ROUNDS}번을 마치면 일당이 지급되고, 놓친 만큼 일당이 깎입니다. 회차가 진행될수록 피로가 쌓여 빨라지고, 실패하면 다음 작업은 더 빨라집니다.</p>
-    <div class="labor-track" role="img" aria-label="노동 타이밍 바">
-      ${band(50-zone,zone*2,"")}${band(50-perfect,perfect*2,"perfect")}<span class="labor-cursor" id="labor-cursor" style="left:0%"></span>
-    </div>
-    <div class="labor-game-meta"><span>작업 <b id="labor-round">1 / ${LABOR_ROUNDS}</b></span><span>피로 <b id="labor-fatigue">0%</b></span><span id="labor-grades">⭐ 완벽 · ✅ 성공 · ❌ 실패</span></div>
-    <div class="labor-game-result" id="labor-result">표시선을 초록 구간에 맞춰 주세요.</div>
-    <button id="labor-stop-btn" class="buy" onclick="laborStop()">멈추기</button>
-    <button class="ghost" onclick="closeLaborGame()">그만두기</button>
+    <p>${intro}</p>
+    ${body}
+    ${commonMeta}
+    <div class="labor-game-result" id="labor-result">${mode==="timing"?"표시선을 초록 구간에 맞춰 주세요.":mode==="memory"?"순서를 기억하세요…":mode==="math"?"준비…":"시작!"}</div>
+    <div class="button-row">${action}<button class="ghost" onclick="closeLaborGame()">그만두기</button></div>
   </div>`;
+}
+function laborClearTimer(){
+  const s=laborSession; if(!s) return;
+  if(s.raf && typeof cancelAnimationFrame==="function"){ try{ cancelAnimationFrame(s.raf); }catch(e){} s.raf=0; }
+  if(s.timer){ clearInterval(s.timer); s.timer=0; }
+  if(s.timeout){ clearTimeout(s.timeout); s.timeout=0; }
+  if(s.mathTimer){ clearInterval(s.mathTimer); s.mathTimer=0; }
+}
+function laborBeginRound(){
+  const s=laborSession; if(!s||s.paid) return false;
+  laborClearTimer();
+  s.roundStart=Date.now();
+  if(s.mode==="timing"){
+    s.pos=0; s.dir=1; s.last=0;
+    const cur=$("labor-cursor"); if(cur&&cur.style) cur.style.left="0%";
+    laborLoop(0);
+  } else if(s.mode==="tap"){
+    s.taps=0; s.tapLeft=3;
+    laborRenderTap();
+    s.timer=setInterval(()=>{
+      if(!laborSession||laborSession!==s) return;
+      s.tapLeft=Math.max(0,s.tapLeft-.1);
+      laborRenderTap();
+      if(s.tapLeft<=0) laborTapEnd();
+    },100);
+  } else if(s.mode==="memory"){
+    s.phase="show"; s.input=[]; s.mistakes=0;
+    const icons=["🍎","🍋","🍇","🍓","🥝","🍒"];
+    s.seq=Array.from({length:3+s.round},()=>icons[Math.floor(Math.random()*icons.length)]);
+    s.icons=icons;
+    laborRenderMemory();
+    s.timeout=setTimeout(()=>{ if(!laborSession||laborSession!==s) return; s.phase="input"; laborRenderMemory(); },1200);
+  } else {
+    s.q=laborMakeMath(); s.qStart=Date.now(); laborRenderMath();
+  }
+  return true;
+}
+function laborRenderTap(){
+  const s=laborSession; if(!s) return;
+  const t=$("labor-tap-count"), left=$("labor-tap-time");
+  if(t) t.textContent=`${s.taps} / ${s.job.tapTarget||12}`;
+  if(left) left.textContent=`${Math.max(0,s.tapLeft).toFixed(1)}초`;
+}
+function laborTap(){
+  const s=laborSession; if(!s||s.mode!=="tap") return false;
+  s.taps=(s.taps||0)+1; laborRenderTap(); return true;
+}
+function laborTapEnd(){
+  const s=laborSession; if(!s||s.mode!=="tap") return false;
+  laborClearTimer();
+  const target=s.job.tapTarget||12;
+  const grade=s.taps>=target?"perfect":s.taps>=Math.ceil(target*.6)?"good":"miss";
+  return laborPushResult(grade);
+}
+function laborRenderMemory(){
+  const s=laborSession; if(!s) return;
+  const seq=$("labor-seq");
+  if(seq) seq.innerHTML=s.phase==="show"?s.seq.map(x=>`<span>${x}</span>`).join(""):s.seq.map(()=>`<span>?</span>`).join("");
+  const opts=$("labor-options");
+  if(opts){
+    if(s.phase==="show") opts.innerHTML="";
+    else opts.innerHTML=(s.icons||[]).map((ic,i)=>`<button class="ghost" onclick="laborMemoryClick(${i})">${ic}</button>`).join("");
+  }
+  const msg=$("labor-result");
+  if(msg) msg.textContent=s.phase==="show"?"순서를 기억하세요…":`입력 ${s.input.length} / ${s.seq.length}${s.mistakes?` · 실수 ${s.mistakes}`:""}`;
+}
+function laborMemoryClick(index){
+  const s=laborSession; if(!s||s.mode!=="memory"||s.phase!=="input") return false;
+  const icons=s.icons||[];
+  const expected=s.seq[s.input.length];
+  if(icons[index]===expected){
+    s.input.push(expected);
+    if(s.input.length>=s.seq.length) return laborPushResult(s.mistakes?"good":"perfect");
+    laborRenderMemory();
+  } else {
+    s.mistakes=(s.mistakes||0)+1;
+    s.input=[];
+    if(s.mistakes>=2) return laborPushResult("miss");
+    laborRenderMemory();
+  }
+  return true;
+}
+function laborMakeMath(){
+  const a=2+Math.floor(Math.random()*9), b=2+Math.floor(Math.random()*9);
+  const op=Math.random()<.5?"+":"×";
+  const ans=op==="+"?a+b:a*b;
+  const set=new Set([ans]);
+  while(set.size<4){ const d=ans+(Math.floor(Math.random()*9)-4); if(d>0&&d!==ans) set.add(d); }
+  const options=[...set].sort(()=>Math.random()-.5);
+  return {text:`${a} ${op} ${b} = ?`,answer:ans,options};
+}
+function laborRenderMath(){
+  const s=laborSession; if(!s||!s.q) return;
+  const q=$("labor-question"); if(q) q.textContent=s.q.text;
+  const opts=$("labor-options");
+  if(opts) opts.innerHTML=s.q.options.map((v,i)=>`<button class="ghost" onclick="laborMathAnswer(${i})">${v}</button>`).join("");
+  const msg=$("labor-result"); if(msg) msg.textContent="남은 시간 6.0초";
+  if(s.mathTimer) clearInterval(s.mathTimer);
+  s.mathTimer=setInterval(()=>{
+    if(!laborSession||laborSession!==s) return;
+    const left=6-(Date.now()-s.qStart)/1000;
+    const m=$("labor-result"); if(m) m.textContent=`남은 시간 ${Math.max(0,left).toFixed(1)}초`;
+    if(left<=0){ laborClearTimer(); laborPushResult("miss"); }
+  },200);
+}
+function laborMathAnswer(index){
+  const s=laborSession; if(!s||s.mode!=="math"||!s.q) return false;
+  const picked=s.q.options[index];
+  const elapsed=Date.now()-s.qStart;
+  laborClearTimer();
+  return laborPushResult(picked===s.q.answer?(elapsed<=3000?"perfect":"good"):"miss");
+}
+function laborPushResult(grade){
+  const s=laborSession; if(!s||s.paid) return false;
+  laborClearTimer();
+  s.results.push({grade});
+  s.round++;
+  const badge=$("labor-grades"); if(badge) badge.textContent=s.results.map(x=>x.grade==="perfect"?"⭐":x.grade==="good"?"✅":"❌").join(" ");
+  const roundEl=$("labor-round"); if(roundEl) roundEl.textContent=`${Math.min(s.round+1,LABOR_ROUNDS)} / ${LABOR_ROUNDS}`;
+  const resEl=$("labor-result"); if(resEl) resEl.textContent=grade==="perfect"?"⭐ 완벽한 작업!":grade==="good"?"✅ 작업 성공":"❌ 작업 실패";
+  if(s.round>=LABOR_ROUNDS) return laborFinishShift();
+  s.timeout=setTimeout(()=>{ if(laborSession===s) laborBeginRound(); },350);
+  return true;
 }
 function laborSpeedMultiplier(s){
   const list=(s&&s.results)||[];
@@ -1612,7 +1783,7 @@ function laborSpeedMultiplier(s){
   return (1 + .14*list.length + .18*misses)*(1+(1-laborCondition())*.25);
 }
 function laborLoop(ts){
-  const s=laborSession; if(!s) return;
+  const s=laborSession; if(!s||s.mode!=="timing"||s.paid) return;
   const now=typeof ts==="number"?ts:0;
   if(!s.last) s.last=now;
   const dt=Math.max(0,Math.min(.05,(now-s.last)/1000)); s.last=now;
@@ -1624,7 +1795,7 @@ function laborLoop(ts){
 }
 function laborAbortShift(quiet){
   const s=laborSession; if(!s) return false;
-  if(s.raf && typeof cancelAnimationFrame==="function"){ try{ cancelAnimationFrame(s.raf); }catch(e){} }
+  laborClearTimer();
   laborSession=null;
   if(!quiet) addLog("💼 노동을 중단했습니다. 일당은 지급되지 않습니다.");
   return true;
@@ -1635,31 +1806,20 @@ function laborStartShift(jobOrId){
   // 이미 진행 중인 작업이 있으면 새 세션을 열지 않습니다(중복 시작·보상 중복 방지).
   if(laborSession) return false;
   // 표시선은 왼쪽 끝에서 출발합니다. 중앙에서 시작하면 열자마자 누르는 것으로 완벽 판정이 납니다.
-  laborSession={job,round:0,results:[],pos:0,dir:1,last:0,raf:0,paid:false};
+  laborSession={job,mode:laborModeOf(job),round:0,results:[],pos:0,dir:1,last:0,raf:0,timer:0,timeout:0,mathTimer:0,paid:false};
   openModal(`${job.icon} ${job.name}`,laborGameHtml(job));
-  laborLoop(0);
+  laborBeginRound();
   return true;
 }
 function laborStop(){
   const s=laborSession; if(!s) return false;
+  if(s.mode!=="timing") return false;
   return laborStopAt(s.pos);
 }
 function laborStopAt(p){
-  const s=laborSession; if(!s || s.paid) return false;
+  const s=laborSession; if(!s || s.paid || s.mode!=="timing") return false;
   const r=laborRoundResult({...s.job,zone:laborZoneFor(s.job)},p);
-  s.results.push(r);
-  s.round++;
-  const roundEl=$("labor-round"); if(roundEl) roundEl.textContent=`${Math.min(s.round+1,LABOR_ROUNDS)} / ${LABOR_ROUNDS}`;
-  const fatigueEl=$("labor-fatigue"); if(fatigueEl) fatigueEl.textContent=`${Math.round((laborSpeedMultiplier(s)-1)*100)}%`;
-  const resEl=$("labor-result"); if(resEl) resEl.textContent=r.grade==="perfect"?"⭐ 완벽한 작업!":(r.grade==="good"?"✅ 작업 성공":"❌ 작업 실패");
-  const badge=$("labor-grades"); if(badge) badge.textContent=s.results.map(x=>x.grade==="perfect"?"⭐":x.grade==="good"?"✅":"❌").join(" ");
-  if(s.round<LABOR_ROUNDS){
-    // 다음 회차를 다시 왼쪽 끝에서 시작해, 같은 자리 연타로 완벽을 반복하지 못하게 합니다.
-    s.pos=0; s.dir=1; s.last=0;
-    const cur=$("labor-cursor"); if(cur&&cur.style) cur.style.left="0%";
-    return true;
-  }
-  return laborFinishShift();
+  return laborPushResult(r.grade);
 }
 function laborShowResult(job,sum,pay){
   const line=pay>0?`일당 <b>${won(pay)}</b>을 받았습니다.`:(job.req>0?`모든 작업을 놓쳐 일당을 받지 못했습니다. ${job.cooldown}초 뒤 다시 도전할 수 있습니다.`:"모든 작업을 놓쳐 일당을 받지 못했습니다. 다시 도전하세요.");
@@ -2718,7 +2878,7 @@ function assetTrendSVG(){
   const w=600,h=120,step=w/Math.max(1,vals.length-1);
   const coords=vals.map((v,i)=>`${(i*step).toFixed(1)},${(h-((v-min)/span)*(h-6)-3).toFixed(1)}`).join(" ");
   const up=vals[vals.length-1]>=vals[0];
-  const color=up?"#0f766e":"#b42318";
+  const color=up?"#d92d20":"#1d4ed8";
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,${h} ${coords} ${w},${h}" fill="${color}" opacity=".10"/><polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
@@ -2796,7 +2956,7 @@ function sparklineSVG(s){
   const w = 100, h = 28, step = w / Math.max(1, data.length - 1);
   const points = data.map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(" ");
   const up = data[data.length - 1] >= data[0];
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="${up ? "#0f766e" : "#b42318"}" stroke-width="1.6"/></svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="${up ? "#d92d20" : "#1d4ed8"}" stroke-width="1.6"/></svg>`;
 }
 // 그래프 위 마우스 위치를 실제 가격으로 바꿔 줍니다. hist는 최근 60틱의 실제 가격입니다.
 function sparkPointAt(s, ratio){
@@ -3186,8 +3346,11 @@ function ensureAdvancedState(){
   if(!state.challenge || typeof state.challenge!=="object") state.challenge={active:null,history:[],best:0,last:null};
   if(!Array.isArray(state.challenge.history)) state.challenge.history=[];
   state.challenge.best=Math.max(0,+state.challenge.best||0);
-  if(!state.ui || typeof state.ui!=="object") state.ui={assetTab:"overview",mobileStock:""};
+  if(!state.ui || typeof state.ui!=="object") state.ui={assetTab:"overview",mobileStock:"",dashMore:null};
   if(typeof state.ui.mobileStock!=="string") state.ui.mobileStock="";
+  if(state.ui.dashMore!==true && state.ui.dashMore!==false) state.ui.dashMore=null;
+  if(!Array.isArray(state.priceAlerts)) state.priceAlerts=[];
+  state.priceAlerts=state.priceAlerts.filter(a=>a&&stock(a.stockId)&&+a.price>0).map(a=>({stockId:a.stockId,price:+a.price,dir:a.dir==="below"?"below":"above",armed:a.armed!==false}));
   if(!["base","crash","rate","fx"].includes(state.riskScenario)) state.riskScenario="base";
   return state;
 }
@@ -3988,7 +4151,163 @@ function cloudRenderPanel(msg){
   if(el) el.innerHTML=cloudPanelHTML(msg);
 }
 
+// ── Firebase: Google 로그인 · 클라우드 저장 · 실제 리더보드 ─────────
+// meta[name=firebase-config]에 웹 앱 설정(JSON)을 넣으면 켜집니다. 비워 두면 기존처럼 로컬 저장만 합니다.
+const FIREBASE_VERSION="10.12.5";
+let FIREBASE_CONFIG=null;
+try{
+  const fm=document.querySelector('meta[name="firebase-config"]');
+  const raw=(fm&&fm.getAttribute?fm.getAttribute("content"):"")||"";
+  if(raw.trim()) FIREBASE_CONFIG=JSON.parse(raw);
+}catch(e){ FIREBASE_CONFIG=null; }
+let fbApp=null, fbAuth=null, fbDb=null, fbApi=null, fbUser=null, fbBusy=false;
+function firebaseConfigured(){ return !!(FIREBASE_CONFIG&&FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.projectId&&FIREBASE_CONFIG.appId); }
+async function firebaseLoad(){
+  if(!firebaseConfigured()) throw Object.assign(new Error("no_firebase"),{code:"no_firebase"});
+  if(fbApi) return fbApi;
+  const base=`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
+  const [appMod,authMod,dbMod]=await Promise.all([
+    import(`${base}/firebase-app.js`),
+    import(`${base}/firebase-auth.js`),
+    import(`${base}/firebase-firestore.js`)
+  ]);
+  fbApp=appMod.initializeApp(FIREBASE_CONFIG);
+  fbAuth=authMod.getAuth(fbApp);
+  fbDb=dbMod.getFirestore(fbApp);
+  fbApi={app:appMod,auth:authMod,db:dbMod};
+  return fbApi;
+}
+async function firebaseBoot(){
+  if(!firebaseConfigured()) return;
+  try{
+    const api=await firebaseLoad();
+    try{ await api.auth.getRedirectResult(fbAuth); }catch(e){}
+    api.auth.onAuthStateChanged(fbAuth,u=>{
+      fbUser=u||null;
+      try{ if(activePage()==="settings") settingsPage(); }catch(e){}
+    });
+  }catch(e){ /* SDK 로드 실패는 조용히 무시하고 로컬 저장으로 계속합니다. */ }
+}
+async function firebaseSignIn(){
+  if(!firebaseConfigured()) return alert("Firebase 설정(meta[name=firebase-config])이 필요합니다.");
+  if(fbBusy) return;
+  fbBusy=true; firebasePanelRefresh("Google 로그인 중…");
+  try{
+    const api=await firebaseLoad();
+    const provider=new api.auth.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:"select_account"});
+    await api.auth.signInWithPopup(fbAuth,provider);
+  }catch(e){
+    try{
+      if(e&&["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/cancelled-popup-request"].includes(e.code)){
+        const api=await firebaseLoad();
+        await api.auth.signInWithRedirect(fbAuth,new api.auth.GoogleAuthProvider());
+        return;
+      }
+    }catch(_){}
+    alert("Google 로그인에 실패했습니다: "+((e&&(e.code||e.message))||"알 수 없는 오류"));
+  }finally{
+    fbBusy=false;
+    try{ settingsPage(); }catch(e){}
+  }
+}
+async function firebaseSignOut(){
+  try{
+    const api=await firebaseLoad();
+    await api.auth.signOut(fbAuth);
+    fbUser=null;
+    settingsPage();
+  }catch(e){ alert("로그아웃하지 못했습니다: "+((e&&(e.code||e.message))||"오류")); }
+}
+function firebaseSavePayload(){
+  const data=buildSaveData();
+  const raw=JSON.stringify(data);
+  if(raw.length>900000) throw new Error("저장 데이터가 너무 큽니다(Firestore 1MB 제한에 근접).");
+  return {data,score:Math.round(totalAssetsKRW())};
+}
+async function firebaseUpload(){
+  if(!firebaseConfigured()) return alert("Firebase 설정이 필요합니다.");
+  if(!fbUser) return alert("먼저 Google로 로그인해 주세요.");
+  if(fbBusy) return;
+  fbBusy=true; firebasePanelRefresh("저장 중…");
+  try{
+    const api=await firebaseLoad();
+    const {data,score}=firebaseSavePayload();
+    await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",updatedAt:api.db.serverTimestamp()});
+    // 같은 시즌에 한 줄만 유지되도록 문서 id를 시즌+uid로 고정합니다(중복 행 방지).
+    await api.db.setDoc(api.db.doc(fbDb,"scores",`${seasonKey()}_${fbUser.uid}`),{season:seasonKey(),uid:fbUser.uid,nickname:fbUser.displayName||"익명",score,updatedAt:api.db.serverTimestamp()});
+    notify("system","클라우드 저장",`Google 계정에 저장했습니다. · ${won(score)}`);
+  }catch(e){
+    alert("저장하지 못했습니다: "+((e&&(e.code||e.message))||"오류"));
+  }finally{
+    fbBusy=false;
+    try{ settingsPage(); }catch(e){}
+  }
+}
+async function firebaseDownload(){
+  if(!firebaseConfigured()) return alert("Firebase 설정이 필요합니다.");
+  if(!fbUser) return alert("먼저 Google로 로그인해 주세요.");
+  if(fbBusy) return;
+  if(!confirm("Google 계정에 저장된 진행으로 이 기기를 덮어쓸까요?\n현재 진행은 사라집니다.")) return;
+  fbBusy=true; firebasePanelRefresh("불러오는 중…");
+  try{
+    const api=await firebaseLoad();
+    const snap=await api.db.getDoc(api.db.doc(fbDb,"saves",fbUser.uid));
+    if(!snap.exists()||!snap.data()||!snap.data().save) throw Object.assign(new Error("no_save"),{code:"no_save"});
+    applySaveData(snap.data().save);
+    saveGame(); banking(); fxPage(); news(); portfolio(); update(); updateBell(); updateSpeedUI();
+    notify("system","클라우드 복원","Google 계정 저장을 불러왔습니다.");
+  }catch(e){
+    alert(e.code==="no_save"?"Google 계정에 저장된 진행이 아직 없습니다.":"불러오지 못했습니다: "+((e&&(e.code||e.message))||"오류"));
+  }finally{
+    fbBusy=false;
+    try{ settingsPage(); }catch(e){}
+  }
+}
+async function firebaseLeaderboard(){
+  if(!firebaseConfigured()) return alert("Firebase 설정이 필요합니다.");
+  openModal("Google 리더보드",`<div id="fb-board"><p>불러오는 중…</p></div>`);
+  try{
+    const api=await firebaseLoad();
+    const q=api.db.query(api.db.collection(fbDb,"scores"),api.db.where("season","==",seasonKey()),api.db.orderBy("score","desc"),api.db.limit(20));
+    const snap=await api.db.getDocs(q);
+    const rows=snap.docs.map((d,i)=>{ const x=d.data()||{}; return `<div class="rank-row${fbUser&&x.uid===fbUser.uid?" me":""}"><b>${i+1}</b><span>${escHtml(x.nickname||"익명")}</span><span>${won(x.score||0)}</span></div>`; }).join("");
+    const box=document.getElementById("fb-board");
+    if(box) box.innerHTML=(rows||`<p>이번 시즌 기록이 없습니다.</p>`)+`<p class="muted-sm" style="margin-top:8px">시즌 ${seasonKey()} · 상위 20명 · 순위는 로그인한 Google 계정의 순자산입니다.</p>`;
+  }catch(e){
+    const box=document.getElementById("fb-board");
+    if(box) box.innerHTML=`<p>리더보드를 불러오지 못했습니다: ${escHtml((e&&(e.message||e.code))||"오류")}</p><p class="muted-sm" style="margin-top:8px">Firestore에서 season+score 복합 인덱스를 만들어야 할 수 있습니다.</p>`;
+  }
+}
+function firebasePanelRefresh(msg){
+  const el=document.getElementById("firebase-panel");
+  if(el) el.innerHTML=(msg?`<p class="muted-sm" style="margin-bottom:8px">${escHtml(msg)}</p>`:"")+firebasePanelHtml();
+}
+function firebasePanelHtml(){
+  if(!firebaseConfigured()){
+    return `<p style="font-size:13px;">Google 로그인·클라우드 저장·실제 리더보드는 <b>Firebase 설정</b>을 넣으면 켜집니다. 지금은 이 기기의 로컬 저장만 사용합니다.</p>
+      <p class="muted-sm" style="margin-top:6px"><code>meta[name=firebase-config]</code>에 Firebase 웹 앱 설정(JSON)을 넣고, Authentication에서 Google을 켜고, 이 사이트 도메인을 승인된 도메인에 추가하세요. 자세한 절차는 저장소의 배포 가이드를 참고하세요.</p>`;
+  }
+  if(fbBusy) return `<p class="muted-sm">처리 중…</p>`;
+  if(!fbUser){
+    return `<p style="font-size:13px;">Google 계정으로 로그인하면 다른 기기에서도 진행을 이어서 할 수 있고, 월간 리더보드에 참여합니다.</p>
+      <div class="button-row" style="margin-top:10px"><button class="buy" onclick="firebaseSignIn()">Google로 로그인</button></div>
+      <p class="muted-sm" style="margin-top:8px">로그인 전에도 게임과 로컬 저장은 그대로 동작합니다.</p>`;
+  }
+  return `<div class="cloud-head"><div><b>${escHtml(fbUser.displayName||"Google 사용자")}</b> <span class="pill">로그인됨</span></div><div style="font-size:12px;">${escHtml(fbUser.email||"")}</div></div>
+    <div class="button-row" style="margin-top:10px">
+      <button class="buy" onclick="firebaseUpload()">클라우드에 저장</button>
+      <button class="ghost" onclick="firebaseDownload()">불러오기</button>
+      <button class="ghost" onclick="firebaseLeaderboard()">리더보드</button>
+      <button class="sell" onclick="firebaseSignOut()">로그아웃</button>
+    </div>
+    <p class="muted-sm" style="margin-top:8px;">저장은 Firestore의 <code>saves/{uid}</code>, 순위는 <code>scores</code>에 기록됩니다. 저장은 수동으로 누를 때만 올라갑니다.</p>`;
+}
+
 // ── 대시보드 ────────────────────────────────────────────────
+function dashNarrow(){ try{ return typeof window!=="undefined" && +window.innerWidth>0 && +window.innerWidth<=760; }catch(e){ return false; } }
+function dashMoreOpen(){ return (state.ui&&state.ui.dashMore!=null)?!!state.ui.dashMore:!dashNarrow(); }
+function toggleDashMore(){ state.ui=Object.assign({},state.ui,{dashMore:!dashMoreOpen()}); dashboardPage(); }
 function dashboardPage(){
   const gross=grossAssetsKRW(), net=netAssetsKRW(), debt=state.loan||0;
   const stockV=stockValueKRW(), prodV=productValueKRW(), estateV=estateValue(), metalV=metalValue(), companyV=companyValue();
@@ -3996,7 +4315,7 @@ function dashboardPage(){
   const news=(state.news||[]).slice(0,3);
   const eco=state.economy||ECON_DEFAULT;
   const jobs=LABOR_JOBS.slice(0,2);
-  $("dashboard").innerHTML=`${pageHeader("OVERVIEW","대시보드",`${currentGrade()} · ${currentTitle()} · 총자산 ${won(gross)} · 순자산 ${won(net)}`, `<button class="ghost" onclick="show('portfolio')">자산 상세</button><button class="buy" onclick="show('domestic')">주식 시장</button>`)}
+  $("dashboard").innerHTML=`${pageHeader("OVERVIEW","대시보드",`${currentGrade()} · ${currentTitle()} · 총자산 ${won(gross)} · 순자산 ${won(net)}`, `${dashNarrow()?`<button class="ghost dash-toggle" onclick="toggleDashMore()">${dashMoreOpen()?"접기":"더 보기"}</button>`:""}<button class="ghost" onclick="show('portfolio')">자산 상세</button><button class="buy" onclick="show('domestic')">주식 시장</button>`)}
     <section class="kpi-strip">
       <div class="metric"><small>총자산</small><b>${wonShort(gross)}</b><span class="delta">${currentGrade()} · ${currentTitle()}</span></div>
       <div class="metric"><small>현금</small><b>${wonShort(state.cash)}</b><span class="muted-sm">보유 ${usdStr(state.usd||0)}</span></div>
@@ -4010,6 +4329,7 @@ function dashboardPage(){
         ${[["주식",stockV,"자산","show('domestic')"],["금융상품",prodV,"자산","show('banking')"],["부동산",estateV,"자산","show('realestate')"],["실물자산",metalV,"자산","show('realestate')"],["기업",companyV,"자산","show('company')"]].map(([label,val,,go])=>`<button class="breakdown-row" onclick="${go}"><span>${label}</span><b>${won(val)}</b><i>›</i></button>`).join("")}
       </div>
     </section>
+    <div class="dash-more" ${dashMoreOpen()?"":"hidden"}>
     <div class="two-col">
       <section class="section"><div class="section-head"><h3>시장 스냅샷</h3><button class="ghost small" onclick="show('news')">뉴스</button></div>
         <div class="panel market-snap">
@@ -4029,7 +4349,8 @@ function dashboardPage(){
     </section>
     <section class="section"><div class="section-head"><h3>최신 속보</h3><button class="ghost small" onclick="show('news')">전체</button></div>
       <div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${n}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div>
-    </section>`;
+    </section>
+    </div>`;
 }
 
 // ── 부동산 · 실물자산 ────────────────────────────────────────
@@ -4132,10 +4453,36 @@ function companyPage(){
 }
 
 // ── 경제 현황 ───────────────────────────────────────────────
+// ── 시장 건강(밸런스 관측) ─────────────────────────────────
+function marketBreadth(){
+  const list=stocks.filter(s=>!isIndexFund(s));
+  const up=list.filter(s=>dayChangePct(s)>.0001).length;
+  const down=list.filter(s=>dayChangePct(s)<-.0001).length;
+  return {up,down,flat:Math.max(0,list.length-up-down),total:list.length};
+}
+function marketRangeStats(){
+  const list=stocks.filter(s=>!isIndexFund(s));
+  const ratios=list.map(s=>s.start>0?s.price/s.start:1);
+  return {min:ratios.length?Math.min(...ratios):1,max:ratios.length?Math.max(...ratios):1,avg:ratios.reduce((a,b)=>a+b,0)/Math.max(1,ratios.length)};
+}
+function marketHealthPanelHtml(){
+  const b=marketBreadth(), r=marketRangeStats();
+  const ranked=stocks.filter(s=>!isIndexFund(s)).map(s=>({s,ret:s.start>0?s.price/s.start-1:0})).sort((a,b)=>b.ret-a.ret);
+  const top=ranked.slice(0,3), bottom=ranked.slice(-3).reverse();
+  const pctUp=b.total?Math.round(b.up/b.total*100):0;
+  return `<section class="section"><div class="section-head"><h3>시장 건강</h3><span class="pill">${b.total}종목 · 상승 ${pctUp}%</span></div><div class="panel">
+    <div class="bar" style="height:10px"><span style="width:${pctUp}%;background:#d92d20"></span></div>
+    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>상승</small><b class="up">${b.up}</b></div><div class="kpi"><small>하락</small><b class="down">${b.down}</b></div><div class="kpi"><small>보합</small><b>${b.flat}</b></div><div class="kpi"><small>시작가 대비</small><b>${Math.round(r.min*100)}% ~ ${Math.round(r.max*100)}%</b></div></div>
+    <div class="two-col" style="margin-top:10px"><div><b class="up">상위</b>${top.map(x=>`<div class="snap-row"><span>${escHtml(x.s.name)}</span><b class="up">${pct(x.ret)}</b></div>`).join("")}</div><div><b class="down">하위</b>${bottom.map(x=>`<div class="snap-row"><span>${escHtml(x.s.name)}</span><b class="down">${pct(x.ret)}</b></div>`).join("")}</div></div>
+    <p class="muted-sm" style="margin-top:8px">장기 범위는 시작가의 ${Math.round(MIN_TOTAL_RATIO*100)}%~${Math.round(MAX_TOTAL_RATIO*100)}%로 제한됩니다. 이 패널은 밸런스 이상치를 빨리 발견하기 위한 관측용입니다.</p>
+  </div></section>`;
+}
+
 function economyPage(){
   const news=(state.news||[]).slice(0,8);
   $("economy").innerHTML=`${pageHeader("ECONOMY","경제 현황","금리·물가·실업률과 시장 이벤트를 한눈에 확인합니다.",`<button class="ghost" onclick="openReport()">결산 리포트</button>`)}
     ${economyPanelHtml()}
+    ${marketHealthPanelHtml()}
     <section class="section">${calendarPanelHtml()}</section>
     <div class="two-col" style="margin-top:14px">
       <section class="section"><div class="section-head"><h3>최신 속보</h3><button class="ghost small" onclick="show('news')">전체</button></div><div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${n}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div></section>
@@ -4202,8 +4549,9 @@ function settingsPage(){
       <div class="button-row" style="margin-top:12px"><button class="ghost" onclick="setAllNotify(false)">종류 모두 끄기</button><button class="ghost" onclick="setAllNotify(true)">종류 모두 켜기</button></div>
     </div></section>
     <section class="settings-section"><h3>게임 플레이</h3><div class="panel">${autoPanelHtml()}</div></section>
-    <section class="settings-section"><h3>데이터</h3><div class="panel">${savePanelHtml()}
-    </div></section>`;
+    <section class="settings-section"><h3>데이터</h3><div class="panel">${savePanelHtml()}</div></section>
+    <section class="settings-section"><h3>Google 계정 · 실제 리더보드</h3><div class="panel"><div id="firebase-panel">${firebasePanelHtml()}</div></div></section>
+    ${CLOUD_API?`<section class="settings-section"><h3>기기 연결 클라우드</h3><div class="panel"><div id="cloud-panel">${cloudPanelHTML()}</div></div></section>`:""}`;
 }
 
 // ── 환생 ────────────────────────────────────────────────────
@@ -4300,7 +4648,7 @@ function resetRunForRebirth(){
   state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
   state.tax={mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1};
   state.calendar=[]; state.disclosures=[]; state.challenge={active:null,history:[],best:0,last:null}; state.riskScenario="base";
-  state.watch=[]; state.journal=[]; state.alerts=[];
+  state.watch=[]; state.journal=[]; state.alerts=[]; state.priceAlerts=[];
   state.loanTotal=0; state.dividendTotal=0; state.feesTotal=0;
   state.labor={shifts:0,earned:0,lastAt:{},warned:false,xp:0,points:0,stamina:100,skills:{focus:0,stamina:0,service:0}};
   state.daily={date:"",counts:{},claimed:{}}; state.weekly={key:"",counts:{},claimed:{}};
@@ -4342,7 +4690,7 @@ function init(){
   const initialStats=document.querySelector(".stats"); if(initialStats) initialStats.classList.add("hidden");
   update();
   recordAssetHistory();
-  ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); cloudBoot();
+  ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); cloudBoot(); firebaseBoot();
 
   // 1초 드라이버: 배속(1~5x)·일시정지를 한곳에서 처리합니다. 중복 생성되지 않게 한 번만 시작합니다.
   startLoops();
@@ -4692,6 +5040,7 @@ function clearGame(skipConfirm) {
   state.watch = [];
   state.journal = [];
   state.alerts = [];
+  state.priceAlerts = [];
   state.achievements = {};
   state.loanTotal = 0;
   state.dividendTotal = 0;
@@ -4706,7 +5055,7 @@ function clearGame(skipConfirm) {
   state.weekly={key:"",counts:{},claimed:{}}; state.special={}; state.streak={days:1,last:"",best:1};
   state.dex={stocks:{},products:{},estates:{},metals:{},company:false}; state.peakNet=START_CASH; state.altRealized=0;
   state.journalFilter={q:"",side:"all"}; state.rewardedGrade=0; state.targetGoal=1000000000;
-  state.ui={assetTab:"overview",mobileStock:""};
+  state.ui={assetTab:"overview",mobileStock:"",dashMore:null};
   state.seasonBase = START_CASH; state.reportMonth=seasonKey();
   fx.usd = START_FX;
   fx.anchor = START_FX;
@@ -4796,6 +5145,7 @@ function stockPage(group,title,desc){
     <input type="search" placeholder="종목명·티커·테마 검색" value="${escAttr(stockView.query)}" oninput="stockView.query=this.value; applyStockView('${group}')">
     <select onchange="stockView.sort=this.value; applyStockView('${group}')">${SORT_OPTIONS.map(([v,l])=>`<option value="${v}" ${stockView.sort===v?"selected":""}>${l}</option>`).join("")}</select>
     <button class="chip ${stockView.watchOnly?"on":""}" onclick="stockView.watchOnly=!stockView.watchOnly; this.classList.toggle('on'); ['domestic','foreign','mega','special','watch'].forEach(g=>applyStockView(g))">★ 관심만</button>
+    <button class="ghost" onclick="openCompare('${group}')">비교</button>
     <span class="pill" id="count-${group}"></span>
   </div>
   ${marketIntelHtml()}
@@ -4863,7 +5213,7 @@ function card(s, group){
   const roi=(s.own>0&&s.avgBuy>0)?(s.price-s.avgBuy)/s.avgBuy:0;
   const maxBuy=maxBuyQty(s);
   return `<article class="card">
-    <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><div style="display:flex;gap:6px;align-items:flex-start"><span class="pill">${s.market}</span><button class="star ${isWatched(s.id)?"on":""}" onclick="toggleWatch('${s.id}')" aria-label="관심종목" title="관심종목">★</button></div></div>
+    <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><div style="display:flex;gap:6px;align-items:flex-start"><span class="pill">${s.market}</span><button class="star ${isWatched(s.id)?"on":""}" onclick="toggleWatch('${s.id}')" aria-label="관심종목" title="관심종목">★</button><button class="star" onclick="openPriceAlert('${s.id}')" aria-label="가격 알림" title="가격 알림">🔔</button></div></div>
     <div class="price ${dayC>=0?"up":"down"}" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
     <p class="${dayC>=0?"up":"down"}" data-change="${s.id}">오늘 ${pct(dayC)} · 전일 종가 기준</p>
     <div class="flow-line"><span>거래량 <b data-volume="${s.id}">${volumeText(s.volume)}</b></span><span>외국인 <b class="${s.foreignFlow>=0?"up":"down"}" data-foreign="${s.id}">${flowText(s.foreignFlow)}</b></span><span>기관 <b class="${s.instFlow>=0?"up":"down"}" data-inst="${s.id}">${flowText(s.instFlow)}</b></span></div>
@@ -4883,8 +5233,8 @@ function card(s, group){
     </div>
     <div class="quick-trade">
       <button class="ghost" onclick="setTradeQty('${s.id}','one','${ctx}')">1주</button>
-      <button class="ghost" onclick="setTradeQty('${s.id}','max','${ctx}')">최대 매수</button>
-      <button class="ghost" onclick="setTradeQty('${s.id}','own','${ctx}')">보유 전량</button>
+      <button class="buy" onclick="fullBuy('${s.id}')">최대 매수</button>
+      <button class="sell" onclick="fullSell('${s.id}')">전량 매도</button>
     </div>
   </article>`;
 }
@@ -5046,7 +5396,7 @@ function laborPanelHtml(){
     </div>
     <p class="labor-note">컨디션이 낮을수록 일당이 줄고 작업이 흔들립니다. 15게임초마다 컨디션이 조금 회복되며, 휴식 버튼으로 즉시 30을 회복할 수 있습니다. 경력 XP 120마다 스킬 포인트 1P를 얻습니다. 집중력은 성공 구간을 넓히고, 체력은 최대 컨디션을, 서비스는 일당을 높입니다.</p>
     <div class="labor-grid">${LABOR_JOBS.map(laborJobCard).join("")}</div>
-    <p class="labor-note">완벽 100% · 성공 80% · 실패 0% 반영. 높은 일당일수록 성공 구간이 좁고 빨라지며, 고임금 노동은 실패해도 쿨다운이 생깁니다. 기본 노동 2종은 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주가 열립니다.</p>`;
+    <p class="labor-note">일자리마다 <b>타이밍·연타·기억·계산</b> 4종 미니게임이 있습니다. 기본 일자리는 타이밍 작업 3회로 일당이 지급되고, 완벽 100% · 성공 80% · 실패 0%로 반영됩니다. 높은 일당일수록 구간이 좁거나 목표가 높아지며, 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주, 12회부터 데이터 입력, 14회부터 리서치 보조, 16회부터 전략 컨설팅이 열립니다.</p>`;
 }
 
 function goalsPanelHtml(){
@@ -5480,7 +5830,12 @@ function savePanelHtml(){
       <button class="ghost" onclick="exportSave()">파일 내보내기</button>
       <label class="ghost file-label">파일 불러오기<input type="file" accept="application/json" onchange="handleImport(event)"></label>
     </div>
-    <p class="muted-sm" style="margin-top:10px">저장 파일을 내보내거나 불러와서 진행 상황을 보관할 수 있습니다.</p>`;
+    <div class="button-row" style="margin-top:8px">
+      <button class="ghost" onclick="exportCsv('journal')">거래 내역 CSV</button>
+      <button class="ghost" onclick="exportCsv('holdings')">보유 종목 CSV</button>
+      <button class="ghost" onclick="exportCsv('assets')">자산 추이 CSV</button>
+    </div>
+    <p class="muted-sm" style="margin-top:10px">저장 파일을 내보내거나 불러와서 진행 상황을 보관할 수 있습니다. CSV는 Excel에서 바로 열 수 있습니다.</p>`;
 }
 
 function portfolio(){
@@ -5699,6 +6054,103 @@ function fullSell(id){
   if(typeof activePage==="function" && activePage()==="holdings") holdingsPage();
 }
 
+// ── 가격 알림 · 종목 비교 ───────────────────────────────────
+function openPriceAlert(id){
+  const s=stock(id); if(!s) return;
+  const ex=(state.priceAlerts||[]).find(a=>a.stockId===id);
+  const foreign=isForeignStock(s);
+  const value=ex?ex.price:Math.round(s.price);
+  openModal(`${escHtml(s.name)} 가격 알림`, `
+    <p style="font-size:13px">현재가 <b>${foreign?usdStr(s.price):won(s.price)}</b> · 도달하면 한 번 알려 드립니다.</p>
+    <label class="field-label" style="margin-top:10px">가격 (${foreign?"USD":"원"})<input id="alert-price" type="number" min="1" step="1" value="${value}"></label>
+    <label class="field-label" style="margin-top:8px">조건<select id="alert-dir"><option value="above" ${!ex||ex.dir!=="below"?"selected":""}>이 가격 이상으로 오르면</option><option value="below" ${ex&&ex.dir==="below"?"selected":""}>이 가격 이하로 내리면</option></select></label>
+    <div class="button-row" style="margin-top:12px">
+      <button class="buy" onclick="setPriceAlert('${id}')">알림 설정</button>
+      ${ex?`<button class="ghost" onclick="removePriceAlert('${id}')">알림 삭제</button>`:""}
+    </div>`);
+}
+function setPriceAlert(id){
+  const s=stock(id); if(!s) return false;
+  const priceEl=$("alert-price"), dirEl=$("alert-dir");
+  const p=Math.round(+((priceEl&&priceEl.value)||0));
+  if(!(p>0)) return alert("가격을 1 이상으로 입력해 주세요.");
+  const dir=(dirEl&&dirEl.value)==="below"?"below":"above";
+  state.priceAlerts=(state.priceAlerts||[]).filter(a=>a.stockId!==id);
+  state.priceAlerts.push({stockId:id,price:p,dir,armed:true});
+  saveGame(); closeModal();
+  notify("system","가격 알림 설정",`${s.name} ${dir==="above"?">=":"<="} ${isForeignStock(s)?usdStr(p):won(p)}`);
+  return true;
+}
+function removePriceAlert(id){
+  state.priceAlerts=(state.priceAlerts||[]).filter(a=>a.stockId!==id);
+  saveGame(); closeModal();
+  notify("system","가격 알림 삭제","설정한 알림을 삭제했습니다.");
+  return true;
+}
+// 가격이 목표에 닿으면 1회 알림을 보내고 다시 무장하지 않습니다(알림 폭주 방지).
+function checkPriceAlerts(){
+  if(!Array.isArray(state.priceAlerts)||!state.priceAlerts.length) return 0;
+  let hit=0;
+  state.priceAlerts.forEach(a=>{
+    if(!a.armed) return;
+    const s=stock(a.stockId); if(!s) return;
+    const reached=a.dir==="above"?s.price>=a.price:s.price<=a.price;
+    if(!reached) return;
+    a.armed=false; hit++;
+    const foreign=isForeignStock(s);
+    addLog(`🔔 가격 알림: ${s.name} ${foreign?usdStr(s.price):won(s.price)} (${a.dir==="above"?">=":"<="} ${foreign?usdStr(a.price):won(a.price)})`);
+    notify("system","가격 알림",`${s.name} ${foreign?usdStr(s.price):won(s.price)} · 설정 ${a.dir==="above"?">=":"<="} ${foreign?usdStr(a.price):won(a.price)}`);
+  });
+  if(hit) saveGame();
+  return hit;
+}
+// 관심종목(또는 현재 그룹)을 최대 6종목까지 한 표에서 비교합니다.
+function openCompare(group){
+  const base=group==="watch"?stocks.filter(s=>isWatched(s.id)):stocks.filter(s=>s.group===group);
+  const pool=(base.length>=2?base:stocks.filter(s=>!isIndexFund(s))).slice(0,6);
+  const rows=pool.map(s=>{
+    const foreign=isForeignStock(s);
+    const first=(s.hist&&s.hist.length)?s.hist[0]:s.start;
+    const long=first>0?(s.price-first)/first:0;
+    const day=dayChangePct(s);
+    return `<tr><td>${escHtml(s.name)}<br><small>${s.ticker}</small></td><td>${foreign?usdStr(s.price):won(s.price)}</td><td class="${day>=0?"up":"down"}">${pct(day)}</td><td class="${long>=0?"up":"down"}">${pct(long)}</td><td>${(s.vol*100).toFixed(1)}%</td><td>${qtyText(s.own)}</td></tr>`;
+  }).join("");
+  openModal("종목 비교", `<div class="compare-wrap"><table class="compare-table"><thead><tr><th>종목</th><th>현재가</th><th>오늘</th><th>차트 구간</th><th>일 변동성</th><th>보유</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted-sm" style="margin-top:8px">차트 구간은 최근 가격 기록의 시작 대비입니다. 관심종목이 2개 이상이면 관심종목을, 아니면 현재 화면 종목을 비교합니다(최대 6종목).</p>`);
+}
+
+// ── CSV 내보내기 ────────────────────────────────────────────
+function csvCell(v){ const s=String(v==null?"":v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+function downloadCsv(filename, rows){
+  const csv="\ufeff"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+function exportCsv(kind){
+  const date=new Date().toISOString().slice(0,10);
+  if(kind==="journal"){
+    const rows=[["시각","구분","종목","수량","금액(원)","수수료(원)","실현손익(원)"]];
+    (state.journal||[]).forEach(x=>rows.push([new Date(x.at).toLocaleString("ko-KR"),x.side==="buy"?"매수":"매도",x.name,x.qty,Math.round(x.valueKRW||0),Math.round(x.fee||0),Math.round(x.profit||0)]));
+    downloadCsv(`money-playground-journal-${date}.csv`,rows);
+  } else if(kind==="holdings"){
+    const rows=[["종목","티커","보유수량","평단(원)","현재가(원)","평가액(원)","평가손익(원)"]];
+    stocks.filter(s=>s.own>0).forEach(s=>{
+      const value=stockPriceKRW(s)*s.own, cost=(+s.avgBuy||0)*s.own*(isForeignStock(s)?fx.usd:1);
+      rows.push([s.name,s.ticker,s.own,Math.round(s.avgBuy||0),Math.round(stockPriceKRW(s)),Math.round(value),Math.round(value-cost)]);
+    });
+    downloadCsv(`money-playground-holdings-${date}.csv`,rows);
+  } else {
+    const rows=[["게임 일차","게임 시간(초)","순자산(원)"]];
+    (assetHistory.points||[]).forEach(p=>rows.push([Math.floor((+p.t||0)/600)+1,Math.round(+p.t||0),Math.round(+p.v||0)]));
+    downloadCsv(`money-playground-assets-${date}.csv`,rows);
+  }
+  addLog("CSV를 내보냈습니다.");
+  notify("system","CSV 내보내기","파일을 내려받았습니다.");
+}
+
 function join(id){
   if(!canJoin(id)) return alert(`${unlockLabel(id)}합니다. (현재 등급: ${currentGrade()})`);
   let p=product(id),v=Math.max(p.min,Math.floor((+$("prod-"+id).value||p.min)/10000)*10000);
@@ -5860,6 +6312,7 @@ function tickMarket(){
   });
   if(dayRolled) ensureDailyBreadth(dayIndex);
   checkShortMargins();
+  checkPriceAlerts();
   tickIPO();
   processOrders();
   update();
@@ -6142,7 +6595,11 @@ if(typeof document!=="undefined" && typeof document.addEventListener==="function
     if(!laborSession) return;
     const tag=e.target&&e.target.tagName?String(e.target.tagName).toUpperCase():"";
     if(tag==="BUTTON"||tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA") return;
-    if(e.key===" "||e.key==="Enter"){ e.preventDefault(); laborStop(); }
+    if(e.key===" "||e.key==="Enter"){
+      e.preventDefault();
+      if(laborSession.mode==="timing") laborStop();
+      else if(laborSession.mode==="tap") laborTap();
+    }
   });
 }
 </script>
