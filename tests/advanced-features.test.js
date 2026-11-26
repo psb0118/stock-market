@@ -191,7 +191,7 @@ function check(name, ok, detail) {
   check('세금 로트·계좌 저장/복원', saved.lots === 6 && saved.mode === 'pension', JSON.stringify(saved));
 }
 
-// ── 5-1. 계좌 전환 후 매도: 일반 세금에 ISA·연금 손익이 섞이지 않음 ──
+// ── 5-1. ISA → 일반 전환 후 매도 ─────────────────
 {
   const g = createGame(11);
   const r = g.run(`(()=>{
@@ -228,6 +228,35 @@ function check(name, ok, detail) {
     return {general:state.realizedYTD,split:state.tax.splitVersion};
   })()`);
   check('구버전 합산 손익을 계좌별로 1회 분리', legacy.general === 2000000 && legacy.split === 1, JSON.stringify(legacy));
+}
+
+// ── 5-2. 연금 → 일반 전환 후 매도 ────────────────
+{
+  const g = createGame(12);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
+    state.tax={mode:'pension',carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0};
+    state.marketOpen=true; state.settings.confirmTrades=false;
+    const gainSell=(id)=>{
+      const s=stock(id);
+      s.price=100000; s.prevClose=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+      marketBuyShares(s,100);
+      s.price=130457; s.prevClose=130457;
+      marketSellShares(s,100);
+      return s.realizedProfit;
+    };
+    const pensionProfit=gainSell('future_ai');
+    const afterPension={general:state.realizedYTD,pension:state.tax.pensionDeferred,paid:state.taxPaid,profit:pensionProfit};
+    setTaxAccount('general');
+    const generalProfit=gainSell('hanbit_semi');
+    const afterGeneral={general:state.realizedYTD,pension:state.tax.pensionDeferred,paid:state.taxPaid,taxable:state.taxedProfit,profit:generalProfit};
+    return {afterPension,afterGeneral};
+  })()`);
+  const pension = r.afterPension, general = r.afterGeneral;
+  check('연금 매도는 일반 손익·세금을 발생시키지 않음', pension.general === 0 && pension.paid === 0 && pension.pension > 2500000, JSON.stringify(pension));
+  check('일반 전환 후 매도에 연금 손익이 합산되지 않음', general.general > 2500000 && general.general < 3500000 && general.pension === pension.pension, JSON.stringify(general));
+  check('일반 과세표준은 일반 매도분만 반영', general.taxable < 1000000, general.taxable);
+  check('일반 세금도 일반 과세표준에만 적용', Math.abs(general.paid - general.taxable * 0.22) < 1, `${general.paid} / ${general.taxable * 0.22}`);
 }
 
 // ── 6. 노동 경력·컨디션·스킬 ─────────────────────
