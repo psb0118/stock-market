@@ -366,6 +366,135 @@ function check(name, ok, detail) {
   check('모바일 거래 바 마크업 존재', shell === 'mobileTradeBar', shell);
 }
 
+// ── 11. 계좌별 로트 분리·세후 미리보기·연간 결산 ──────────
+{
+  const g = createGame(13);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
+    state.tax={mode:'general',carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0};
+    const s=stock('future_ai'); s.price=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+    marketBuyShares(s,2,'general');
+    setTaxAccount('isa');
+    marketBuyShares(s,3,'isa');
+    const before={general:accountQty(s,'general'),isa:accountQty(s,'isa'),own:s.own};
+    const sold=marketSellShares(s,1,'general');
+    return {before,sold,after:{general:accountQty(s,'general'),isa:accountQty(s,'isa'),own:s.own},lots:s.taxLots.map(l=>[l.account,l.qty])};
+  })()`);
+  check('계좌별 보유 로트가 분리됨', r.before.general===2 && r.before.isa===3 && r.before.own===5, JSON.stringify(r.before));
+  check('일반 계좌 매도는 ISA 로트를 건드리지 않음', r.sold===true && r.after.general===1 && r.after.isa===3 && r.after.own===4, JSON.stringify(r.after));
+  check('저장 로트에 계좌 태그 포함', r.lots.every(x=>x[0]==='general'||x[0]==='isa'), JSON.stringify(r.lots));
+}
+{
+  const g = createGame(14);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0; state.marketSeconds=0;
+    state.tax={mode:'general',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    const s=stock('future_ai'); s.price=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+    marketBuyShares(s,10,'general'); s.price=1000000;
+    const cashBefore=state.cash, realizedBefore=state.realizedYTD, ownBefore=s.own;
+    const p=taxPreviewFor(s,5,'general');
+    document.getElementById('tax-preview-stock').value=s.id;
+    document.getElementById('tax-preview-qty').value='5';
+    renderTaxPreview();
+    const previewHtml=document.getElementById('tax-preview-result').innerHTML;
+    const after={cash:state.cash,realized:state.realizedYTD,own:s.own,account:accountQty(s,'general')};
+    return {p,cashBefore,realizedBefore,ownBefore,after,previewHtml};
+  })()`);
+  check('매도 전 세후 미리보기 세금·세후금액 계산', r.p.ok===true && r.p.tax>400000 && r.p.netKRW>0, JSON.stringify(r.p));
+  check('미리보기는 잔고·보유·손익을 변경하지 않음', r.after.cash===r.cashBefore && r.after.realized===r.realizedBefore && r.after.own===r.ownBefore && r.after.account===10, JSON.stringify(r.after));
+  check('세후 미리보기 UI 렌더', r.previewHtml.includes('예상 세금') && r.previewHtml.includes('세후'), r.previewHtml);
+
+  const carry = g.run(`(()=>{
+    state.tax={mode:'general',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0; state.marketSeconds=0;
+    settleTax(-1000000,'general');
+    const loss={realized:state.realizedYTD,carry:state.tax.carryLoss,base:state.tax.carryLossBase};
+    state.marketSeconds=TAX_YEAR_SECONDS; taxYearReset();
+    const reset={realized:state.realizedYTD,base:state.tax.carryLossBase,year:state.tax.year};
+    const tax=settleTax(4000000,'general');
+    return {loss,reset,tax,afterBase:state.tax.carryLossBase,afterCarry:state.tax.carryLoss,year:state.tax.year};
+  })()`);
+  check('당해 손실은 이월 후보로 기록', carry.loss.realized===-1000000 && carry.loss.carry===1000000, JSON.stringify(carry.loss));
+  check('세금 연도 결산 후 이월 손실이 실제 차감됨', carry.reset.base===1000000 && carry.tax===110000 && carry.afterBase===0 && carry.year===2, JSON.stringify(carry));
+  const sameYear = g.run(`(()=>{
+    state.tax={mode:'general',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0; state.marketSeconds=TAX_YEAR_SECONDS;
+    settleTax(-1000000,'general'); const tax=settleTax(4000000,'general'); taxYearReset();
+    return {tax,base:state.tax.carryLossBase,carry:state.tax.carryLoss};
+  })()`);
+  check('당해 손실과 이익을 상계한 뒤 이월 손실을 중복 사용하지 않음', sameYear.tax===110000 && sameYear.base===0 && sameYear.carry===0, JSON.stringify(sameYear));
+}
+
+// ── 12. 계좌 성과 대시보드·저장 버전·자동 세금 예산 ────────
+{
+  const g = createGame(15);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.tax={mode:'isa',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    const s=stock('future_ai'); s.price=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+    marketBuyShares(s,10,'isa');
+    const stats=taxAccountStats('isa'), panel=taxPanelHtml(), dash=dashPanelHtml();
+    const data=buildSaveData(), copy=JSON.parse(JSON.stringify(data)); delete copy.version; const migrated=migrateSaveData(copy);
+    return {stats,panel:panel.includes('세금 계좌')&&panel.includes('매도 전 세후 미리보기')&&panel.includes('계좌 간 보유 로트 이체'),dash:dash.includes('세금 계좌별 주식'),nan:panel.includes('NaN'),version:data.version,migrated:migrated.version,lotAccount:data.stocks.find(x=>x.id===s.id).taxLots[0].account};
+  })()`);
+  check('계좌별 성과에 보유·실현손익이 집계됨', r.stats.qty===10 && r.stats.value===1000000 && r.panel===true, JSON.stringify(r.stats));
+  check('자산 대시보드에 계좌별 주식 배분 표시', r.dash===true && r.nan===false);
+  check('저장 스키마 버전·마이그레이션', r.version===3 && r.migrated===3 && r.lotAccount==='isa', JSON.stringify(r));
+}
+{
+  const g = createGame(16);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.tax={mode:'general',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
+    const s=stock('future_ai'); s.price=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+    marketBuyShares(s,10,'general'); s.price=1000000;
+    state.auto=Object.assign({},state.auto,{enabled:true,rebalance:true,rebStockPct:0,rebBand:2,taxAware:true,taxBudget:1,autoSell:false,minCash:0});
+    const blocked=autoRebalance(), afterBlocked=accountQty(s,'general');
+    state.auto.taxBudget=10000000;
+    const allowed=autoRebalance(), afterAllowed=accountQty(s,'general');
+    return {blocked,afterBlocked,allowed,afterAllowed,log:state.logs.some(l=>l.includes('세금 예산'))};
+  })()`);
+  check('세금 예산 초과 자동 리밸런싱 매도 건너뜀', r.blocked===0 && r.afterBlocked===10 && r.log===true, JSON.stringify(r));
+  check('예산 안에서는 자동 리밸런싱 매도 실행', r.allowed>0 && r.afterAllowed<10, JSON.stringify(r));
+}
+
+// ── 13. ISA 한도·계좌 이체·리스크·모바일 정보 ───────────
+{
+  const g = createGame(17);
+  const r = g.run(`(()=>{
+    state.cash=100000000; state.loan=0; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.tax={mode:'isa',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    const s=stock('future_ai'); s.price=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+    const first=marketBuyShares(s,200,'isa'), over=marketBuyShares(s,1,'isa'), room=taxContributionRoom('isa');
+    document.getElementById('tax-transfer-stock').value=s.id;
+    document.getElementById('tax-transfer-qty').value='2';
+    document.getElementById('tax-transfer-to').value='pension';
+    taxTransferStock();
+    return {first,over,room,isa:accountQty(s,'isa'),pension:accountQty(s,'pension'),pensionUsed:taxContributionUsed('pension')};
+  })()`);
+  check('ISA 연간 납입한도 초과 매수 차단', r.first===true && r.over===false && r.room===0, JSON.stringify(r));
+  check('보유 로트를 다른 계좌로 이체', r.isa===198 && r.pension===2 && r.pensionUsed===200000, JSON.stringify(r));
+}
+{
+  const g = createGame(18);
+  const r = g.run(`(()=>{
+    state.cash=20000000; state.loan=0; state.marketOpen=true; state.settings.confirmTrades=false;
+    state.tax={mode:'general',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    const s=stock('future_ai'); s.price=100000; s.start=100000; s.own=0; s.avgBuy=0; s.taxLots=[];
+    marketBuyShares(s,100,'general');
+    const impacts=stressImpactList('crash');
+    const sold=deRiskPortfolio();
+    state.ui.mobileStock=s.id; document.getElementById('mobile-stock').value=s.id; document.getElementById('mobile-trade-qty').value='1';
+    renderMobileTradeInfo();
+    return {impacts:impacts.length,sold,left:accountQty(s,'general'),info:document.getElementById('mobileTradeInfo').innerHTML};
+  })()`);
+  check('리스크 상위 영향 종목과 축소 액션', r.impacts>0 && r.sold===true && r.left===90, JSON.stringify(r));
+  check('모바일 거래 바에 계좌·예상 세금 표시', r.info.includes('매수 가능') && r.info.includes('매도 가능') && r.info.includes('예상 세금'), r.info);
+}
+
 console.log('');
 console.log(`== ${pass}/${pass + fail} passed ==`);
 process.exit(fail ? 1 : 0);

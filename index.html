@@ -497,6 +497,18 @@ body.no-effects *{box-shadow:none!important}
 .tax-lots{display:grid;gap:6px;margin-top:8px}
 .lot-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,auto);gap:8px;align-items:center;border:1px solid #e4e8ee;border-radius:8px;padding:8px 9px;font-size:12px;min-width:0}
 .lot-row b{overflow-wrap:anywhere}
+.tax-account-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:8px;margin-top:10px}
+.tax-account-card{border:1px solid #e4e8ee;border-radius:9px;padding:10px;display:grid;gap:5px;min-width:0;background:#fafafa;font-size:12px}
+.tax-account-card.on{border-color:#0f766e;background:#f0fdf4}
+.tax-account-card small{display:block;color:#667085;font-size:10px}
+.tax-account-card b,.tax-account-card span{overflow-wrap:anywhere}
+.mini-tag{display:inline-block;padding:1px 5px;border-radius:5px;background:#eef2f6;color:#475467;font-size:10px;white-space:nowrap}
+.tax-preview-result{margin-top:8px;display:grid;gap:6px}
+.alloc-account{display:grid;gap:7px;margin-top:7px}
+.alloc-account .section-head{margin:0;font-size:12px}
+.alloc-account small{display:block;color:#667085;font-size:11px;margin-top:3px}
+#mobileTradeInfo{display:none;grid-column:1/-1;font-size:11px;line-height:1.45;color:#b9c7d8;overflow-wrap:anywhere}
+#mobileTradeBar.on #mobileTradeInfo{display:block}
 .risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:8px}
 .risk-card{border:1px solid #e4e8ee;border-radius:9px;padding:11px;background:#fafafa;min-width:0}
 .risk-card small{display:block;color:#667085;font-size:11px}
@@ -513,13 +525,15 @@ body.no-effects *{box-shadow:none!important}
   #mobileTradeBar.on{display:grid;grid-template-columns:minmax(0,1fr) 48px 50px 50px;gap:4px;position:fixed;left:8px;right:8px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:49;background:#0c1523;border:1px solid #2b3a4d;border-radius:10px;padding:6px;box-shadow:0 8px 24px #0004}
   #mobileTradeBar select,#mobileTradeBar input{min-height:36px;height:36px;font-size:12px;padding:0 6px;background:#16202c;color:#e6edf6;border-color:#33465c;min-width:0;width:100%}
   #mobileTradeBar button{min-height:36px;height:36px;padding:0 4px;font-size:12px;border-radius:7px}
-  body.has-mobile-trade main{padding-bottom:228px}
+  body.has-mobile-trade main{padding-bottom:268px}
 }
 @media(max-width:360px){
   #mobileTradeBar.on{grid-template-columns:minmax(0,1fr) 42px 46px 46px;left:5px;right:5px;padding:5px}
   #mobileTradeBar button{font-size:11px}
 }
-body.dark .intel-row,body.dark .lot-row,body.dark .risk-card,body.dark .challenge-card{border-color:#2a3a4d;background:#0f1a26}
+body.dark .intel-row,body.dark .lot-row,body.dark .risk-card,body.dark .challenge-card,body.dark .tax-account-card{border-color:#2a3a4d;background:#0f1a26}
+body.dark .tax-account-card.on{border-color:#2dd4bf;background:#0d2b26}
+body.dark .mini-tag{background:#1c2b3a;color:#cbd5e1}
 body.dark .flow-line b{color:#dbe4ef}
 
 </style>
@@ -597,9 +611,10 @@ body.dark .flow-line b{color:#dbe4ef}
 </div>
 <div id="mobileTradeBar" aria-label="모바일 빠른 거래">
   <select id="mobile-stock" aria-label="거래 종목" onchange="mobileTradeSelect(this.value)"></select>
-  <input id="mobile-trade-qty" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="거래 수량">
+  <input id="mobile-trade-qty" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="거래 수량" oninput="renderMobileTradeInfo()">
   <button class="buy" onclick="mobileTrade('buy')">매수</button>
   <button class="sell" onclick="mobileTrade('sell')">매도</button>
+  <div id="mobileTradeInfo"></div>
 </div>
 
 <script>
@@ -609,6 +624,10 @@ const FEE_FX = 0.01;      // 환전 수수료 1%(브론즈 기준)
 const TAX_TRADE = 0.002;        // 매도 거래세 0.2%
 const TAX_GAINS_RATE = 0.22;    // 양도소득세율 22%
 const TAX_GAINS_FREE = 2500000; // 양도세 기본공제(연간 실현손익)
+const TAX_ACCOUNTS=["general","isa","pension"];
+const TAX_ACCOUNT_LIMITS={general:Infinity, isa:20000000, pension:18000000}; // 계좌별 연간 납입한도
+const TAX_YEAR_SECONDS=18000; // 게임 30일 = 1세금연도
+const SAVE_VERSION=3;
 const DIVIDEND_YIELD = 0.001;   // 배당수익률(보유 평가액 대비, 120초 주기)
 const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
 const MAX_DAILY_MOVE = 0.30; // 실제 시장처럼 하루 최대 -30%~+30%만 움직입니다.
@@ -946,7 +965,9 @@ const state={
   ipo: {offer:null, nextAt:0, history:[]}, // 공모주 청약
   calendar: [],     // 실적 발표 일정(주식별 예정 시각)
   disclosures: [],  // 기업 공시 기록(가이던스·내부자·자사주 등)
-  tax: {mode:"general", carryLoss:0, pensionDeferred:0, isaGains:0, isaTaxed:0, splitVersion:1}, // 세금 계좌·이월 손실·계좌 분리 버전
+  tax: {mode:"general", carryLoss:0, carryLossBase:0, pensionDeferred:0, isaGains:0, isaTaxed:0, splitVersion:1,
+    contributions:{general:0,isa:0,pension:0}, taxPaidByAccount:{general:0,isa:0,pension:0},
+    year:1, yearStart:0}, // 세금 계좌·이월 손실·납입한도·세금연도
   challenge: {active:null, history:[], best:0, last:null}, // 현재 진행을 초기화하지 않는 시나리오 챌린지
   riskScenario: "base", // 리스크 탭에서 선택한 스트레스 시나리오
   shortRealized: 0, // 공매도 누적 실현손익
@@ -964,7 +985,7 @@ const state={
   dividendTotal: 0, // 누적 배당 수령액
   feesTotal: 0,     // 누적 거래 수수료
   notify: Object.assign({},NOTIFY_DEFAULT),
-  auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0, autoSell:false, takeProfit:20, stopLoss:10, taxAware:false},
+  auto: {enabled:false, stockPct:60, minCash:1000000, every:60, goldPct:0, estatePct:0, autoSell:false, takeProfit:20, stopLoss:10, rebalance:false, rebStockPct:60, rebBand:5, taxAware:false, taxBudget:0},
   // 환생(영구 성장) 데이터. 일반 진행 초기화와 분리되어 유지됩니다.
   rebirth: {count:0, points:0, spent:0, upgrades:{}, bestNet:0, history:[], notified:false},
   ui: {assetTab:"overview", mobileStock:""},
@@ -1337,7 +1358,8 @@ function saveAutoSettings(){
   const rebStockPct=Math.max(0,Math.min(100,+($("auto-reb-pct")?$("auto-reb-pct").value:60)||0));
   const rebBand=Math.max(2,Math.min(20,Math.round(+($("auto-reb-band")?$("auto-reb-band").value:5)||5)));
   const taxAware=$("auto-tax")?$("auto-tax").checked:!!(state.auto||{}).taxAware;
-  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every,autoSell,takeProfit,stopLoss,rebalance,rebStockPct,rebBand,taxAware});
+  const taxBudget=Math.max(0,Math.floor(+($("auto-tax-budget")?$("auto-tax-budget").value:((state.auto||{}).taxBudget||0))||0));
+  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every,autoSell,takeProfit,stopLoss,rebalance,rebStockPct,rebBand,taxAware,taxBudget});
   saveGame(); if(activePage()==="settings") settingsPage(); else portfolio(); update();
   notify("system","자동 투자",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)} · ${state.auto.every}초 주기${state.auto.autoSell?` · 익절 ${state.auto.takeProfit}%/손절 ${state.auto.stopLoss}%`:''}`);
 }
@@ -1353,21 +1375,14 @@ function autoSellRules(){
   const tp=(a.takeProfit||0)/100, sl=(a.stopLoss||0)/100;
   if(tp<=0 && sl<=0) return 0;
   let sold=0;
+  const acct=state.tax.mode;
   stocks.forEach(s=>{
-    if(s.own<=0 || !s.avgBuy) return;
-    const roi=(s.price-s.avgBuy)/s.avgBuy;
+    const count=accountQty(s,acct), avg=accountAvgBuy(s,acct);
+    if(count<=0 || !avg) return;
+    const roi=(s.price-avg)/avg;
     if(!((tp>0&&roi>=tp)||(sl>0&&roi<=-sl))) return;
-    const foreign=isForeignStock(s), count=s.own;
-    const revenue=s.price*count*(1-stockFeeRate()-tradeTaxRate());
-    const profit=revenue-consumeTaxLots(s,count);
-    const profitKRW=foreign?profit*fx.usd:profit;
-    if(foreign){ state.usd+=revenue; s.realizedProfit+=profitKRW; }
-    else { state.cash+=revenue; s.realizedProfit+=profit; }
-    s.own=0; s.avgBuy=0;
-    recordTrade(s,"sell",count,s.price,profitKRW);
-    settleTax(profitKRW);
-    creditStockBonus(profitKRW);
-    addLog(`🤖 자동 매도: ${s.name} ${count}주 · ${pct(roi)}`);
+    if(!marketSellShares(s,count,acct)) return;
+    addLog(`🤖 자동 매도: ${s.name} ${count}주 · ${pct(roi)} · ${taxModeLabel(acct)}`);
     sold++;
   });
   if(sold){
@@ -1393,7 +1408,8 @@ function autoInvest(force){
       const unitKRW=s.price*(1+stockFeeRate())*(foreign?fx.usd:1);
       const qty=Math.floor(perKRW/unitKRW);
       if(qty<=0) return;
-      const costNative=qty*s.price*(1+stockFeeRate());
+      const costNative=qty*s.price*(1+stockFeeRate()), acct=state.tax.mode, principalKRW=qty*s.price*(foreign?fx.usd:1);
+      if(!canTaxContribute(acct,principalKRW)) return;
       if(foreign){
         if(state.usd<costNative){
           const need=costNative-state.usd;
@@ -1401,14 +1417,9 @@ function autoInvest(force){
           if(krw>state.cash) return;
           state.cash-=krw; state.usd+=need;
         }
-        state.usd-=costNative;
-      }else{
-        if(state.cash<costNative) return;
-        state.cash-=costNative;
-      }
-      s.avgBuy=((s.avgBuy*s.own)+(s.price*(1+stockFeeRate()))*qty)/(s.own+qty);
-      s.own+=qty;
-      invested+=costNative*(foreign?fx.usd:1);
+      }else if(state.cash<costNative) return;
+      if(!marketBuyShares(s,qty,acct)) return;
+      invested+=principalKRW;
     });
   }
   // 자동 배분: 금·은과 부동산 비중(설정한 경우에만 동작, 기본 0%).
@@ -1829,29 +1840,62 @@ function setCompanyPayout(v){ if(!state.company) return; state.company.payout=Ma
 
 // ── 주문 체결 공통 ─────────────────────────────
 // 예약 주문·자동 리밸런싱이 같은 수수료/세금/기록 경로를 쓰도록 모았습니다.
-function marketBuyShares(s,qty){
+function marketBuyShares(s,qty,account){
+  ensureAdvancedState();
   qty=Math.floor(+qty||0); if(!s||qty<=0) return false;
-  const foreign=isForeignStock(s);
-  const cost=s.price*(1+stockFeeRate())*qty;
+  const acct=TAX_ACCOUNTS.includes(account)?account:state.tax.mode, foreign=isForeignStock(s);
+  const unit=s.price*(1+stockFeeRate()), cost=unit*qty, principalKRW=s.price*qty*(foreign?fx.usd:1);
+  if(!canTaxContribute(acct,principalKRW)) return false;
   if(foreign ? state.usd<cost : state.cash<cost) return false;
   if(foreign) state.usd-=cost; else state.cash-=cost;
-  s.avgBuy=((s.avgBuy*s.own)+(s.price*(1+stockFeeRate()))*qty)/(s.own+qty);
+  s.avgBuy=((s.avgBuy*s.own)+unit*qty)/(s.own+qty);
   s.own+=qty;
-  addTaxLot(s,qty,s.price*(1+stockFeeRate()));
+  addTaxContribution(acct,principalKRW);
+  addTaxLot(s,qty,unit,acct);
   recordTrade(s,"buy",qty,s.price,0);
   return true;
 }
-function marketSellShares(s,qty){
-  qty=Math.floor(+qty||0); if(!s||qty<=0||s.own<qty) return false;
+function simulateFifoBasis(s,qty,account){
+  const acct=TAX_ACCOUNTS.includes(account)?account:state.tax.mode;
+  const lots=ensureTaxLots(s).filter(l=>l.account===acct).map(l=>({qty:l.qty,price:l.price}));
+  let left=Math.max(0,Math.floor(+qty||0)), basis=0;
+  while(left>0&&lots.length){
+    const l=lots[0], take=Math.min(left,l.qty);
+    basis+=take*l.price; l.qty-=take; left-=take;
+    if(l.qty<=0) lots.shift();
+  }
+  if(left>0) basis+=left*Math.max(0,+s.avgBuy||+s.price||0);
+  return basis;
+}
+function taxPreviewFor(s,qty,account){
+  ensureAdvancedState();
+  qty=Math.floor(+qty||0);
+  const acct=TAX_ACCOUNTS.includes(account)?account:state.tax.mode;
+  const available=s?accountQty(s,acct):0;
+  if(!s||qty<=0) return {ok:false,reason:"수량을 입력해 주세요.",account:acct,available};
+  if(qty>available) return {ok:false,reason:`${taxModeLabel(acct)}에 매도 가능한 수량은 ${available}주입니다.`,account:acct,available};
+  const foreign=isForeignStock(s);
+  const revenue=s.price*(1-stockFeeRate()-tradeTaxRate())*qty;
+  const basis=simulateFifoBasis(s,qty,acct);
+  const profit=revenue-basis, profitKRW=foreign?profit*fx.usd:profit;
+  const projection=taxProjection(profitKRW,acct);
+  const revenueKRW=foreign?revenue*fx.usd:revenue;
+  return {ok:true,account:acct,available,qty,revenue,revenueKRW,basis,profit,profitKRW,tax:projection.tax,taxable:projection.taxable,carryUsed:projection.carryUsed,deferred:projection.deferred,netKRW:revenueKRW-projection.tax};
+}
+function marketSellShares(s,qty,account){
+  ensureAdvancedState();
+  qty=Math.floor(+qty||0);
+  const acct=TAX_ACCOUNTS.includes(account)?account:state.tax.mode;
+  if(!s||qty<=0||accountQty(s,acct)<qty) return false;
   const foreign=isForeignStock(s);
   const revenue=s.price*(1-stockFeeRate()-tradeTaxRate())*qty;
   // FIFO 로트의 취득원가를 세금·실현손익 계산에 사용합니다.
-  const profit=revenue-consumeTaxLots(s,qty);
+  const profit=revenue-consumeTaxLots(s,qty,acct);
   const profitKRW=foreign?profit*fx.usd:profit;
   if(foreign){ state.usd+=revenue; s.realizedProfit+=profitKRW; } else { state.cash+=revenue; s.realizedProfit+=profit; }
   s.own-=qty; if(s.own===0) s.avgBuy=0;
   recordTrade(s,"sell",qty,s.price,profitKRW);
-  settleTax(profitKRW); creditStockBonus(profitKRW);
+  settleTax(profitKRW,acct); creditStockBonus(profitKRW);
   return true;
 }
 
@@ -2049,7 +2093,13 @@ function subscribeIPO(){
   const amount=Math.floor(+((($("ipo-amount")||{}).value)||0)||0);
   if(amount<10000) return alert("1만원 이상 청약할 수 있습니다.");
   if(state.cash<amount) return alert("현금이 부족합니다.");
+  const acct=state.tax.mode;
+  if(o.mine>0 && o.account && o.account!==acct) return alert(`이 공모주는 ${taxModeLabel(o.account)}에서 청약했습니다. 같은 계좌에서만 추가 청약할 수 있습니다.`);
+  if(!canTaxContribute(acct,amount)) return alert(`${taxModeLabel(acct)} 연간 납입한도가 부족합니다.`);
+  o.account=acct;
   state.cash-=amount;
+  addTaxContribution(acct,amount);
+  o.reserved=(o.reserved||0)+amount;
   o.mine=(o.mine||0)+amount;
   o.subscribed=(o.subscribed||0)+amount;
   o.lastAction={type:"subscribe",amount,at:Date.now(),shares:o.price>0?Math.floor(amount/o.price):0};
@@ -2059,8 +2109,10 @@ function subscribeIPO(){
 }
 function cancelIPO(){
   const ipo=ensureIPO(),o=ipo.offer; if(!o||!o.mine) return;
-  const refund=o.mine;
+  const refund=o.mine, acct=TAX_ACCOUNTS.includes(o.account)?o.account:"general", reserved=Math.max(0,+o.reserved||0);
   state.cash+=refund;
+  releaseTaxContribution(acct,reserved);
+  o.reserved=0;
   o.subscribed=Math.max(0,(o.subscribed||0)-refund);
   o.mine=0;
   o.lastAction={type:"cancel",amount:refund,at:Date.now(),shares:0};
@@ -2075,11 +2127,14 @@ function closeIPO(){
   const demandShares=Math.round(o.qty*(0.3+Math.random()*2.2))+mineShares;
   const ratio=Math.min(1,o.qty/Math.max(1,demandShares));
   const alloc=mine>0?Math.max(0,Math.floor(mineShares*ratio)):0;
+  const acct=TAX_ACCOUNTS.includes(o.account)?o.account:"general", reserved=Math.max(0,+o.reserved||0);
   if(mine>0) state.cash+=mine-alloc*o.price;
+  if(reserved>0) releaseTaxContribution(acct,Math.max(0,reserved-alloc*o.price));
+  o.reserved=0;
   const open=Math.max(100,Math.round(o.price*(0.9+Math.random()*0.35)/100)*100);
   const s=ensureListedStock(o,o.price);
   s.start=o.price; s.price=open; s.lastMove=(open-o.price)/o.price; s.hist=[o.price,open];
-  if(alloc>0){ s.own=alloc; s.avgBuy=o.price; }
+  if(alloc>0){ s.own=alloc; s.avgBuy=o.price; addTaxLot(s,alloc,o.price,acct); recordTrade(s,"buy",alloc,o.price,0); }
   if(!state.listedIds.includes(o.id)) state.listedIds.push(o.id);
   ipo.history.unshift({id:o.id,name:o.name,price:o.price,open,alloc,at:state.marketSeconds});
   ipo.history=ipo.history.slice(0,8);
@@ -2102,24 +2157,30 @@ function autoRebalance(){
   const a=state.auto||{};
   if(!a.enabled||!a.rebalance||!state.marketOpen) return 0;
   const gross=grossAssetsKRW(); if(gross<=0) return 0;
-  const target=Math.max(0,Math.min(100,+a.rebStockPct||60))/100;
-  const band=Math.max(0.02,Math.min(0.2,(+a.rebBand||5)/100));
+  const target=Math.max(0,Math.min(100,Number.isFinite(+a.rebStockPct)?+a.rebStockPct:60))/100;
+  const band=Math.max(0.02,Math.min(0.2,Number.isFinite(+a.rebBand)?+a.rebBand:5)/100);
   const now=stockValueKRW()/gross;
   let moved=0;
+  const acct=state.tax.mode;
   if(now>target+band){
     let need=(now-target-band)*gross;
-    const taxAware=!!a.taxAware;
-    const sellList=[...stocks].filter(s=>s.own>0&&!isIndexFund(s));
+    const taxAware=!!a.taxAware, taxBudget=Math.max(0,+a.taxBudget||0);
+    const sellList=[...stocks].filter(s=>accountQty(s,acct)>0&&!isIndexFund(s));
     // 세금 고려 모드: 평가차익이 작은(또는 손실인) 종목부터 매도해 양도세를 줄입니다.
     sellList.sort(taxAware
-      ?(x,y)=>((x.price-x.avgBuy)/Math.max(1,x.avgBuy))-((y.price-y.avgBuy)/Math.max(1,y.avgBuy))
-      :(x,y)=>y.price*y.own-x.price*x.own);
+      ?(x,y)=>{const ax=accountAvgBuy(x,acct),ay=accountAvgBuy(y,acct);return ((x.price-ax)/Math.max(1,ax))-((y.price-ay)/Math.max(1,ay));}
+      :(x,y)=>y.price*accountQty(y,acct)-x.price*accountQty(x,acct));
     sellList.forEach(s=>{
       if(need<=0) return;
       const unit=s.price*(isForeignStock(s)?fx.usd:1);
-      const qty=Math.min(s.own,Math.max(1,Math.floor(need/unit)));
-      const before=s.own;
-      if(marketSellShares(s,qty)){ const done=(before-s.own)*unit; moved+=done; need-=done; }
+      const qty=Math.min(accountQty(s,acct),Math.max(1,Math.floor(need/unit)));
+      if(qty<=0) return;
+      const p=taxPreviewFor(s,qty,acct);
+      if(taxAware && taxBudget>0 && (state.tax.taxPaidByAccount[acct]||0)+p.tax>taxBudget){
+        addLog(`🧾 세금 예산 초과로 ${s.name} 매도 건너뜀 (예상 ${won(p.tax)} / 예산 ${won(taxBudget)})`);
+        return;
+      }
+      if(marketSellShares(s,qty,acct)){ const done=qty*unit; moved+=done; need-=done; }
     });
   } else if(now<target-band){
     const need=(target-band-now)*gross;
@@ -2135,7 +2196,7 @@ function autoRebalance(){
     }
   }
   if(moved>0){
-    addLog(`⚖️ 자동 리밸런싱: 주식 비중 ${pct(now)} → 목표 ${Math.round(target*100)}% · ${won(moved)} 조정${a.taxAware?" (세금 고려: 저수익 로트 우선)":""}`);
+    addLog(`⚖️ 자동 리밸런싱: 주식 비중 ${pct(now)} → 목표 ${Math.round(target*100)}% · ${won(moved)} 조정${a.taxAware?` (세금 고려 · 예산 ${a.taxBudget>0?won(a.taxBudget):"제한 없음"})`:""}`);
     notify("system","리밸런싱",`${won(moved)} · 주식 ${Math.round(target*100)}% 맞춤${a.taxAware?" · 절세 우선":""}`);
     saveGame(); update();
   }
@@ -2754,36 +2815,37 @@ function placeOrder(){
   const s = stock(stockId);
   if(!s) return alert("예약할 종목을 선택해 주세요.");
   const id = `o${Date.now()}${Math.floor(Math.random()*1000)}`;
+  const account = state.tax.mode, held = accountQty(s,account);
   const priceText = isForeignStock(s) ? usdStr(limit) : won(limit);
   if(type === "dca"){
     if(limit < 10000) return alert("분할 매수 금액은 1만원 이상이어야 합니다.");
-    state.orders.push({id, stockId, type:"dca", side:"buy", amount:limit, every, lastAt:state.marketSeconds});
-    addLog(`🔁 분할 매수 예약: ${s.name} ${won(limit)} / ${every}초`);
+    state.orders.push({id, stockId, type:"dca", side:"buy", amount:limit, every, lastAt:state.marketSeconds, account});
+    addLog(`🔁 분할 매수 예약: ${s.name} ${won(limit)} / ${every}초 · ${taxModeLabel(account)}`);
   } else if(type === "trailing"){
-    if(s.own <= 0) return alert("보유 중인 종목만 트레일링 스톱을 걸 수 있습니다.");
-    state.orders.push({id, stockId, type:"trailing", side:"sell", qty:qty||s.own, trail, peak:s.price});
-    addLog(`📉 트레일링 스톱: ${s.name} ${qty||s.own}주 · 고점 대비 -${trail}%`);
+    if(held <= 0) return alert("현재 계좌에 보유 중인 종목만 트레일링 스톱을 걸 수 있습니다.");
+    state.orders.push({id, stockId, type:"trailing", side:"sell", qty:qty||held, trail, peak:s.price, account});
+    addLog(`📉 트레일링 스톱: ${s.name} ${qty||held}주 · 고점 대비 -${trail}% · ${taxModeLabel(account)}`);
   } else if(type === "oco"){
     if(qty <= 0 || takeProfit <= 0 || stopPrice <= 0) return alert("수량·익절가·손절가를 모두 입력해 주세요.");
-    if(s.own < qty) return alert("보유 수량이 부족합니다.");
+    if(held < qty) return alert("현재 계좌의 보유 수량이 부족합니다.");
     if(!(takeProfit > stopPrice)) return alert("익절가는 손절가보다 높아야 합니다.");
-    state.orders.push({id, stockId, type:"oco", side:"sell", qty, takeProfit, stopPrice});
-    addLog(`🎯 OCO 주문: ${s.name} ${qty}주 · 익절 ${won(takeProfit)} / 손절 ${won(stopPrice)}`);
+    state.orders.push({id, stockId, type:"oco", side:"sell", qty, takeProfit, stopPrice, account});
+    addLog(`🎯 OCO 주문: ${s.name} ${qty}주 · 익절 ${won(takeProfit)} / 손절 ${won(stopPrice)} · ${taxModeLabel(account)}`);
   } else if(type === "bracket"){
     if(qty <= 0 || entry <= 0 || takeProfit <= 0 || stopPrice <= 0) return alert("수량·진입가·익절가·손절가를 모두 입력해 주세요.");
     if(!(takeProfit > entry && entry > stopPrice)) return alert("익절가 > 진입가 > 손절가 순서로 입력해 주세요.");
-    state.orders.push({id, stockId, type:"bracket", side:"buy", qty, entry, takeProfit, stopPrice});
-    addLog(`🧩 브래킷 주문: ${s.name} ${qty}주 · 진입 ${won(entry)} 돌파 시 매수 후 OCO`);
+    state.orders.push({id, stockId, type:"bracket", side:"buy", qty, entry, takeProfit, stopPrice, account});
+    addLog(`🧩 브래킷 주문: ${s.name} ${qty}주 · 진입 ${won(entry)} 돌파 시 매수 후 OCO · ${taxModeLabel(account)}`);
   } else if(type === "stop"){
     if(qty <= 0 || limit <= 0) return alert("수량과 조건 가격을 입력해 주세요.");
-    if(side === "sell" && s.own < qty) return alert("보유 수량이 부족합니다.");
-    state.orders.push({id, stockId, type:"stop", side, qty, limit});
-    addLog(`🛑 조건 주문: ${s.name} ${side==="buy"?"돌파 매수":"손절 매도"} ${qty}주 @ ${priceText}`);
+    if(side === "sell" && held < qty) return alert("현재 계좌의 보유 수량이 부족합니다.");
+    state.orders.push({id, stockId, type:"stop", side, qty, limit, account});
+    addLog(`🛑 조건 주문: ${s.name} ${side==="buy"?"돌파 매수":"손절 매도"} ${qty}주 @ ${priceText} · ${taxModeLabel(account)}`);
   } else {
     if(qty <= 0 || limit <= 0) return alert("수량과 지정가를 올바르게 입력해 주세요.");
-    if(side === "sell" && s.own < qty) return alert("보유 수량이 부족합니다.");
-    state.orders.push({id, stockId, type:"limit", side, qty, limit});
-    addLog(`예약 주문: ${s.name} ${side === "buy" ? "매수" : "매도"} ${qty}주 @ ${priceText}`);
+    if(side === "sell" && held < qty) return alert("현재 계좌의 보유 수량이 부족합니다.");
+    state.orders.push({id, stockId, type:"limit", side, qty, limit, account});
+    addLog(`예약 주문: ${s.name} ${side === "buy" ? "매수" : "매도"} ${qty}주 @ ${priceText} · ${taxModeLabel(account)}`);
   }
   saveGame(); portfolio(); update();
 }
@@ -2806,11 +2868,12 @@ function processOrders(){
     if(!s) return;
     const foreign = isForeignStock(s);
     const px = p => foreign ? usdStr(p) : won(p);
+    const acct = TAX_ACCOUNTS.includes(o.account) ? o.account : state.tax.mode;
     if(o.type === "dca"){
       if(state.marketOpen && state.marketSeconds - (o.lastAt||0) >= (o.every||60)){
         const unit = s.price*(1+stockFeeRate())*(foreign?fx.usd:1);
         const qty = Math.max(0,Math.floor((o.amount||0)/unit));
-        if(qty>0 && marketBuyShares(s,qty)){
+        if(qty>0 && marketBuyShares(s,qty,acct)){
           o.lastAt = state.marketSeconds;
           addLog(`🔁 분할 매수 체결: ${s.name} ${qty}주 @ ${px(s.price)}`);
           notify("order","분할 매수",`${s.name} ${qty}주`);
@@ -2821,11 +2884,11 @@ function processOrders(){
     }
     if(!state.marketOpen){ remain.push(o); return; }
     if(o.type === "oco"){
-      if(s.own < o.qty) return; // 다른 거래로 수량이 사라진 OCO는 자동 취소
+      if(accountQty(s,acct) < o.qty) return; // 다른 거래로 수량이 사라진 OCO는 자동 취소
       const hitTp=s.price >= o.takeProfit;
       const hitSl=s.price <= o.stopPrice;
       if(!hitTp && !hitSl){ remain.push(o); return; }
-      if(marketSellShares(s,o.qty)){
+      if(marketSellShares(s,o.qty,acct)){
         addLog(`🎯 OCO ${hitTp?"익절":"손절"} 체결: ${s.name} ${o.qty}주 @ ${s.price}`);
         notify("order",hitTp?"OCO 익절 체결":"OCO 손절 체결",`${s.name} ${o.qty}주`);
         bumpDaily("orders");
@@ -2834,8 +2897,8 @@ function processOrders(){
     }
     if(o.type === "bracket"){
       if(s.price < o.entry){ remain.push(o); return; }
-      if(marketBuyShares(s,o.qty)){
-        extra.push({id:`o${Date.now()}${Math.floor(Math.random()*1000)}`,stockId:o.stockId,type:"oco",side:"sell",qty:o.qty,takeProfit:o.takeProfit,stopPrice:o.stopPrice,parent:o.id});
+      if(marketBuyShares(s,o.qty,acct)){
+        extra.push({id:`o${Date.now()}${Math.floor(Math.random()*1000)}`,stockId:o.stockId,type:"oco",side:"sell",qty:o.qty,takeProfit:o.takeProfit,stopPrice:o.stopPrice,parent:o.id,account:acct});
         addLog(`🧩 브래킷 진입 돌파: ${s.name} ${o.qty}주 @ ${s.price} · OCO 자동 등록`);
         notify("order","브래킷 진입",`${s.name} ${o.qty}주 · OCO 등록`);
         bumpDaily("orders");
@@ -2846,8 +2909,8 @@ function processOrders(){
       o.peak = Math.max(+o.peak||0, s.price);
       const trig = (o.peak||s.price)*(1-(o.trail||5)/100);
       if(s.price > trig){ remain.push(o); return; }
-      const qty = Math.min(o.qty||s.own, s.own);
-      if(qty>0 && marketSellShares(s,qty)){
+      const qty = Math.min(o.qty||accountQty(s,acct), accountQty(s,acct));
+      if(qty>0 && marketSellShares(s,qty,acct)){
         addLog(`📉 트레일링 스톱 매도: ${s.name} ${qty}주 @ ${px(s.price)}`);
         notify("order","트레일링 스톱",`${s.name} ${qty}주`);
         bumpDaily("orders");
@@ -2858,14 +2921,14 @@ function processOrders(){
       const hit = o.side === "buy" ? s.price >= o.limit : s.price <= o.limit;
       if(!hit){ remain.push(o); return; }
       if(o.side === "buy"){
-        if(marketBuyShares(s,o.qty)){
+        if(marketBuyShares(s,o.qty,acct)){
           addLog(`🛑 돌파 매수 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
           notify("order","돌파 매수",`${s.name} ${o.qty}주`);
           bumpDaily("orders");
         } else remain.push(o);
       } else {
-        if(s.own < o.qty){ remain.push(o); return; }
-        if(marketSellShares(s,o.qty)){
+        if(accountQty(s,acct) < o.qty){ remain.push(o); return; }
+        if(marketSellShares(s,o.qty,acct)){
           addLog(`🛑 손절 매도 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
           notify("order","손절 매도",`${s.name} ${o.qty}주`);
           bumpDaily("orders");
@@ -2877,18 +2940,17 @@ function processOrders(){
     const hit = o.side === "buy" ? s.price <= o.limit : s.price >= o.limit;
     if(!hit){ remain.push(o); return; }
     if(o.side === "buy"){
-      if(marketBuyShares(s,o.qty)){
+      if(marketBuyShares(s,o.qty,acct)){
         addLog(`⏱ 예약 매수 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
         notify("order","지정가 매수 체결",`${s.name} ${o.qty}주`);
         bumpDaily("orders");
       } else remain.push(o);
     } else {
-      if(s.own < o.qty){ remain.push(o); return; }
-      const before = s.avgBuy*o.qty;
-      if(marketSellShares(s,o.qty)){
-        const profitKRW = (s.price*(1-stockFeeRate()-tradeTaxRate())*o.qty - before);
+      if(accountQty(s,acct) < o.qty){ remain.push(o); return; }
+      const p=taxPreviewFor(s,o.qty,acct);
+      if(marketSellShares(s,o.qty,acct)){
         addLog(`⏱ 예약 매도 체결: ${s.name} ${o.qty}주 @ ${px(s.price)}`);
-        notify("order","지정가 매도 체결",`${s.name} ${o.qty}주 · ${won(profitKRW)}`);
+        notify("order","지정가 매도 체결",`${s.name} ${o.qty}주 · ${won(p.profitKRW)}`);
         bumpDaily("orders");
       }
     }
@@ -2899,56 +2961,75 @@ function processOrders(){
 // ── 세금 ────────────────────────────────────────
 // 양도소득세: 일반 계좌는 연 2,500만원 공제 후 22%, ISA는 200만원 공제 후 9.9%,
 // 연금저축은 매도 시점에 과세하지 않고 인출할 때 5.5%를 납부합니다.
-function settleTax(profitKRW){
+function taxProjection(profitKRW, account){
   ensureAdvancedState();
-  const t=state.tax;
-  const profit=+profitKRW||0;
-  if(!profit){
-    return 0;
+  const t=state.tax, acct=TAX_ACCOUNTS.includes(account)?account:t.mode, profit=+profitKRW||0;
+  const base={account:acct,profit,tax:0,taxable:0,carryUsed:0,deferred:0};
+  if(!(profit>0)) return base;
+  if(acct==="pension") return Object.assign(base,{deferred:profit});
+  if(acct==="isa"){
+    const gains=(+t.isaGains||0)+profit;
+    const taxable=Math.max(0,Math.max(0,gains-2000000)-(+t.isaTaxed||0));
+    return Object.assign(base,{tax:taxable*.099,taxable});
   }
+  const realized=(+state.realizedYTD||0)+profit;
+  let taxable=Math.max(0,Math.max(0,realized-TAX_GAINS_FREE)-(+state.taxedProfit||0));
+  // carryLossBase는 지난 세금연도에서 넘어온 손실만 담습니다. 당해 손실은 realizedYTD에 이미 반영되어
+  // 중복 차감되지 않습니다.
+  const carryUsed=Math.min(taxable,Math.max(0,+t.carryLossBase||0));
+  taxable=Math.max(0,taxable-carryUsed);
+  return Object.assign(base,{tax:taxable*TAX_GAINS_RATE,taxable,carryUsed});
+}
+function settleTax(profitKRW, account){
+  ensureAdvancedState();
+  const t=state.tax, acct=TAX_ACCOUNTS.includes(account)?account:t.mode, profit=+profitKRW||0;
+  if(!profit){ return 0; }
   // 계좌별 손익은 서로 섞지 않습니다. state.realizedYTD와 state.taxedProfit은
   // 일반 계좌 전용이고, ISA는 isaGains/isaTaxed, 연금은 pensionDeferred를 사용합니다.
   if(profit<0){
-    if(t.mode==="general"){
+    if(acct==="general"){
       state.realizedYTD=(state.realizedYTD||0)+profit;
       t.carryLoss=Math.min(TAX_GAINS_FREE*2,t.carryLoss-profit);
-    } else if(t.mode==="isa"){
+    } else if(acct==="isa"){
       t.isaGains=Math.max(0,t.isaGains+profit);
     } else {
       t.pensionDeferred=Math.max(0,t.pensionDeferred+profit);
     }
     return 0;
   }
-  if(t.mode==="pension"){
+  const plan=taxProjection(profit,acct);
+  if(acct==="pension"){
     t.pensionDeferred=(t.pensionDeferred||0)+profit;
     addLog(`연금저축 세금 이연: ${won(profit*.055)} (인출 시 5.5%)`);
     return 0;
   }
-  if(t.mode==="isa"){
+  if(acct==="isa"){
     t.isaGains=(t.isaGains||0)+profit;
-    const taxable=Math.max(0,t.isaGains-2000000)-(t.isaTaxed||0);
-    if(taxable<=0) return 0;
-    const tax=taxable*.099;
-    t.isaTaxed=(t.isaTaxed||0)+taxable;
-    state.taxPaid=(state.taxPaid||0)+tax;
-    if(state.cash>=tax) state.cash-=tax; else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
-    addLog(`ISA 양도세 원천징수: ${won(tax)} (ISA 누적 실현손익 ${won(t.isaGains)})`);
-    notify("tax","ISA 양도세",won(tax));
-    return tax;
+    if(plan.taxable>0){
+      const tax=plan.tax;
+      t.isaTaxed=(t.isaTaxed||0)+plan.taxable;
+      state.taxPaid=(state.taxPaid||0)+tax;
+      t.taxPaidByAccount.isa+=tax;
+      if(state.cash>=tax) state.cash-=tax; else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
+      addLog(`ISA 양도세 원천징수: ${won(tax)} (ISA 누적 실현손익 ${won(t.isaGains)})`);
+      notify("tax","ISA 양도세",won(tax));
+    }
+    return plan.tax;
   }
   state.realizedYTD=(state.realizedYTD||0)+profit;
-  // 일반 계좌: 일반 계좌의 연간 실현손익에서 기본공제를 뺀 뒤 22%를 적용합니다.
-  // 당해 손실은 realizedYTD에 반영되어 세금을 줄이고, 초과 손실은 carryLoss로 이월합니다.
-  const taxable = Math.max(0, state.realizedYTD - TAX_GAINS_FREE) - (state.taxedProfit || 0);
-  if(taxable <= 0) return 0;
-  const tax = taxable * TAX_GAINS_RATE;
-  state.taxedProfit = (state.taxedProfit || 0) + taxable;
-  state.taxPaid = (state.taxPaid || 0) + tax;
-  if(state.cash >= tax){ state.cash -= tax; }
-  else { state.loan = (state.loan || 0) + (tax - state.cash); state.cash = 0; } // 현금 부족분은 대출로 전환
-  addLog(`양도세 원천징수: ${won(tax)} (연 누적 실현손익 ${won(state.realizedYTD)})`);
-  notify("tax","양도세 원천징수",`${won(tax)}`);
-  return tax;
+  if(plan.carryUsed>0){ t.carryLoss=Math.max(0,t.carryLoss-plan.carryUsed); t.carryLossBase=Math.max(0,t.carryLossBase-plan.carryUsed); }
+  if(plan.taxable>0){
+    const tax=plan.tax;
+    state.taxedProfit=(state.taxedProfit||0)+plan.taxable;
+    state.taxPaid=(state.taxPaid||0)+tax;
+    t.taxPaidByAccount.general+=tax;
+    if(state.cash>=tax){ state.cash-=tax; }
+    else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
+    addLog(`양도세 원천징수: ${won(tax)} (연 누적 실현손익 ${won(state.realizedYTD)})`);
+    notify("tax","양도세 원천징수",`${won(tax)}`);
+    return tax;
+  }
+  return 0;
 }
 
 // ── 신용 대출 ───────────────────────────────────
@@ -3052,10 +3133,20 @@ function earningsSurprise(target){
 function ensureAdvancedState(){
   if(!Array.isArray(state.calendar)) state.calendar=[];
   if(!Array.isArray(state.disclosures)) state.disclosures=[];
-  if(!state.tax || typeof state.tax!=="object") state.tax={mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1};
+  if(!state.tax || typeof state.tax!=="object") state.tax={mode:"general",carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1,
+    contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:state.marketSeconds||0};
   const t=state.tax;
-  if(!["general","isa","pension"].includes(t.mode)) t.mode="general";
-  ["carryLoss","pensionDeferred","isaGains","isaTaxed"].forEach(k=>{ t[k]=Math.max(0,+t[k]||0); });
+  if(!TAX_ACCOUNTS.includes(t.mode)) t.mode="general";
+  ["carryLoss","carryLossBase","pensionDeferred","isaGains","isaTaxed"].forEach(k=>{ t[k]=Math.max(0,+t[k]||0); });
+  if(!t.contributions || typeof t.contributions!=="object") t.contributions={general:0,isa:0,pension:0};
+  TAX_ACCOUNTS.forEach(k=>{ t.contributions[k]=Math.max(0,+t.contributions[k]||0); });
+  if(!t.taxPaidByAccount || typeof t.taxPaidByAccount!=="object"){
+    const paid=Math.max(0,+state.taxPaid||0), isaPaid=Math.min(paid,Math.max(0,+t.isaTaxed||0)*.099);
+    t.taxPaidByAccount={general:paid-isaPaid,isa:isaPaid,pension:0};
+  }
+  TAX_ACCOUNTS.forEach(k=>{ t.taxPaidByAccount[k]=Math.max(0,+t.taxPaidByAccount[k]||0); });
+  t.year=Math.max(1,Math.floor(+t.year||1));
+  t.yearStart=Number.isFinite(+t.yearStart)?Math.max(0,+t.yearStart):Math.max(0,+state.marketSeconds||0);
   // 이전 버전은 ISA·연금 손익까지 realizedYTD에 합산했습니다. 한 번만 분리해
   // 기존 세이브를 불러온 뒤 일반 계좌 세금에 과거 ISA·연금 이익이 다시 잡히지 않게 합니다.
   if(t.splitVersion!==1){
@@ -3073,13 +3164,14 @@ function ensureAdvancedState(){
   return state;
 }
 
-// FIFO 세금 로트: 매수할 때마다 취득원가를 한 로트씩 남기고, 매도할 때 오래된 로트부터 소진합니다.
+// FIFO 세금 로트: 계좌·취득원가를 남기고, 매도할 때 해당 계좌의 오래된 로트부터 소진합니다.
+function lotAccount(l){ return TAX_ACCOUNTS.includes(l&&l.account)?l.account:"general"; }
 function ensureTaxLots(s){
   if(!s) return [];
   if(!Array.isArray(s.taxLots)) s.taxLots=[];
-  s.taxLots=s.taxLots.filter(l=>l&&+l.qty>0).map(l=>({qty:Math.max(0,Math.floor(+l.qty||0)),price:Math.max(0,+l.price||0),at:Math.max(0,+l.at||0)}));
+  s.taxLots=s.taxLots.filter(l=>l&&+l.qty>0).map(l=>({qty:Math.max(0,Math.floor(+l.qty||0)),price:Math.max(0,+l.price||0),at:Math.max(0,+l.at||0),account:lotAccount(l)}));
   const total=s.taxLots.reduce((a,l)=>a+l.qty,0);
-  if(total<(+s.own||0)) s.taxLots.push({qty:(+s.own||0)-total,price:Math.max(0,+s.avgBuy||+s.price||0),at:0});
+  if(total<(+s.own||0)) s.taxLots.push({qty:(+s.own||0)-total,price:Math.max(0,+s.avgBuy||+s.price||0),at:0,account:"general"});
   else if(total>(+s.own||0)){
     let excess=total-(+s.own||0);
     for(let i=s.taxLots.length-1;i>=0&&excess>0;i--){
@@ -3090,29 +3182,51 @@ function ensureTaxLots(s){
   }
   return s.taxLots;
 }
+function accountLots(s,account){ return ensureTaxLots(s).filter(l=>l.account===(account||state.tax.mode)); }
+function accountQty(s,account){ return accountLots(s,account).reduce((a,l)=>a+l.qty,0); }
+function accountAvgBuy(s,account){
+  const lots=accountLots(s,account), qty=lots.reduce((a,l)=>a+l.qty,0);
+  return qty>0?lots.reduce((a,l)=>a+l.qty*l.price,0)/qty:0;
+}
 // 매수 직후(s.own에 이미 수량이 더해진 뒤) 호출합니다. 기존 보유분의 로트가 없으면
 // 평단가로 보완한 뒤 새 로트를 추가해, 같은 수량이 두 번 잡히지 않게 합니다.
-function addTaxLot(s,qty,price){
+function addTaxLot(s,qty,price,account){
   const n=Math.max(0,Math.floor(+qty||0));
   if(!s||!n) return;
   if(!Array.isArray(s.taxLots)) s.taxLots=[];
-  s.taxLots=s.taxLots.filter(l=>l&&+l.qty>0).map(l=>({qty:Math.max(0,Math.floor(+l.qty||0)),price:Math.max(0,+l.price||0),at:Math.max(0,+l.at||0)}));
+  s.taxLots=s.taxLots.filter(l=>l&&+l.qty>0).map(l=>({qty:Math.max(0,Math.floor(+l.qty||0)),price:Math.max(0,+l.price||0),at:Math.max(0,+l.at||0),account:lotAccount(l)}));
   const previousOwn=Math.max(0,(+s.own||0)-n);
   const total=s.taxLots.reduce((a,l)=>a+l.qty,0);
-  if(total<previousOwn) s.taxLots.push({qty:previousOwn-total,price:Math.max(0,+s.avgBuy||+s.price||0),at:0});
-  s.taxLots.push({qty:n,price:Math.max(0,+price||0),at:Math.max(0,+state.marketSeconds||0)});
+  if(total<previousOwn) s.taxLots.push({qty:previousOwn-total,price:Math.max(0,+s.avgBuy||+s.price||0),at:0,account:"general"});
+  s.taxLots.push({qty:n,price:Math.max(0,+price||0),at:Math.max(0,+state.marketSeconds||0),account:TAX_ACCOUNTS.includes(account)?account:state.tax.mode});
 }
-function consumeTaxLots(s,qty){
-  const lots=ensureTaxLots(s);
+function consumeTaxLots(s,qty,account){
+  const acct=TAX_ACCOUNTS.includes(account)?account:state.tax.mode, lots=ensureTaxLots(s);
   let left=Math.max(0,Math.floor(+qty||0)), basis=0;
-  while(left>0 && lots.length){
-    const l=lots[0], take=Math.min(left,l.qty);
+  for(let i=0;i<lots.length&&left>0;){
+    const l=lots[i];
+    if(l.account!==acct){ i++; continue; }
+    const take=Math.min(left,l.qty);
     basis+=take*l.price; l.qty-=take; left-=take;
-    if(l.qty<=0) lots.shift();
+    if(l.qty<=0) lots.splice(i,1); else i++;
   }
-  // 구버전 세이브 등 로트가 부족한 경우 평단가로 보완합니다.
+  // 구버전 세이브 등 계좌 로트가 부족한 경우 평단가로 보완합니다.
   if(left>0) basis+=left*Math.max(0,+s.avgBuy||+s.price||0);
   return basis;
+}
+function moveTaxLots(s,qty,from,to){
+  if(!s||!TAX_ACCOUNTS.includes(from)||!TAX_ACCOUNTS.includes(to)||from===to) return 0;
+  let left=Math.max(0,Math.floor(+qty||0)), moved=0, lots=ensureTaxLots(s);
+  for(const l of lots){
+    if(left<=0) break;
+    if(l.account!==from) continue;
+    const take=Math.min(left,l.qty);
+    if(take<=0) continue;
+    if(take===l.qty){ l.account=to; }
+    else { l.qty-=take; lots.push({qty:take,price:l.price,at:l.at,account:to}); }
+    left-=take; moved+=take;
+  }
+  return moved;
 }
 function taxModeLabel(mode){ return mode==="isa"?"ISA 절세 계좌":mode==="pension"?"연금저축 계좌":"일반 위탁 계좌"; }
 function taxAccountRealized(mode,t){
@@ -3121,10 +3235,47 @@ function taxAccountRealized(mode,t){
   if(mode==="pension") return +t.pensionDeferred||0;
   return +state.realizedYTD||0;
 }
+function taxAccountLimit(mode){ return TAX_ACCOUNT_LIMITS[mode]??Infinity; }
+function taxContributionUsed(mode){ const t=ensureAdvancedState().tax; return Math.max(0,+((t.contributions||{})[mode])||0); }
+function taxContributionRoom(mode){
+  const limit=taxAccountLimit(mode);
+  return Number.isFinite(limit)?Math.max(0,limit-taxContributionUsed(mode)):Infinity;
+}
+function canTaxContribute(mode,amountKRW){
+  const amount=Math.max(0,+amountKRW||0);
+  return !Number.isFinite(taxAccountLimit(mode)) || taxContributionUsed(mode)+amount<=taxAccountLimit(mode)+0.01;
+}
+function addTaxContribution(mode,amountKRW){
+  const t=ensureAdvancedState().tax, amount=Math.max(0,+amountKRW||0);
+  if(!TAX_ACCOUNTS.includes(mode)||!amount) return;
+  t.contributions[mode]=Math.max(0,+t.contributions[mode]||0)+amount;
+}
+function releaseTaxContribution(mode,amountKRW){
+  const t=ensureAdvancedState().tax, amount=Math.max(0,+amountKRW||0);
+  if(!TAX_ACCOUNTS.includes(mode)||!amount) return;
+  t.contributions[mode]=Math.max(0,(+t.contributions[mode]||0)-amount);
+}
+function taxYearRemaining(){ const t=ensureAdvancedState().tax; return Math.max(0,TAX_YEAR_SECONDS-(state.marketSeconds-(+t.yearStart||0))); }
+function taxYearReset(){
+  const t=ensureAdvancedState().tax;
+  // 연말 일반 계좌의 순손실만 다음 연도로 넘깁니다. 당해 이익과 상계된 손실을 다시
+  // 이월 손실로 쓰는 중복 차감을 막습니다.
+  const priorBase=Math.max(0,+t.carryLossBase||0), currentLoss=Math.max(0,-(+state.realizedYTD||0));
+  t.carryLoss=Math.min(TAX_GAINS_FREE*2,priorBase+currentLoss);
+  t.carryLossBase=t.carryLoss;
+  state.realizedYTD=0; state.taxedProfit=0;
+  t.isaGains=0; t.isaTaxed=0;
+  t.contributions={general:0,isa:0,pension:0};
+  t.taxPaidByAccount={general:0,isa:0,pension:0};
+  t.year=Math.max(1,+t.year||1)+1; t.yearStart=state.marketSeconds;
+  addLog(`🧾 세금 ${t.year-1}년차 결산 완료 · ${t.year}년차 시작 (일반 공제·ISA 한도·연간 손익 리셋, 이월 손실 유지)`);
+  notify("tax","세금 연도 결산",`${t.year}년차 시작 · 일반·ISA 연간 손익과 납입한도가 리셋되었습니다.`);
+}
+function tickTaxYear(){ if(state.marketSeconds-(+ensureAdvancedState().tax.yearStart||0)>=TAX_YEAR_SECONDS) taxYearReset(); }
 function setTaxAccount(mode){
   ensureAdvancedState();
   if(!["general","isa","pension"].includes(mode)) return false;
-  if(state.tax.mode!==mode && !confirm("세금 계좌를 바꾸면 이후 실현손익부터 새 계좌 규칙이 적용됩니다. 바꿀까요?")) return false;
+  if(state.tax.mode!==mode && !confirm(`세금 계좌를 ${taxModeLabel(mode)}(으)로 바꿀까요?\n보유 로트는 계좌별로 분리되어 있으며, 매도는 이 계좌에서 매수한 수량만 가능합니다.`)) return false;
   state.tax.mode=mode;
   addLog(`세금 계좌 변경: ${taxModeLabel(mode)}`);
   saveGame(); taxPage(); update();
@@ -3137,30 +3288,104 @@ function withdrawPensionTax(){
   const tax=t.pensionDeferred*0.055;
   if(state.cash>=tax) state.cash-=tax; else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
   state.taxPaid=(state.taxPaid||0)+tax;
+  t.taxPaidByAccount.pension=(t.taxPaidByAccount.pension||0)+tax;
   t.pensionDeferred=0;
   addLog(`연금저축 세금 납부: ${won(tax)} (5.5%)`);
   saveGame(); taxPage(); update();
   notify("tax","연금 세금 납부",won(tax));
 }
 function harvestLoss(id){
-  const s=stock(id);
-  if(!s || s.own<=0) return alert("손실 확정할 보유 종목이 없습니다.");
-  if(s.price>=s.avgBuy) return alert("평가손실이 있는 종목만 절세 매도할 수 있습니다.");
-  const qty=s.own;
-  if(!confirmTrade("절세 매도",`${s.name} ${qty}주 · 평가손실 ${won((s.price-s.avgBuy)*qty*(isForeignStock(s)?fx.usd:1))}`)) return false;
-  if(!marketSellShares(s,qty)) return false;
-  addLog(`🧾 절세 매도: ${s.name} ${qty}주 · 손실 확정`);
+  const s=stock(id), acct=state.tax.mode, qty=accountQty(s,acct);
+  if(!s || qty<=0) return alert(`${taxModeLabel(acct)}에 손실 확정할 보유 종목이 없습니다.`);
+  const p=taxPreviewFor(s,qty,acct);
+  if(!p.ok) return alert(p.reason);
+  if(p.profitKRW>=0) return alert("평가손실이 있는 종목만 절세 매도할 수 있습니다.");
+  if(!confirmTrade("절세 매도",`${s.name} ${qty}주 · 평가손실 ${won(p.profitKRW)} · ${taxModeLabel(acct)}`)) return false;
+  if(!marketSellShares(s,qty,acct)) return false;
+  addLog(`🧾 절세 매도: ${s.name} ${qty}주 · 손실 확정 · ${taxModeLabel(acct)}`);
   notify("tax","손실 확정",`${s.name} ${qty}주 · 이월 손실에 반영`);
   saveGame(); taxPage(); update();
   return true;
 }
 function taxLotsHtml(){
-  const held=stocks.filter(s=>s.own>0);
+  const held=stocks.filter(s=>accountQty(s,state.tax.mode)>0||s.own>0);
   if(!held.length) return `<div class="empty-state small"><b>보유 주식이 없습니다</b><p>주식을 매수하면 취득 로트와 보유 기간이 이곳에 쌓입니다.</p></div>`;
   return held.map(s=>{
     const lots=ensureTaxLots(s);
-    return `<div class="tax-lots"><div class="section-head"><b>${escHtml(s.name)}</b><span class="pill">${s.own}주 · ${lots.length}로트</span></div>${lots.map(l=>`<div class="lot-row"><b>${l.qty}주</b><span>${isForeignStock(s)?usdStr(l.price):won(l.price)}</span><span>${l.at?`${Math.max(0,Math.floor((state.marketSeconds-l.at)/600))}일 보유`:"기존 보유"}</span><span class="muted-sm">취득원가 ${won(l.qty*l.price*(isForeignStock(s)?fx.usd:1))}</span></div>`).join("")}</div>`;
+    return `<div class="tax-lots"><div class="section-head"><b>${escHtml(s.name)}</b><span class="pill">전체 ${s.own}주 · ${lots.length}로트</span></div>${lots.map(l=>`<div class="lot-row"><b>${l.qty}주</b><span class="mini-tag">${l.account==="isa"?"ISA":l.account==="pension"?"연금":"일반"}</span><span>${isForeignStock(s)?usdStr(l.price):won(l.price)}</span><span>${l.at?`${Math.max(0,Math.floor((state.marketSeconds-l.at)/600))}일 보유`:"기존 보유"}</span><span class="muted-sm">취득원가 ${won(l.qty*l.price*(isForeignStock(s)?fx.usd:1))}</span></div>`).join("")}</div>`;
   }).join("");
+}
+function taxAccountStats(mode){
+  const t=ensureAdvancedState().tax;
+  let value=0,basis=0,qty=0,names=0;
+  stocks.forEach(s=>{
+    const rate=isForeignStock(s)?fx.usd:1;
+    const lots=accountLots(s,mode);
+    if(!lots.length) return;
+    names++;
+    value+=lots.reduce((a,l)=>a+l.qty*s.price*rate,0);
+    basis+=lots.reduce((a,l)=>a+l.qty*l.price*rate,0);
+    qty+=lots.reduce((a,l)=>a+l.qty,0);
+  });
+  const realized=taxAccountRealized(mode,t);
+  return {mode,value,basis,unrealized:value-basis,qty,names,realized,taxPaid:Math.max(0,+((t.taxPaidByAccount||{})[mode])||0),used:Math.max(0,+((t.contributions||{})[mode])||0),limit:taxAccountLimit(mode)};
+}
+function taxAccountSummaryHtml(){
+  const t=state.tax, active=TAX_ACCOUNTS.includes(t.mode)?t.mode:"general";
+  const label={general:"일반",isa:"ISA",pension:"연금"};
+  return `<div class="tax-account-grid">${TAX_ACCOUNTS.map(mode=>{
+    const a=taxAccountStats(mode), limitText=Number.isFinite(a.limit)?`${won(a.used)} / ${won(a.limit)}`:`${won(a.used)} / 제한 없음`;
+    return `<div class="tax-account-card ${mode===active?"on":""}"><div class="section-head"><b>${label[mode]} 계좌</b>${mode===active?`<span class="pill">사용 중</span>`:""}</div>
+      <div><small>보유 평가액</small><b>${won(a.value)}</b></div>
+      <div><small>보유 ${a.qty}주 · ${a.names}종목</small><span class="${a.unrealized>=0?"up":"down"}">${a.unrealized>=0?"+":""}${won(a.unrealized)}</span></div>
+      <div><small>${mode==="pension"?"이연 이익":"실현손익"}</small><span>${won(a.realized)}</span></div>
+      <div><small>올해 납입</small><span>${limitText}</span></div>
+      <div><small>올해 납부 세금</small><span>${won(a.taxPaid)}</span></div>
+    </div>`;
+  }).join("")}</div>`;
+}
+function taxAccountAllocationHtml(){
+  const stats=TAX_ACCOUNTS.map(taxAccountStats), total=stats.reduce((a,x)=>a+x.value,0);
+  const label={general:"일반",isa:"ISA",pension:"연금"};
+  return `<div class="alloc-account">${stats.map(a=>{const share=total>0?a.value/total:0;return `<div><div class="section-head"><b>${label[a.mode]}</b><span>${won(a.value)} · ${(share*100).toFixed(1)}%</span></div><div class="bar"><span style="width:${(share*100).toFixed(2)}%"></span></div><small>${a.qty}주 · ${a.names}종목 · 평가손익 <b class="${a.unrealized>=0?"up":"down"}">${a.unrealized>=0?"+":""}${won(a.unrealized)}</b></small></div>`;}).join("")}</div>`;
+}
+function taxPreviewHtml(){
+  const acct=state.tax.mode, held=stocks.filter(s=>accountQty(s,acct)>0);
+  if(!held.length) return `<div class="empty-state small"><b>${taxModeLabel(acct)}에 보유 주식이 없습니다</b><p>이 계좌에서 매수한 종목만 세후 미리보기를 계산할 수 있습니다.</p></div>`;
+  return `<div class="inline-form"><label>종목<select id="tax-preview-stock">${held.map(s=>`<option value="${s.id}">${escHtml(s.name)} (${accountQty(s,acct)}주)</option>`).join("")}</select></label><label>수량<input id="tax-preview-qty" type="number" min="1" step="1" value="1"></label><label>&nbsp;<button class="ghost" onclick="renderTaxPreview()">계산</button></label></div><div id="tax-preview-result" class="tax-preview-result muted-sm">종목과 수량을 입력하면 예상 세금과 세후 손익이 표시됩니다.</div>`;
+}
+function renderTaxPreview(){
+  const box=$("tax-preview-result"); if(!box) return;
+  const id=$("tax-preview-stock")?$("tax-preview-stock").value:"";
+  const qty=Math.floor(+($("tax-preview-qty")?$("tax-preview-qty").value:0)||0);
+  const s=stock(id); if(!s){ box.innerHTML="종목을 선택해 주세요."; return; }
+  const p=taxPreviewFor(s,qty,state.tax.mode);
+  if(!p.ok){ box.innerHTML=`<span class="down">${escHtml(p.reason)}</span>`; return; }
+  const foreign=isForeignStock(s), basisKRW=foreign?p.basis*fx.usd:p.basis;
+  const taxLine=p.account==="pension"?`<span>인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}</span>`:`<span>예상 세금 <b>${won(p.tax)}</b></span>`;
+  box.innerHTML=`<div class="lot-row"><b>${p.qty}주 매도</b><span>매도대금 ${won(p.revenueKRW)}</span><span>취득원가 ${won(basisKRW)}</span></div><div class="lot-row"><span>평가손익 <b class="${p.profitKRW>=0?"up":"down"}">${p.profitKRW>=0?"+":""}${won(p.profitKRW)}</b></span>${taxLine}<span>세후 ${won(p.netKRW)}</span></div>${p.carryUsed>0?`<div class="muted-sm">이월 손실 ${won(p.carryUsed)} 차감 적용</div>`:""}`;
+}
+function taxTransferStock(){
+  const t=ensureAdvancedState().tax, s=stock($("tax-transfer-stock")?$("tax-transfer-stock").value:"");
+  const to=$("tax-transfer-to")?$("tax-transfer-to").value:"", qty=Math.floor(+($("tax-transfer-qty")?$("tax-transfer-qty").value:0)||0);
+  const from=t.mode;
+  if(!s) return alert("이체할 종목을 선택해 주세요.");
+  if(!TAX_ACCOUNTS.includes(to)||to===from) return alert("다른 계좌를 선택해 주세요.");
+  if(qty<=0) return alert("이체 수량을 1주 이상 입력해 주세요.");
+  if(accountQty(s,from)<qty) return alert(`${taxModeLabel(from)} 보유 수량이 부족합니다.`);
+  const value=s.price*qty*(isForeignStock(s)?fx.usd:1);
+  if(!canTaxContribute(to,value)) return alert(`${taxModeLabel(to)} 연간 납입한도가 부족합니다. 남은 한도 ${won(taxContributionRoom(to))}`);
+  const moved=moveTaxLots(s,qty,from,to);
+  if(moved!==qty) return alert("로트 이체에 실패했습니다.");
+  addTaxContribution(to,value);
+  addLog(`🔀 계좌 이체: ${s.name} ${qty}주 · ${taxModeLabel(from)} → ${taxModeLabel(to)} (${won(value)})`);
+  notify("tax","계좌 이체",`${s.name} ${qty}주 · ${taxModeLabel(to)}`);
+  saveGame(); taxPage(); update();
+}
+function taxTransferHtml(){
+  const acct=state.tax.mode, held=stocks.filter(s=>accountQty(s,acct)>0);
+  if(!held.length) return `<div class="muted-sm">현재 계좌에 보유 주식이 있으면 다른 계좌로 로트를 옮길 수 있습니다.</div>`;
+  return `<div class="inline-form"><label>종목<select id="tax-transfer-stock">${held.map(s=>`<option value="${s.id}">${escHtml(s.name)} (${accountQty(s,acct)}주)</option>`).join("")}</select></label><label>수량<input id="tax-transfer-qty" type="number" min="1" step="1" value="1"></label><label>대상 계좌<select id="tax-transfer-to">${TAX_ACCOUNTS.filter(m=>m!==acct).map(m=>`<option value="${m}">${taxModeLabel(m)}</option>`).join("")}</select></label><label>&nbsp;<button class="ghost" onclick="taxTransferStock()">이체</button></label></div><p class="muted-sm">이체는 보유 로트의 취득원가·보유기간을 그대로 옮기며, 받는 계좌의 연간 납입한도에 평가액이 반영됩니다.</p>`;
 }
 
 // 실적 캘린더: 일정이 된 종목만 실제 실적을 발표하고, 끝난 종목은 다음 일정을 잡습니다.
@@ -3324,12 +3549,45 @@ function setRiskScenario(kind){
   if(!["base","crash","rate","fx"].includes(kind)) kind="base";
   state.riskScenario=kind; saveGame(); portfolio(); update();
 }
+function stressImpactList(kind){
+  const out=[];
+  if(kind==="crash"){
+    stocks.forEach(s=>{ if(s.own>0) out.push({name:s.name,value:-s.price*s.own*(isForeignStock(s)?fx.usd:1)*.15}); });
+    if(companyValue()>0) out.push({name:"내 기업",value:-companyValue()*.15});
+    if(estateValue()>0) out.push({name:"부동산",value:-estateValue()*.05});
+    if(shortValueKRW()>0) out.push({name:"공매도 완충",value:shortValueKRW()*.15});
+  } else if(kind==="rate"){
+    const rate=Math.max(.005,(state.economy&&+state.economy.baseRate)||.03);
+    const now=bondUnitPrice(), next=Math.max(60000,Math.min(200000,BOND.face*.045/(rate+.01)));
+    if((state.bonds||{}).qty>0) out.push({name:"채권 재평가",value:(next-now)*(+state.bonds.qty||0)});
+    stocks.forEach(s=>{ if(s.own>0) out.push({name:s.name,value:-s.price*s.own*(isForeignStock(s)?fx.usd:1)*.04}); });
+    if(state.loan>0) out.push({name:"대출 이자 부담",value:-(+state.loan||0)*.01});
+  } else if(kind==="fx"){
+    if(state.usd>0) out.push({name:"달러 현금",value:(+state.usd||0)*fx.usd*.1});
+    stocks.forEach(s=>{ if(s.own>0&&isForeignStock(s)) out.push({name:s.name,value:s.price*s.own*fx.usd*.1}); });
+  }
+  return out.sort((a,b)=>Math.abs(b.value)-Math.abs(a.value)).slice(0,4);
+}
+function deRiskPortfolio(){
+  const acct=state.tax.mode, held=stocks.filter(s=>accountQty(s,acct)>0).map(s=>({s,value:s.price*accountQty(s,acct)*(isForeignStock(s)?fx.usd:1)})).sort((a,b)=>b.value-a.value).slice(0,3);
+  if(!held.length) return alert(`${taxModeLabel(acct)}에 비중을 줄일 주식이 없습니다.`);
+  const plan=held.map(x=>({s:x.s,qty:Math.max(1,Math.floor(accountQty(x.s,acct)*.1))}));
+  const total=plan.reduce((a,x)=>a+x.qty*x.s.price*(isForeignStock(x.s)?fx.usd:1),0);
+  if(!confirmTrade("리스크 축소",`${taxModeLabel(acct)} 상위 ${plan.length}종목을 10%씩 매도 · 약 ${won(total)}`)) return false;
+  let sold=0;
+  plan.forEach(x=>{ if(marketSellShares(x.s,x.qty,acct)) sold+=x.qty; });
+  if(!sold) return alert("매도할 수량이 부족합니다.");
+  addLog(`🛡 리스크 축소: 상위 보유 ${sold}주 매도 · ${taxModeLabel(acct)}`);
+  notify("system","리스크 축소",`${sold}주 매도 · ${taxModeLabel(acct)}`);
+  saveGame(); portfolio(); update();
+  return true;
+}
 function riskPanelHtml(){
-  const m=riskMetrics(), s=stressTest(state.riskScenario||"base");
+  const m=riskMetrics(), s=stressTest(state.riskScenario||"base"), impacts=stressImpactList(state.riskScenario||"base");
   const rr=v=>v==null?"-":`${(v*100).toFixed(1)}%`;
   return `<div class="kpi-strip"><div class="metric"><small>주식 집중도</small><b>${(m.equityPct*100).toFixed(1)}%</b><span class="delta">최대 보유 ${escHtml(m.top.top.name)} ${(m.top.pct*100).toFixed(1)}%</span></div><div class="metric"><small>최대 낙폭</small><b class="down">-${(m.maxDD*100).toFixed(1)}%</b><span class="delta">자산 기록 기준</span></div><div class="metric"><small>변동성(15초)</small><b>${(m.vol*100).toFixed(2)}%</b><span class="delta">최근 30개 표본</span></div><div class="metric"><small>부채 비중</small><b>${(m.debtRatio*100).toFixed(1)}%</b><span class="delta">총자산 대비</span></div></div>
     <div class="panel" style="margin-top:10px"><div class="section-head"><h3>상관관계</h3><span class="pill">${m.corr?`${escHtml(m.corr.a)} ↔ ${escHtml(m.corr.b)} ${m.corr.corr.toFixed(2)}`:"표본 수집 중"}</span></div><p class="muted-sm">${m.corr?`가장 동조화된 보유 종목 쌍입니다. 상관계수가 1에 가까울수록 함께 움직여 분산 효과가 작습니다.`:"보유 종목이 2개 이상이고 가격 기록이 쌓이면 표시됩니다."}</p></div>
-    <div class="panel" style="margin-top:10px"><div class="section-head"><h3>스트레스 테스트</h3><span class="pill">${s.label}</span></div><div class="stress-btns">${[["base","기준"],["crash","시장 -15%"],["rate","금리 +1%p"],["fx","환율 +10%"]].map(([k,l])=>`<button class="${state.riskScenario===k?"on":"ghost"}" onclick="setRiskScenario('${k}')">${l}</button>`).join("")}</div><div class="risk-grid" style="margin-top:10px"><div class="risk-card"><small>현재 순자산</small><b>${won(s.base)}</b></div><div class="risk-card"><small>충격 후 순자산</small><b>${won(s.after)}</b></div><div class="risk-card"><small>예상 손익</small><b class="${s.delta>=0?"up":"down"}">${s.delta>=0?"+":""}${won(s.delta)}</b></div><div class="risk-card"><small>예상 수익률</small><b class="${s.delta>=0?"up":"down"}">${pct(s.pct)}</b></div></div><p class="muted-sm" style="margin-top:8px">${s.detail}</p></div>`;
+    <div class="panel" style="margin-top:10px"><div class="section-head"><h3>스트레스 테스트</h3><span class="pill">${s.label}</span></div><div class="stress-btns">${[["base","기준"],["crash","시장 -15%"],["rate","금리 +1%p"],["fx","환율 +10%"]].map(([k,l])=>`<button class="${state.riskScenario===k?"on":"ghost"}" onclick="setRiskScenario('${k}')">${l}</button>`).join("")}</div><div class="risk-grid" style="margin-top:10px"><div class="risk-card"><small>현재 순자산</small><b>${won(s.base)}</b></div><div class="risk-card"><small>충격 후 순자산</small><b>${won(s.after)}</b></div><div class="risk-card"><small>예상 손익</small><b class="${s.delta>=0?"up":"down"}">${s.delta>=0?"+":""}${won(s.delta)}</b></div><div class="risk-card"><small>예상 수익률</small><b class="${s.delta>=0?"up":"down"}">${pct(s.pct)}</b></div></div><p class="muted-sm" style="margin-top:8px">${s.detail}</p>${impacts.length?`<div class="section-head" style="margin-top:10px"><h3>영향 상위 종목</h3><span class="pill">현재 계좌 ${taxModeLabel(state.tax.mode)}</span></div><div class="tax-lots">${impacts.map(x=>`<div class="lot-row"><b>${escHtml(x.name)}</b><span class="${x.value>=0?"up":"down"}">${x.value>=0?"+":""}${won(x.value)}</span><span class="muted-sm">시나리오 기여</span></div>`).join("")}</div>`:""}<div class="button-row" style="margin-top:10px"><button class="ghost" onclick="deRiskPortfolio()">상위 보유 10% 줄이기</button></div><p class="muted-sm">리스크 축소는 현재 세금 계좌의 상위 3종목을 10%씩 매도해 현금 비중을 높입니다.</p></div>`;
 }
 
 // 초기화 없는 시나리오 챌린지
@@ -3418,10 +3676,22 @@ function renderMobileTradeBar(){
   if(!list.some(s=>s.id===state.ui.mobileStock)) state.ui.mobileStock=list[0].id;
   sel.innerHTML=list.map(s=>`<option value="${s.id}" ${s.id===state.ui.mobileStock?"selected":""}>${escHtml(s.name)}</option>`).join("");
   sel.value=state.ui.mobileStock;
+  renderMobileTradeInfo();
+}
+function renderMobileTradeInfo(){
+  const box=$("mobileTradeInfo"); if(!box) return;
+  const s=stock(((($("mobile-stock")||{}).value)||(state.ui&&state.ui.mobileStock)||""));
+  if(!s){ box.textContent="거래할 종목이 없습니다."; return; }
+  const acct=state.tax.mode, max=maxBuyQty(s), available=accountQty(s,acct);
+  const qty=Math.max(1,Math.floor(+((($("mobile-trade-qty")||{}).value)||1)||1));
+  const p=taxPreviewFor(s,Math.min(qty,Math.max(1,available)),acct);
+  const taxText=available>0&&p.ok?(acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`):"";
+  box.innerHTML=`${taxModeLabel(acct)} · 매수 가능 ${max.toLocaleString("ko-KR")}주 · 매도 가능 ${available.toLocaleString("ko-KR")}주${taxText}`;
 }
 function mobileTradeSelect(id){
   ensureAdvancedState();
   if(stock(id)) state.ui.mobileStock=id;
+  renderMobileTradeInfo();
 }
 function mobileTrade(side){
   ensureAdvancedState();
@@ -3430,16 +3700,22 @@ function mobileTrade(side){
   const qty=Math.floor(+((($("mobile-trade-qty")||{}).value)||0)||0);
   if(qty<=0) return alert("수량을 1주 이상 입력해 주세요.");
   if(!checkMarketOpen()) return false;
+  const acct=state.tax.mode;
   if(side==="buy"){
-    if(qty>maxBuyQty(s)) return alert("수수료 포함 잔고가 부족합니다.");
-    if(!confirmTrade("모바일 매수",`${s.name} ${qty}주`)) return false;
-    if(!marketBuyShares(s,qty)) return alert("주문을 처리하지 못했습니다.");
-    addLog(`📱 모바일 매수: ${s.name} ${qty}주`);
+    if(qty>maxBuyQty(s)) return alert("수수료 포함 잔고 또는 계좌 납입한도가 부족합니다.");
+    const cost=s.price*(1+stockFeeRate())*qty, principalKRW=s.price*qty*(isForeignStock(s)?fx.usd:1);
+    if(!canTaxContribute(acct,principalKRW)) return alert(`${taxModeLabel(acct)} 연간 납입한도가 부족합니다.`);
+    if(!confirmTrade("모바일 매수",`${s.name} ${qty}주 · ${taxModeLabel(acct)}`)) return false;
+    if(!marketBuyShares(s,qty,acct)) return alert("주문을 처리하지 못했습니다.");
+    addLog(`📱 모바일 매수: ${s.name} ${qty}주 · ${taxModeLabel(acct)}`);
   } else {
-    if(qty>s.own) return alert(`보유한 ${s.own}주까지만 매도할 수 있습니다.`);
-    if(!confirmTrade("모바일 매도",`${s.name} ${qty}주`)) return false;
-    if(!marketSellShares(s,qty)) return alert("주문을 처리하지 못했습니다.");
-    addLog(`📱 모바일 매도: ${s.name} ${qty}주`);
+    const available=accountQty(s,acct);
+    if(qty>available) return alert(`${taxModeLabel(acct)} 보유 ${available}주까지만 매도할 수 있습니다.`);
+    const p=taxPreviewFor(s,qty,acct);
+    const taxNote=acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`;
+    if(!confirmTrade("모바일 매도",`${s.name} ${qty}주 · ${taxModeLabel(acct)}${taxNote}`)) return false;
+    if(!marketSellShares(s,qty,acct)) return alert("주문을 처리하지 못했습니다.");
+    addLog(`📱 모바일 매도: ${s.name} ${qty}주 · ${taxModeLabel(acct)}`);
   }
   state.ui.mobileStock=s.id;
   saveGame(); update(); renderMobileTradeBar();
@@ -4139,11 +4415,12 @@ function addLog(text) {
 
 function buildSaveData() {
   return {
+    version: SAVE_VERSION,
     costBasisIncludesFee: true, // 평단가가 매수 수수료를 포함한 취득원가 형식인지 표시(구버전 데이터 마이그레이션용)
     state: state,
     fx: fx,
     stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove, revenue:s.revenue, opProfit:s.opProfit,
-      volume:s.volume, foreignFlow:s.foreignFlow, instFlow:s.instFlow, taxLots:(s.taxLots||[]).map(l=>({qty:l.qty,price:l.price,at:l.at})),
+      volume:s.volume, foreignFlow:s.foreignFlow, instFlow:s.instFlow, taxLots:ensureTaxLots(s).map(l=>({qty:l.qty,price:l.price,at:l.at,account:l.account})),
       prevClose:s.prevClose, dayOpen:s.dayOpen, dayRet:s.dayRet, dayIndex:s.dayIndex})),
     products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate, bank:p.bank||null, startedAt:Number.isFinite(p.startedAt)?p.startedAt:null, matured:!!p.matured}))
   };
@@ -4174,9 +4451,46 @@ function loadGame() {
   }
 }
 
+// 저장 스키마 마이그레이션: 버전이 없는 구세이브도 현재 구조로 올린 뒤 적용합니다.
+const SAVE_MIGRATIONS={
+  2:data=>{
+    // v2: 평단가에 매수 수수료가 포함되는 형식으로 통일합니다.
+    if(data.costBasisIncludesFee===undefined) data.costBasisIncludesFee=false;
+    return data;
+  },
+  3:data=>{
+    // v3: 세금 계좌별 로트·연간 납입한도·세금연도·계좌별 납부 내역을 추가합니다.
+    data.state=data.state||{};
+    const t=data.state.tax;
+    if(t&&typeof t==="object"){
+      if(!t.contributions||typeof t.contributions!=="object") t.contributions={general:0,isa:0,pension:0};
+      if(!t.taxPaidByAccount||typeof t.taxPaidByAccount!=="object") t.taxPaidByAccount={general:0,isa:0,pension:0};
+      if(t.carryLossBase===undefined){
+        const netLoss=Math.max(0,-(+data.state.realizedYTD||0));
+        t.carryLossBase=Math.max(0,(+t.carryLoss||0)-netLoss);
+      }
+      if(!Number.isFinite(+t.year)||+t.year<1) t.year=1;
+      if(!Number.isFinite(+t.yearStart)) t.yearStart=Math.max(0,+data.state.marketSeconds||0);
+    }
+    return data;
+  }
+};
+function migrateSaveData(data){
+  if(!data||typeof data!=="object") return data;
+  let version=Math.max(1,Math.floor(+data.version||1));
+  while(version<SAVE_VERSION){
+    version++;
+    const step=SAVE_MIGRATIONS[version];
+    if(step) data=step(data)||data;
+  }
+  data.version=SAVE_VERSION;
+  return data;
+}
+
 // localStorage와 파일 불러오기가 같은 경로를 쓰도록 저장 데이터 적용을 한 곳에 모읍니다.
 function applySaveData(data) {
   if(!data || typeof data !== "object") throw new Error("잘못된 저장 데이터");
+  data=migrateSaveData(data);
   if(data.state) Object.assign(state, data.state);
   if(data.fx) Object.assign(fx, data.fx);
   // 공모주로 상장된 종목을 먼저 복원해야 저장된 가격·보유량을 적용할 수 있습니다.
@@ -4193,7 +4507,7 @@ function applySaveData(data) {
       s.realizedProfit = ls.realizedProfit || 0;
       s.lastMove = ls.lastMove || 0;
       s.volume=Math.max(0,+ls.volume||0); s.foreignFlow=Math.max(-1e15,+ls.foreignFlow||0); s.instFlow=Math.max(-1e15,+ls.instFlow||0);
-      if(Array.isArray(ls.taxLots)) s.taxLots=ls.taxLots.filter(l=>l&&+l.qty>0).map(l=>({qty:Math.floor(+l.qty||0),price:Math.max(0,+l.price||0),at:Math.max(0,+l.at||0)}));
+      if(Array.isArray(ls.taxLots)) s.taxLots=ls.taxLots.filter(l=>l&&+l.qty>0).map(l=>({qty:Math.floor(+l.qty||0),price:Math.max(0,+l.price||0),at:Math.max(0,+l.at||0),account:TAX_ACCOUNTS.includes(l.account)?l.account:"general"}));
       if(Number.isFinite(+ls.revenue)&&+ls.revenue>0) s.revenue=+ls.revenue;
       if(Number.isFinite(+ls.opProfit)&&+ls.opProfit>=0) s.opProfit=+ls.opProfit;
       // 일일 시세(전일 종가·시가·변동률) 복원 · 구버전 세이브는 현재가 기준으로 보정
@@ -4243,7 +4557,7 @@ function applySaveData(data) {
   state.notify.newsGap=Math.max(0,Math.min(600,Math.round(+state.notify.newsGap||0)));
   state.notify.toastMs=Math.max(2000,Math.min(8000,Math.round(+state.notify.toastMs||4200)));
   state.notify.toastMax=Math.max(1,Math.min(5,Math.round(+state.notify.toastMax||3)));
-  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10,rebalance:false,rebStockPct:60,rebBand:5,taxAware:false};
+  const AUTO_DEFAULT={enabled:false,stockPct:60,minCash:1000000,every:60,goldPct:0,estatePct:0,autoSell:false,takeProfit:20,stopLoss:10,rebalance:false,rebStockPct:60,rebBand:5,taxAware:false,taxBudget:0};
   state.auto=Object.assign({},AUTO_DEFAULT,(state.auto&&typeof state.auto==="object")?state.auto:{});
   state.auto.goldPct=Math.max(0,Math.min(100,+state.auto.goldPct||0));
   state.auto.estatePct=Math.max(0,Math.min(100,+state.auto.estatePct||0));
@@ -4477,7 +4791,7 @@ function holdingCard(s){
   const avg=s.own>0?s.avgBuy:0;
   const value=stockPriceKRW(s)*Math.max(0,+s.own||0);
   const cost=(+s.avgBuy||0)*(+s.own||0)*(isForeign?fx.usd:1);
-  const pnl=value-cost;
+  const pnl=value-cost, acct=state.tax.mode, aq=accountQty(s,acct), acctAvg=accountAvgBuy(s,acct);
   return `<article class="card holding-card">
     <div class="top"><div><h2>${s.name}</h2><span class="pill">${s.ticker} · ${s.theme}</span></div><span class="pill">${s.market}</span></div>
     <div class="price ${dayC>=0?"up":"down"}" data-price="${s.id}">${isForeign ? usdStr(s.price) : won(s.price)}</div>
@@ -4489,6 +4803,7 @@ function holdingCard(s){
       <div><small>평가액</small><b data-hold-value="${s.id}">${won(value)}</b></div>
       <div><small>평가손익</small><b class="${pnl>=0?"up":"down"}" data-hold-pnl="${s.id}">${pnl>=0?"+":""}${won(pnl)}</b></div>
     </div>
+    <p class="muted-sm" style="margin:6px 0">현재 계좌 ${taxModeLabel(acct)} · 평단 ${acctAvg>0?(isForeign?usdStr(acctAvg):won(acctAvg)):"-"} · 매도 가능 <b>${qtyText(aq)}</b>${s.own>aq?` (다른 계좌 ${qtyText(s.own-aq)})`:""}</p>
     <div class="trade trade-qty trade-sell-only">
       <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 매도 수량">
       <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
@@ -4509,7 +4824,7 @@ function holdingsPage(){
   page.innerHTML=`${marketDayBarHTML()}
   ${pageHeader("MARKET","보유 주식","국내·해외·공모주 등 모든 계좌의 보유 종목을 한곳에 모았습니다. 이 화면은 매도만 가능합니다.",`<span class="pill">${owned.length}종목</span>`)}
   ${marketTabs("holdings")}
-  <div class="notice"><b>매도 전용</b> · 보유 종목을 한 번에 확인하고 바로 팔 수 있습니다. 매수 버튼은 이 화면에 없습니다.</div>
+  <div class="notice"><b>매도 전용</b> · 모든 계좌의 보유 종목을 보여주며, 매도는 현재 세금 계좌(${taxModeLabel(state.tax.mode)})의 로트에서만 체결됩니다. 매수 버튼은 이 화면에 없습니다.</div>
   <section class="kpi-strip">
     <div class="metric"><small>총 평가액</small><b>${wonShort(total)}</b></div>
     <div class="metric"><small>총 매입원가</small><b>${wonShort(cost)}</b></div>
@@ -4686,6 +5001,8 @@ function dashPanelHtml(){
     <div class="trend">${assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 그래프가 표시됩니다.</small></div>`}</div>
     <div class="alloc-bar" role="img" aria-label="자산 배분">${allocBar||'<span style="width:100%;background:#e7ebef"></span>'}</div>
     <div class="alloc-legend">${allocLegend}</div>
+    <div class="section-head" style="margin-top:10px"><h3>세금 계좌별 주식</h3><span class="pill">평가액 기준</span></div>
+    ${taxAccountAllocationHtml()}
     <div class="dash-foot">
       <span>다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b></span>
       <span>총부채 <b>${debt>0?won(debt):"없음"}</b></span>
@@ -4877,13 +5194,14 @@ function autoPanelHtml(){
       <label class="check"><input id="auto-sell" type="checkbox" ${a.autoSell?"checked":""}> 자동 매매(익절/손절)</label>
       <label class="check"><input id="auto-reb" type="checkbox" ${a.rebalance?"checked":""}> 자동 리밸런싱</label>
       <label class="check"><input id="auto-tax" type="checkbox" ${a.taxAware?"checked":""}> 세금 고려 리밸런싱</label>
+      <label>세금 예산 (원, 0=무제한)<input id="auto-tax-budget" type="number" min="0" step="10000" value="${a.taxBudget||0}"></label>
       <label>목표 주식 비중 (%)<input id="auto-reb-pct" type="number" min="0" max="100" step="5" value="${a.rebStockPct??60}"></label>
       <label>허용 범위 (%p)<input id="auto-reb-band" type="number" min="2" max="20" step="1" value="${a.rebBand??5}"></label>
       <label>&nbsp;<button class="buy" onclick="saveAutoSettings()">${a.enabled?"규칙 저장":"자동 투자 켜기"}</button></label>
       <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
       ${a.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 투자 끄기</button></label>':""}
     </div>
-    <p class="muted-sm">${a.enabled?`켜짐 · ${a.every||60}초마다 현금을 주식 ${a.stockPct}% / 금 ${a.goldPct||0}% / 부동산 ${a.estatePct||0}% / 예금으로 재투자합니다.${a.autoSell?` 익절 ${a.takeProfit}% 또는 손절 ${a.stopLoss}%에 닿으면 자동 매도합니다.`:""}${a.rebalance?` 주식 비중이 목표 ${a.rebStockPct??60}%에서 ${a.rebBand??5}%p 이상 벗어나면 자동으로 리밸런싱합니다.${a.taxAware?" 세금 고려 모드에서는 평가차익이 작은 종목부터 매도합니다.":""}`:""}`:"꺼짐 · 켜면 설정한 주기마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
+    <p class="muted-sm">${a.enabled?`켜짐 · ${a.every||60}초마다 현금을 주식 ${a.stockPct}% / 금 ${a.goldPct||0}% / 부동산 ${a.estatePct||0}% / 예금으로 재투자합니다.${a.autoSell?` 익절 ${a.takeProfit}% 또는 손절 ${a.stopLoss}%에 닿으면 자동 매도합니다.`:""}${a.rebalance?` 주식 비중이 목표 ${a.rebStockPct??60}%에서 ${a.rebBand??5}%p 이상 벗어나면 자동으로 리밸런싱합니다.${a.taxAware?` 세금 고려 모드에서는 평가차익이 작은 종목부터 매도하고, 세금 예산 ${a.taxBudget>0?won(a.taxBudget):"무제한"}을 넘는 매도는 건너뜁니다.`:""}`:""}`:"꺼짐 · 켜면 설정한 주기마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
 }
 
 function orderTypeText(o){
@@ -4897,7 +5215,7 @@ function orderTypeText(o){
 function ordersPanelHtml(){
   const rows=state.orders.length?state.orders.map(o=>{
     const s=stock(o.stockId); if(!s) return "";
-    return `<div class="holding-row compact"><b>${s.name}</b><span>${orderTypeText(o)}</span><button class="ghost" onclick="cancelOrder('${o.id}')">취소</button></div>`;
+    return `<div class="holding-row compact"><b>${s.name}</b><span>${orderTypeText(o)} · ${taxModeLabel(o.account||state.tax.mode)}</span><button class="ghost" onclick="cancelOrder('${o.id}')">취소</button></div>`;
   }).join(""):`<div class="empty-state small"><b>예약 주문이 없습니다</b><p>지정가·손절·트레일링·분할 매수를 등록하면 조건에 맞을 때 자동으로 체결됩니다.</p></div>`;
   return `<div class="panel"><div class="field">
       <label>종목<select id="order-stock">${stocks.map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}</select></label>
@@ -4911,6 +5229,7 @@ function ordersPanelHtml(){
       <label>OCO 익절가<input id="order-tp" type="number" min="1" step="1" placeholder="이 가격 이상이면 매도"></label>
       <label>OCO 손절가<input id="order-sl" type="number" min="1" step="1" placeholder="이 가격 이하이면 매도"></label>
     </div>
+    <div class="notice" style="margin-top:8px">주문 계좌: <b>${taxModeLabel(state.tax.mode)}</b> · 등록 시 계좌가 고정되어 이후 계좌를 바꿔도 같은 로트에서 체결됩니다.</div>
     <button class="buy" onclick="placeOrder()" style="margin-top:8px;width:100%">예약 주문 등록</button>
     <div class="stack" style="margin-top:12px">${rows}</div>
     <div class="notice" style="margin-top:12px">지정가: 가격이 지정가에 닿으면 체결 · 조건: 손절은 아래로, 돌파 매수는 위로 닿을 때 · 트레일링: 보유 종목이 최고가에서 설정한 %만큼 빠지면 전량 매도 · 분할 매수: 설정한 금액을 주기마다 자동 매수 · <b>OCO</b>: 익절가와 손절가 중 먼저 닿는 쪽을 매도 · <b>브래킷</b>: 진입가를 돌파하면 매수한 뒤 익절/손절 OCO를 자동 등록합니다. 모든 주문은 거래 수수료·세금이 똑같이 적용됩니다.</div></div>`;
@@ -5107,20 +5426,29 @@ function loanPanelHtml(){
 function taxPanelHtml(){
   ensureAdvancedState();
   const t=state.tax;
-  const losers=stocks.filter(s=>s.own>0&&s.price<s.avgBuy).sort((a,b)=>(a.price/a.avgBuy)-(b.price/b.avgBuy));
-  const modeDesc=t.mode==="isa"?"ISA: 연 200만원 이익까지 비과세, 초과분 9.9% 분리과세":t.mode==="pension"?"연금저축: 매도 시 비과세, 인출 시 5.5% 과세":"일반: 연 250만원 기본공제 후 22% 양도세";
+  const losers=stocks.filter(s=>{
+    const qty=accountQty(s,t.mode);
+    return qty>0 && taxPreviewFor(s,qty,t.mode).profitKRW<0;
+  }).sort((a,b)=>(a.price/a.avgBuy)-(b.price/b.avgBuy));
+  const modeDesc=t.mode==="isa"?"ISA: 연 2,000만원 납입한도 · 200만원 이익까지 비과세, 초과분 9.9% 분리과세 · 인출 자유(재납입은 한도에 재포함)":t.mode==="pension"?"연금저축: 연 1,800만원 납입한도 · 매도 시 비과세, 인출 시 5.5% 과세":"일반: 납입한도 없음 · 연 250만원 기본공제 후 22% 양도세";
   const accountRealized=taxAccountRealized(t.mode,t);
+  const yearPaid=Math.max(0,+((t.taxPaidByAccount||{})[t.mode])||0);
   return `<div class="panel">
-    <div class="section-head"><h3>세금 계좌</h3><span class="pill">${taxModeLabel(t.mode)}</span></div>
+    <div class="section-head"><h3>세금 계좌</h3><span class="pill">${taxModeLabel(t.mode)} · ${t.year||1}년차</span></div>
     <div class="button-row">${[["general","일반"],["isa","ISA"],["pension","연금저축"]].map(([k,l])=>`<button class="${t.mode===k?"buy":"ghost"}" onclick="setTaxAccount('${k}')">${l}</button>`).join("")}</div>
     <p class="muted-sm" style="margin-top:8px">${modeDesc} · 매도 거래세 ${(tradeTaxRate()*100).toFixed(2)}%는 모든 계좌에 공통 적용됩니다.</p>
-    <p class="muted-sm">계좌별 실현손익은 분리 계산됩니다. 계좌를 바꿔도 이전 계좌의 손익이 일반 계좌 양도세에 합산되지 않습니다. <b>일반</b> ${won(state.realizedYTD||0)} · <b>ISA</b> ${won(t.isaGains||0)} · <b>연금</b> ${won(t.pensionDeferred||0)}</p>
-    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>납부 세금</small><b>${won(state.taxPaid||0)}</b></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b></div><div class="kpi"><small>${t.mode==="pension"?"이연 세금 기준":t.mode==="isa"?"ISA 누적 이익":"기본공제"}</small><b>${t.mode==="pension"?won(t.pensionDeferred||0):t.mode==="isa"?won(t.isaGains||0):won(TAX_GAINS_FREE)}</b></div></div>
+    <p class="muted-sm">세금 연도 ${t.year||1}년차 · 다음 결산까지 ${clockText(taxYearRemaining())} · 연간 손익·기본공제·ISA 한도·납입한도가 리셋되고 이월 손실은 유지됩니다. <b>일반</b> ${won(state.realizedYTD||0)} · <b>ISA</b> ${won(t.isaGains||0)} · <b>연금</b> ${won(t.pensionDeferred||0)}</p>
+    ${taxAccountSummaryHtml()}
+    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>이번 연도 납부</small><b>${won(yearPaid)}</b></div><div class="kpi"><small>누적 납부</small><b>${won(state.taxPaid||0)}</b></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b><span class="delta">차감 가능 ${won(t.carryLossBase||0)}</span></div></div>
     ${t.mode==="pension"?`<div class="notice" style="margin-top:10px">인출 시 5.5% 세금이 적용됩니다. <button class="ghost small" onclick="withdrawPensionTax()">연금 세금 납부 (${won((t.pensionDeferred||0)*.055)})</button></div>`:""}
+    <div class="section-head" style="margin-top:14px"><h3>매도 전 세후 미리보기</h3><span class="pill">현재 계좌 · FIFO</span></div>
+    ${taxPreviewHtml()}
+    <div class="section-head" style="margin-top:14px"><h3>계좌 간 보유 로트 이체</h3><span class="pill">취득원가 유지</span></div>
+    ${taxTransferHtml()}
     <div class="section-head" style="margin-top:14px"><h3>절세 손실 확정</h3><span class="pill">평가손실 종목 ${losers.length}개</span></div>
-    <p class="muted-sm">평가손실이 난 종목을 매도하면 손실이 확정되어 연간 실현손익과 세금이 줄어듭니다. 매도 후 현금으로 다시 매수할 수 있습니다.</p>
-    <div class="stack" style="margin-top:8px">${losers.length?losers.map(s=>`<div class="holding-row compact"><b>${escHtml(s.name)}</b><span>${s.own}주</span><span class="down">${pct((s.price-s.avgBuy)/s.avgBuy)}</span><button class="ghost" onclick="harvestLoss('${s.id}')">손실 확정</button></div>`).join("")||`<div class="muted-sm">현재 평가손실 종목이 없습니다.</div>`:"<div class=\"muted-sm\">현재 평가손실 종목이 없습니다.</div>"}</div>
-    <div class="section-head" style="margin-top:14px"><h3>보유 로트 (FIFO)</h3><span class="pill">오래된 취득분부터 매도</span></div>
+    <p class="muted-sm">평가손실이 난 종목을 현재 계좌에서 매도하면 손실이 확정되어 연간 실현손익과 세금이 줄어듭니다.</p>
+    <div class="stack" style="margin-top:8px">${losers.length?losers.map(s=>{const qty=accountQty(s,t.mode);return `<div class="holding-row compact"><b>${escHtml(s.name)}</b><span>${qty}주</span><span class="down">${pct((s.price-s.avgBuy)/s.avgBuy)}</span><button class="ghost" onclick="harvestLoss('${s.id}')">손실 확정</button></div>`;}).join("")||`<div class="muted-sm">현재 평가손실 종목이 없습니다.</div>`:"<div class=\"muted-sm\">현재 평가손실 종목이 없습니다.</div>"}</div>
+    <div class="section-head" style="margin-top:14px"><h3>보유 로트 (FIFO)</h3><span class="pill">계좌 태그 · 오래된 취득분부터 매도</span></div>
     ${taxLotsHtml()}
   </div>`;
 }
@@ -5229,71 +5557,43 @@ function checkMarketOpen() {
 
 function buy(id){
   if(!checkMarketOpen()) return;
-  let s=stock(id);
-  const isForeign = ["foreign","mega","special"].includes(s.group);
-  if(!confirmTrade("매수",`${s.name} 1주 · ${isForeign?usdStr(s.price*(1+stockFeeRate())):won(s.price*(1+stockFeeRate()))}`)) return;
-  
-  if(isForeign){
-    let cost = s.price * (1 + stockFeeRate());
-    if(state.usd < cost) return alert("수수료 포함 달러(USD) 잔고가 부족합니다.");
-    state.usd -= cost;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + stockFeeRate()))) / (s.own + 1);
-    s.own += 1;
-    addTaxLot(s,1,s.price*(1+stockFeeRate()));
-    addLog(`${s.name} 1주 매수 (${usdStr(s.price)}, 수수료 포함)`);
-  }else{
-    let cost = s.price * (1 + stockFeeRate());
-    if(state.cash < cost) return alert("수수료 포함 원화 현금이 부족합니다.");
-    state.cash -= cost;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + stockFeeRate()))) / (s.own + 1);
-    s.own += 1;
-    addTaxLot(s,1,s.price*(1+stockFeeRate()));
-    addLog(`${s.name} 1주 매수 (${won(s.price)}, 수수료 포함)`);
-  }
+  const s=stock(id); if(!s) return;
+  const acct=state.tax.mode, foreign=isForeignStock(s), unit=s.price*(1+stockFeeRate());
+  const principalKRW=s.price*(foreign?fx.usd:1);
+  if(!canTaxContribute(acct,principalKRW)) return alert(`${taxModeLabel(acct)} 연간 납입한도가 부족합니다. 남은 한도 ${won(taxContributionRoom(acct))}`);
+  if(!confirmTrade("매수",`${s.name} 1주 · ${foreign?usdStr(unit):won(unit)} · ${taxModeLabel(acct)}`)) return;
+  if(!marketBuyShares(s,1,acct)) return alert("수수료 포함 잔고가 부족합니다.");
   markDex("stocks",s.id);
-  recordTrade(s,"buy",1,s.price,0);
+  addLog(`${s.name} 1주 매수 (${foreign?usdStr(s.price):won(s.price)}, 수수료 포함 · ${taxModeLabel(acct)})`);
   saveGame();
   update();
 }
 
 function sell(id){
   if(!checkMarketOpen()) return;
-  let s=stock(id);
-  if(s.own<=0)return alert("보유 주식이 없습니다.");
-  const isForeign = ["foreign","mega","special"].includes(s.group);
-  if(!confirmTrade("매도",`${s.name} 1주 · ${isForeign?usdStr(s.price*(1-stockFeeRate()-tradeTaxRate())):won(s.price*(1-stockFeeRate()-tradeTaxRate()))}`)) return;
-  
-  let revenue = s.price * (1 - stockFeeRate() - tradeTaxRate()); // 수수료 0.15% + 거래세 0.2%
-  // FIFO 로트의 취득원가로 실현손익을 계산합니다(로트가 없으면 평단가로 보완).
-  let profit = revenue - consumeTaxLots(s,1);
-  const profitKRW = isForeign ? profit * fx.usd : profit;
-  
-  if(isForeign) {
-    state.usd += revenue;
-    s.realizedProfit += (profit * fx.usd);
-    addLog(`${s.name} 1주 매도 (${usdStr(s.price)}, 실현손익: ${won(profit * fx.usd)})`);
-  } else {
-    state.cash += revenue;
-    s.realizedProfit += profit;
-    addLog(`${s.name} 1주 매도 (${won(s.price)}, 실현손익: ${won(profit)})`);
-  }
-  recordTrade(s,"sell",1,s.price,profitKRW);
-  settleTax(profitKRW);
-  creditStockBonus(profitKRW);
-  
-  s.own -= 1;
-  if(s.own === 0) s.avgBuy = 0;
+  const s=stock(id); if(!s) return;
+  const acct=state.tax.mode, available=accountQty(s,acct);
+  if(available<=0) return alert(`${taxModeLabel(acct)}에 매도할 주식이 없습니다.`);
+  const p=taxPreviewFor(s,1,acct);
+  const foreign=isForeignStock(s);
+  const taxNote=acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`;
+  if(!confirmTrade("매도",`${s.name} 1주 · ${foreign?usdStr(p.revenue):won(p.revenue)} (수수료·세금 반영)${taxNote}`)) return;
+  if(!marketSellShares(s,1,acct)) return alert("주문을 처리하지 못했습니다.");
+  addLog(`${s.name} 1주 매도 (${foreign?usdStr(s.price):won(s.price)} · ${taxModeLabel(acct)})`);
   saveGame();
   update();
 }
 
-// 현재 잔고로 살 수 있는 최대 수량(수수료 포함)입니다. 카드 표시와 수량 채우기에 함께 씁니다.
+// 현재 잔고와 계좌 납입한도로 살 수 있는 최대 수량(수수료 포함)입니다.
 function maxBuyQty(s){
   if(!s || !(+s.price>0)) return 0;
   const unit=+s.price*(1+stockFeeRate());
   if(!(unit>0)) return 0;
-  const balance=isForeignStock(s)?(+state.usd||0):(+state.cash||0);
-  return Math.max(0,Math.floor(balance/unit));
+  const foreign=isForeignStock(s), balance=foreign?(+state.usd||0):(+state.cash||0);
+  let max=Math.max(0,Math.floor(balance/unit));
+  const room=taxContributionRoom(state.tax.mode);
+  if(Number.isFinite(room)) max=Math.min(max,Math.max(0,Math.floor(room/(s.price*(foreign?fx.usd:1)))));
+  return max;
 }
 // 같은 종목 카드가 국내·관심 화면에 동시에 있을 수 있어 화면(context)별로 수량 칸을 구분합니다.
 function qtyInputId(id,ctx){ return "qty-"+id+(ctx?"-"+ctx:""); }
@@ -5316,7 +5616,7 @@ function setTradeQty(id,mode,ctx){
   const s=stock(id), el=$(qtyInputId(id,ctx)); if(!s||!el) return;
   let q=1;
   if(mode==="max") q=Math.max(1,maxBuyQty(s));
-  else if(mode==="own") q=Math.max(1,Math.floor(+s.own||0));
+  else if(mode==="own") q=Math.max(1,accountQty(s,state.tax.mode));
   el.value=String(q);
   return q;
 }
@@ -5324,89 +5624,57 @@ function setTradeQty(id,mode,ctx){
 function buyQty(id,ctx){
   if(!checkMarketOpen()) return;
   const s=stock(id); if(!s) return;
-  const qty=tradeQtyValue(id,ctx);
+  const qty=tradeQtyValue(id,ctx), acct=state.tax.mode;
   if(qty<=0) return alert("매수 수량을 1주 이상 입력해 주세요.");
   const max=maxBuyQty(s);
-  if(max<=0) return alert(isForeignStock(s)?"수수료 포함 달러 잔고가 부족합니다.":"수수료 포함 현금이 부족합니다.");
+  if(max<=0) return alert(isForeignStock(s)?"수수료 포함 달러 잔고 또는 계좌 납입한도가 부족합니다.":"수수료 포함 현금 또는 계좌 납입한도가 부족합니다.");
   if(qty>max) return alert(`지금은 최대 ${max.toLocaleString("ko-KR")}주까지 매수할 수 있습니다.`);
-  const cost=s.price*(1+stockFeeRate())*qty;
-  if(!confirmTrade("매수",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${isForeignStock(s)?usdStr(cost):won(cost)}`)) return;
-  if(!marketBuyShares(s,qty)) return alert("주문을 처리하지 못했습니다. 잔고를 확인해 주세요.");
-  addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매수 (${isForeignStock(s)?usdStr(s.price):won(s.price)}, 수수료 포함)`);
+  const cost=s.price*(1+stockFeeRate())*qty, principalKRW=s.price*qty*(isForeignStock(s)?fx.usd:1);
+  if(!canTaxContribute(acct,principalKRW)) return alert(`${taxModeLabel(acct)} 연간 납입한도가 부족합니다.`);
+  if(!confirmTrade("매수",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${isForeignStock(s)?usdStr(cost):won(cost)} · ${taxModeLabel(acct)}`)) return;
+  if(!marketBuyShares(s,qty,acct)) return alert("주문을 처리하지 못했습니다. 잔고 또는 납입한도를 확인해 주세요.");
+  addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매수 (${isForeignStock(s)?usdStr(s.price):won(s.price)}, 수수료 포함 · ${taxModeLabel(acct)})`);
   saveGame(); update();
 }
-// 카드에 입력한 수량만큼 매도합니다.
+// 카드에 입력한 수량만큼 현재 계좌에서 매도합니다.
 function sellQty(id,ctx){
   if(!checkMarketOpen()) return;
   const s=stock(id); if(!s) return;
-  const qty=tradeQtyValue(id,ctx);
+  const qty=tradeQtyValue(id,ctx), acct=state.tax.mode, available=accountQty(s,acct);
   if(qty<=0) return alert("매도 수량을 1주 이상 입력해 주세요.");
-  if(s.own<qty) return alert(`보유한 ${s.own.toLocaleString("ko-KR")}주까지만 매도할 수 있습니다.`);
-  const revenue=s.price*(1-stockFeeRate()-tradeTaxRate())*qty;
-  if(!confirmTrade("매도",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${isForeignStock(s)?usdStr(revenue):won(revenue)} (수수료·세금 반영)`)) return;
-  if(!marketSellShares(s,qty)) return alert("주문을 처리하지 못했습니다. 보유 수량을 확인해 주세요.");
-  addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매도 (${isForeignStock(s)?usdStr(s.price):won(s.price)})`);
+  if(available<qty) return alert(`${taxModeLabel(acct)} 보유 ${available.toLocaleString("ko-KR")}주까지만 매도할 수 있습니다.`);
+  const p=taxPreviewFor(s,qty,acct), foreign=isForeignStock(s);
+  const taxNote=acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`;
+  if(!confirmTrade("매도",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${foreign?usdStr(p.revenue):won(p.revenue)} (수수료·세금 반영)${taxNote}`)) return;
+  if(!marketSellShares(s,qty,acct)) return alert("주문을 처리하지 못했습니다. 계좌 보유 수량을 확인해 주세요.");
+  addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매도 (${foreign?usdStr(s.price):won(s.price)} · ${taxModeLabel(acct)})`);
   saveGame(); update();
   if(typeof activePage==="function" && activePage()==="holdings") holdingsPage();
 }
 
 function fullBuy(id){
   if(!checkMarketOpen()) return;
-  let s=stock(id);
-  const isForeign = ["foreign","mega","special"].includes(s.group);
-  if(!confirmTrade("전액 매수",`${s.name} · 보유 가능 수량 전부`)) return;
-  
-  if(isForeign){
-    let singleCost = s.price * (1 + stockFeeRate());
-    let count = Math.floor(state.usd / singleCost);
-    if(count<=0) return alert("달러(USD) 잔고가 부족합니다.");
-    state.usd -= singleCost * count;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + stockFeeRate())) * count) / (s.own + count);
-    s.own += count;
-    addTaxLot(s,count,s.price*(1+stockFeeRate()));
-    addLog(`${s.name} ${count}주 풀매수`);
-  }else{
-    let singleCost = s.price * (1 + stockFeeRate());
-    let count = Math.floor(state.cash / singleCost);
-    if(count<=0) return alert("원화 현금이 부족합니다.");
-    state.cash -= singleCost * count;
-    s.avgBuy = ((s.avgBuy * s.own) + (s.price * (1 + stockFeeRate())) * count) / (s.own + count);
-    s.own += count;
-    addTaxLot(s,count,s.price*(1+stockFeeRate()));
-    addLog(`${s.name} ${count}주 풀매수`);
-  }
-  recordTrade(s,"buy",count,s.price,0);
+  const s=stock(id); if(!s) return;
+  const acct=state.tax.mode, count=maxBuyQty(s), foreign=isForeignStock(s);
+  if(count<=0) return alert("수수료 포함 잔고 또는 연간 납입한도가 부족합니다.");
+  const cost=s.price*(1+stockFeeRate())*count;
+  if(!confirmTrade("전액 매수",`${s.name} ${count.toLocaleString("ko-KR")}주 전부 · ${foreign?usdStr(cost):won(cost)} · ${taxModeLabel(acct)}`)) return;
+  if(!marketBuyShares(s,count,acct)) return alert("주문을 처리하지 못했습니다.");
+  addLog(`${s.name} ${count.toLocaleString("ko-KR")}주 풀매수 (${taxModeLabel(acct)})`);
   saveGame();
   update();
 }
 
 function fullSell(id){
   if(!checkMarketOpen()) return;
-  let s=stock(id);
-  if(s.own<=0)return alert("매도할 주식이 없습니다.");
-  const isForeign = ["foreign","mega","special"].includes(s.group);
-  if(!confirmTrade("전액 매도",`${s.name} ${s.own}주 전부`)) return;
-  
-  let count = s.own;
-  let revenue = (s.price * count) * (1 - stockFeeRate() - tradeTaxRate()); // 수수료 + 거래세
-  // FIFO 로트의 취득원가 기준으로 실현손익 계산
-  let profitTotal = revenue - consumeTaxLots(s,count);
-  const profitKRW = isForeign ? profitTotal * fx.usd : profitTotal;
-  
-  if(isForeign){
-    state.usd += revenue;
-    s.realizedProfit += (profitTotal * fx.usd);
-    addLog(`${s.name} ${count}주 풀매도 (${usdStr(s.price)}, 실현손익: ${won(profitTotal * fx.usd)})`);
-  }else{
-    state.cash += revenue;
-    s.realizedProfit += profitTotal;
-    addLog(`${s.name} ${count}주 풀매도 (${won(s.price)}, 실현손익: ${won(profitTotal)})`);
-  }
-  recordTrade(s,"sell",count,s.price,profitKRW);
-  settleTax(profitKRW);
-  creditStockBonus(profitKRW);
-  s.own=0;
-  s.avgBuy=0;
+  const s=stock(id); if(!s) return;
+  const acct=state.tax.mode, count=accountQty(s,acct);
+  if(count<=0) return alert(`${taxModeLabel(acct)}에 매도할 주식이 없습니다.`);
+  const p=taxPreviewFor(s,count,acct), foreign=isForeignStock(s);
+  const taxNote=acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`;
+  if(!confirmTrade("전액 매도",`${s.name} ${count.toLocaleString("ko-KR")}주 전부 · ${taxModeLabel(acct)}${taxNote}`)) return;
+  if(!marketSellShares(s,count,acct)) return alert("주문을 처리하지 못했습니다.");
+  addLog(`${s.name} ${count.toLocaleString("ko-KR")}주 풀매도 (${foreign?usdStr(s.price):won(s.price)} · ${taxModeLabel(acct)})`);
   saveGame();
   update();
   if(typeof activePage==="function" && activePage()==="holdings") holdingsPage();
@@ -5450,6 +5718,7 @@ function leave(id){
 
 function tickSeconds() {
   state.marketSeconds++;
+  tickTaxYear();
   
   // 3분(180초) 개장 후 1분(60초) 휴장 순환 시스템
   // 남은 시간 표시는 renderMarketBar가 현재 배속을 반영한 실제 초로 처리합니다.
