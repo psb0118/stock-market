@@ -71,7 +71,9 @@ function check(name, ok, detail) {
   check('은퇴·시즌 초기화 함수 제거', globals.retire === 'undefined' && globals.open === 'undefined' && globals.season === 'undefined', JSON.stringify(globals));
   check('환생 초기화 경로는 유지', globals.rebirth === 'function' && globals.reset === 'function');
   const saveHtml = g.run('savePanelHtml()');
-  check('설정에 환생만 초기화 안내', saveHtml.includes('환생') && saveHtml.includes('별도 초기화') && !saveHtml.includes('시즌 종료 버튼을'), saveHtml.length);
+  const settingsHtml = g.run('settingsPage(); document.getElementById("settings").innerHTML');
+  check('데이터 탭에 초기화 버튼 없음', !settingsHtml.includes('초기화') && !settingsHtml.includes('시즌 종료') && !settingsHtml.includes('환생 화면'), settingsHtml.length);
+  check('데이터 탭에 저장·내보내기는 유지', saveHtml.includes('수동 저장') && saveHtml.includes('파일 내보내기') && saveHtml.includes('파일 불러오기'), saveHtml.length);
   const guide = g.run('guidePage(); document.getElementById("guide").innerHTML');
   check('도움말에 유일한 초기화 설명', guide.includes('유일한 초기화') && guide.includes('은퇴·시즌 종료 같은 별도 초기화 버튼은 없습니다'));
 }

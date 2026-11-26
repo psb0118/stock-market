@@ -1002,7 +1002,7 @@ const RESET = total => `
   g.run('dashboardPage(); portfolio(); settingsPage(); rebirthPage(); realestatePage(); companyPage(); economyPage(); loanPage(); taxPage(); ordersPage(); 1');
   const pageText = g.run('["dashboard","portfolio","settings","rebirth","realestate","company","economy","loan","tax","orders"].map(id=>document.getElementById(id).innerHTML).join("")');
   check('새 페이지 렌더에 NaN·undefined 없음', !pageText.includes('NaN') && !pageText.includes('undefined'), (pageText.match(/NaN|undefined/g) || []).length);
-  check('설정 페이지에 속도·알림·환생 안내', pageText.includes('게임 속도') && pageText.includes('알림') && pageText.includes('설정만 초기화'));
+  check('설정 페이지에 속도·알림·데이터 저장 안내', pageText.includes('게임 속도') && pageText.includes('알림') && pageText.includes('수동 저장') && !pageText.includes('설정만 초기화'));
 }
 
 const failed = results.filter(r => !r.pass);
