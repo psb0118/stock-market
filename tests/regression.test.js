@@ -981,7 +981,7 @@ const RESET = total => `
     usd:document.getElementById('usdValue').textContent
   })`);
   check('상단 금융상품 5천만·부채 1천만 표시', topText.product === top.run("won(50000000)") && topText.debt === top.run("won(10000000)"), JSON.stringify(topText));
-  check('상단 총자산·순자산 분리 표시', topText.gross === top.run("won(50000000)") && topText.net === top.run("won(40000000)"), JSON.stringify(topText));
+  check('상단 순자산 카드에 총자산 함께 표시', topText.gross === top.run('"총자산 "+won(50000000)') && topText.net === top.run("won(40000000)"), JSON.stringify(topText));
   check('상단 부동산·달러·누적 세금 항목 표시', topText.estate === top.run("won(0)") && topText.usd === top.run("won(0)") && topText.tax === top.run("won(330000)"), JSON.stringify(topText));
 
   const cashBefore = g.run('state.cash');

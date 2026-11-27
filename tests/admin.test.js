@@ -99,6 +99,22 @@ function fakeDb(calls) {
   check('오프라인·오래된 하트비트 제외', result.online === true && result.stale === false);
 }
 
+// ── 관리자 전체 사용자 목록(오프라인 포함) ───────────────────
+{
+  const g = createGame();
+  const result = g.run(`(()=>{
+    const now=Date.now();
+    const list=fbAdminFromDocs([
+      {id:'u1',data:()=>({uid:'u1',nickname:'활성',email:'a@x.com',online:true,lastSeen:now-1000})},
+      {id:'u2',data:()=>({uid:'u2',nickname:'오프라인',email:'b@x.com',online:false,lastSeen:now-3000})},
+      {id:'u3',data:()=>({uid:'u3',nickname:'오래됨',email:'c@x.com',online:true,lastSeen:now-200000})}
+    ]);
+    return {ids:list.map(x=>x.uid), online:list.map(x=>fbPresenceOnline(x,now))};
+  })()`);
+  check('관리자 목록은 오프라인 사용자도 포함', result.ids.length === 3 && result.ids.includes('u2'), result.ids.join(','));
+  check('온라인 사용자를 먼저 정렬', result.ids[0] === 'u1' && result.ids[1] === 'u2', result.ids.join(','));
+}
+
 // ── 관리자 화면 표시 ───────────────────────────────────────
 {
   const g = createGame();
@@ -116,8 +132,8 @@ function fakeDb(calls) {
     fbAdminUsers=null; fbUser=null; FIREBASE_CONFIG=keep;
     return {h,settings,normal};
   })()`);
-  check('관리자에게 접속자 목록 패널 표시', panel.h.includes('관리자 · 접속 중인 사용자') && panel.h.includes('a@x.com'), panel.h.slice(0, 80));
-  check('설정 화면에도 관리자 패널 포함', panel.settings.includes('관리자 · 접속 중인 사용자'));
+  check('관리자에게 전체 사용자 목록 패널 표시', panel.h.includes('관리자 · 전체 사용자') && panel.h.includes('a@x.com'), panel.h.slice(0, 80));
+  check('설정 화면에도 관리자 패널 포함', panel.settings.includes('관리자 · 전체 사용자'));
   check('목록이 없으면 빈 상태 안내', panel.normal.includes('새로고침'));
 }
 
@@ -132,6 +148,19 @@ function fakeDb(calls) {
   })()`);
   check('강제 초기화 모달에 대상 표시', modal.includes('대상') && modal.includes('u@x.com'));
   check('진행만/전체 초기화 선택 제공', modal.includes("adminResetTarget('u1','run')") && modal.includes("adminResetTarget('u1','all')"));
+}
+
+// ── 목록에 없는 오프라인 사용자를 UID로 직접 초기화 ──────────
+{
+  const g = createGame();
+  const modal = g.run(`(()=>{
+    fbUser={uid:'admin',email:'soundpsb1@gmail.com',displayName:'관리자'};
+    fbAdminUsers=[];
+    document.getElementById('admin-reset-uid').value='offline-uid';
+    adminResetByUid();
+    return document.getElementById('modalRoot').innerHTML;
+  })()`);
+  check('UID 직접 입력으로 오프라인 대상 지정', modal.includes('offline-uid') && modal.includes("adminResetTarget('offline-uid','run')"), modal.slice(0, 100));
 }
 
 // ── 대상 기기의 초기화 적용 ────────────────────────────────
@@ -183,6 +212,15 @@ function fakeDb(calls) {
   const offline = calls.find(c => c.op === 'setDoc' && c.ref.path === 'presence/u1' && c.data.online === false);
   check('로그인 중 접속 하트비트 기록', !!beat && beat.data.email === 'u@x.com' && beat.opts.merge === true);
   check('로그아웃 시 오프라인 기록', !!offline);
+
+  calls.length = 0;
+  await g.run(`(async()=>{
+    fbUser={uid:'admin',email:'soundpsb1@gmail.com',displayName:'관리자'};
+    fbAdminUsers=null;
+    await fbAdminRefresh();
+  })()`);
+  const presenceQuery = calls.find(c => c.op === 'getDocs' && c.q.col && c.q.col.path === 'presence');
+  check('관리자 조회는 online 필터 없이 전체 접속 기록을 읽음', !!presenceQuery && !presenceQuery.q.rest.some(x => x.where), presenceQuery && presenceQuery.q.rest.length);
 
   calls.length = 0;
   await g.run(`(async()=>{
