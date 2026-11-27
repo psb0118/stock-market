@@ -495,6 +495,58 @@ function check(name, ok, detail) {
   check('예전 세이브에도 온보딩 기본값 생성', legacy.onboard === true && legacy.dismissed === false);
 }
 
+// ── 클라우드 백업 주기 · 잠금 경로 · 관리자 계정 ───────────────
+{
+  const g = createGame(91);
+  const snap = g.run(`(()=>{
+    const now=Date.now();
+    return {
+      due:  fbShouldSnapshot(1000000,{at:now-11*60*1000, score:1000000}),
+      soon: fbShouldSnapshot(1050000,{at:now-60*1000,    score:1000000}),
+      jump: fbShouldSnapshot(1200000,{at:now-60*1000,    score:1000000}),
+      drop: fbShouldSnapshot(  850000,{at:now-60*1000,    score:1000000}),
+      empty: fbShouldSnapshot(0,{at:now-60*1000, score:0}),
+      first: fbShouldSnapshot(5000,null)
+    };
+  })()`);
+  check('10분이 지나면 백업', snap.due === true);
+  check('10분 안이고 변화가 작으면 백업 안 함', snap.soon === false, JSON.stringify(snap));
+  check('자산이 크게 늘거나 줄면 바로 백업', snap.jump === true && snap.drop === true);
+  check('백업이 하나도 없으면 처음 한 번은 남김', snap.first === true && snap.empty === false);
+
+  const nav = g.run(`(()=>{
+    state.cash=0; state.peakNet=0;
+    const before=document.getElementById('rebirth').innerHTML||'';
+    quickNav('rebirth');
+    const gated={page:document.getElementById('rebirth').innerHTML||'', modal:document.getElementById('modalRoot').innerHTML||''};
+    goPage('rebirth', true);
+    const forced=(document.getElementById('rebirth').innerHTML||'').includes('영구 업그레이드');
+    return {before, gated, forced};
+  })()`);
+  check('quickNav도 잠금 검사를 거침', nav.gated.modal.includes('아직 잠겨') && !nav.gated.page.includes('영구 업그레이드'), nav.gated.modal.slice(0, 40));
+  check('내부 이동(force)은 잠금을 건너뜀', nav.forced === true);
+
+  const admin = g.run(`(()=>{
+    const a={upper:isAdminEmail('SOUNDPSB1@Gmail.com'), space:isAdminEmail('  26007@changshin.ms.kr '), no:isAdminEmail('x@y.com'), empty:isAdminEmail('')};
+    fbUser={uid:'u',displayName:'관리자',email:'soundpsb1@gmail.com'};
+    const on=isAdminUser();
+    fbUser={uid:'u2',displayName:'일반',email:'user@example.com'};
+    const off=isAdminUser();
+    fbUser=null;
+    return {a,on,off,list:ADMIN_EMAILS.length};
+  })()`);
+  check('관리자 이메일 비교(대소문자·공백 무시)', admin.a.upper === true && admin.a.space === true && admin.a.no === false && admin.a.empty === false, JSON.stringify(admin.a));
+  check('관리자 계정 두 개 등록', admin.list === 2 && admin.on === true && admin.off === false);
+  const badge = g.run(`(()=>{
+    const keep=FIREBASE_CONFIG; FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+    fbUser={uid:'u',displayName:'관리자',email:'26007@changshin.ms.kr'}; state.settings.cloudAuto=true;
+    const h=firebasePanelHtml(), d=diagPanelHtml();
+    fbUser=null; FIREBASE_CONFIG=keep;
+    return {h,d};
+  })()`);
+  check('관리자로 로그인하면 배지·계정 표시', badge.h.includes('관리자') && badge.d.includes('관리자 계정'), badge.h.slice(0, 80));
+}
+
 console.log('');
 console.log(`== ${pass}/${pass + fail} passed ==`);
 process.exit(fail ? 1 : 0);
