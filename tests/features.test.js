@@ -602,6 +602,44 @@ function check(name, ok, detail) {
   check('관리자로 로그인하면 배지·계정 표시', badge.h.includes('관리자') && badge.d.includes('관리자 계정'), badge.h.slice(0, 80));
 }
 
+// ── 환생 1회 이상이면 환생 탭 영구 해금 ───────────────────
+{
+  const g = createGame(91);
+  const legacy = g.run(`(()=>{
+    state.cash=0; state.peakNet=0;
+    state.onboard={done:false,dismissed:false,seen:{},unlocked:{},firstTrade:false};
+    state.rebirth={count:1,points:100,spent:0,upgrades:{},bestNet:0,history:[],notified:false};
+    const locked=isPageLocked('rebirth');
+    show('rebirth');
+    const page=(document.getElementById('rebirth').innerHTML||'').includes('영구 업그레이드');
+    const mapped=state.onboard.unlocked.rebirth===true;
+    const bought=buyRebirthUpgrade('start');
+    return {locked,page,mapped,bought,level:rebirthLevel('start'),points:ensureRebirth().points};
+  })()`);
+  check('환생 기록이 있으면 자산 0이어도 환생 탭 해금', legacy.locked === false && legacy.page === true, JSON.stringify(legacy));
+  check('환생 탭 해금 상태가 저장됨', legacy.mapped === true);
+  check('환생 후 포인트 업그레이드 구매 가능', legacy.bought === true && legacy.level === 1 && legacy.points < 100, JSON.stringify(legacy));
+
+  const after = g.run(`(()=>{
+    state.cash=200000000; state.peakNet=200000000; state.usd=0;
+    rebirthNow(true);
+    const locked=isPageLocked('rebirth');
+    rebirthPage();
+    const page=(document.getElementById('rebirth').innerHTML||'').includes('영구 업그레이드');
+    return {locked,page,count:ensureRebirth().count,mapped:state.onboard.unlocked.rebirth===true};
+  })()`);
+  check('환생 직후·초기화 후에도 환생 탭 유지', after.locked === false && after.page === true && after.count === 2, JSON.stringify(after));
+  check('환생 직후 해금 상태 저장', after.mapped === true);
+
+  const reload = g.run(`(()=>{
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    state.onboard.unlocked={}; state.cash=0; state.peakNet=0;
+    applySaveData(data);
+    return {locked:isPageLocked('rebirth'),mapped:state.onboard.unlocked.rebirth===true,count:ensureRebirth().count};
+  })()`);
+  check('구버전 세이브를 불러와도 환생 탭 유지', reload.locked === false && reload.mapped === true, JSON.stringify(reload));
+}
+
 console.log('');
 console.log(`== ${pass}/${pass + fail} passed ==`);
 process.exit(fail ? 1 : 0);

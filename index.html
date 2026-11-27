@@ -5480,6 +5480,7 @@ function rebirthNow(skipConfirm){
   }
   const pts=rebirthPointsFor(net), r=ensureRebirth();
   r.count++; r.points+=pts; r.bestNet=Math.max(r.bestNet||0,net); r.notified=false;
+  unlockedMap().rebirth=true; // 환생 화면은 이후 자산과 무관하게 계속 열려 있어야 합니다.
   r.history.unshift({at:Date.now(),net,points:pts,count:r.count});
   if(r.history.length>20) r.history.pop();
   resetRunForRebirth();
@@ -5630,10 +5631,14 @@ function unlockedMap(){
 function syncUnlocks(){
   const map=unlockedMap(), reach=unlockReach();
   let changed=false;
+  // 이미 환생한 세이브는 자산이 초기화됐어도 환생 화면을 영구 해금합니다.
+  if(ensureRebirth().count>0 && !map.rebirth){ map.rebirth=true; changed=true; }
   UNLOCK_RULES.forEach(r=>{ if(!map[r.id] && reach>=r.need){ map[r.id]=true; changed=true; } });
   return changed;
 }
 function isPageLocked(page){
+  // 예전 세이브에 unlocked.rebirth가 없어도 환생 횟수가 1회 이상이면 열어 줍니다.
+  if(page==="rebirth" && ensureRebirth().count>0){ syncUnlocks(); return false; }
   const rule=unlockRuleFor(page);
   if(!rule) return false;
   if(unlockedMap()[rule.id]) return false;
@@ -5996,6 +6001,8 @@ function applySaveData(data) {
   ["confirmTrades","animations","effects","autoSave"].forEach(k=>{ state.settings[k]=state.settings[k]!==false; });
   ["colorblind","largeText"].forEach(k=>{ state.settings[k]=state.settings[k]===true; });
   ensureRebirth();
+  // 구버전 세이브 마이그레이션: 환생 기록이 있으면 환생 화면을 즉시 영구 해금합니다.
+  if(state.rebirth.count>0) unlockedMap().rebirth=true;
   if(!state.ui || typeof state.ui!=="object") state.ui={assetTab:"overview"};
   if(!["overview","stocks","finance","estate","metals","company","journal","growth","risk"].includes(state.ui.assetTab)) state.ui.assetTab="overview";
   ["cash","usd","loan","peakNet","altRealized"].forEach(k=>{ if(!Number.isFinite(+state[k]) || +state[k]<0) state[k]=0; });
