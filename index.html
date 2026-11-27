@@ -2839,31 +2839,61 @@ const OFFLINE_MAX_BASE=2*3600;
 function offlineMaxSeconds(){ return OFFLINE_MAX_BASE + 2*3600*rebirthLevel("offline"); }
 // 오프라인 동안에도 시장을 결정론적으로 재생합니다(같은 게임 시각 = 같은 시세).
 let OFFLINE_REPLAY=false;
+// 재생을 한 번에 오래 돌리면 화면이 멈추므로, 같은 단계를 작은 덩어리로 나눠 돌릴 수 있게 분리했습니다.
+function replayOfflineSteps(from,to){
+  for(let i=from;i<to;i++){
+    state.marketSeconds++;
+    if(state.marketSeconds%15===0) tickAlt();
+    if(state.marketSeconds%5===0){ tickMarket(); updateFX(); }
+    if(state.marketSeconds%7===0) marketEventsAndNews();
+  }
+}
 function replayOfflineMarket(seconds){
   if(!(seconds>0)) return;
   OFFLINE_REPLAY=true;
+  try{ replayOfflineSteps(0,seconds); }
+  finally { OFFLINE_REPLAY=false; }
+  state.marketOpen=(state.marketSeconds%240)<180;
+}
+// 화면이 보이지 않는 탭에서는 양보하지 않습니다(백그라운드 타이머 지연으로 오히려 느려짐).
+function offlineYield(){
+  return new Promise(resolve=>{
+    try{
+      if(typeof document!=="undefined" && document.visibilityState==="hidden"){ resolve(); return; }
+      setTimeout(resolve,0);
+    }catch(e){ resolve(); }
+  });
+}
+// 화면이 끊기지 않게 짧게 끊어 재생합니다(기본 120게임초 단위 · 2시간이면 60번 양보).
+async function replayOfflineMarketChunked(seconds, chunk, onProgress){
+  if(!(seconds>0)) return;
+  const step=Math.max(20, Math.floor(chunk||60));
+  OFFLINE_REPLAY=true;
   try{
-    for(let i=0;i<seconds;i++){
-      state.marketSeconds++;
-      if(state.marketSeconds%15===0) tickAlt();
-      if(state.marketSeconds%5===0){ tickMarket(); updateFX(); }
-      if(state.marketSeconds%7===0) marketEventsAndNews();
+    for(let done=0; done<seconds; done+=step){
+      replayOfflineSteps(done, Math.min(seconds, done+step));
+      if(typeof onProgress==="function"){ try{ onProgress(Math.min(seconds, done+step), seconds); }catch(e){} }
+      await offlineYield();
     }
   } finally { OFFLINE_REPLAY=false; }
   state.marketOpen=(state.marketSeconds%240)<180;
 }
-function applyOfflineProgress(){
+function offlineElapsedSeconds(){
   const now=Date.now();
   const last=state.lastSeen||0;
   state.lastSeen=now;
   if(!last || last>now) return null;
   const sec=Math.min(offlineMaxSeconds(), Math.floor((now-last)/1000));
-  if(sec<120) return null;
-  // 재생 전 시세를 기억해 두고, 같은 시간만큼 시장을 돌려 놓습니다(돈 정산은 아래에서 따로).
-  const idxBefore=marketIndex(), fxBefore=fx.usd;
-  const heldBefore={};
+  return sec>=120?sec:null;
+}
+// 재생 전 시세를 기억해 두고, 같은 시간만큼 시장을 돌려 놓습니다(돈 정산은 따로).
+function offlineMarketStart(){
+  const idxBefore=marketIndex(), fxBefore=fx.usd, heldBefore={};
   stocks.forEach(s=>{ if(+s.own>0) heldBefore[s.id]=s.price; });
-  replayOfflineMarket(sec);
+  return {idxBefore, fxBefore, heldBefore};
+}
+function offlineSettle(sec, start, opts){
+  const {idxBefore, fxBefore, heldBefore}=start;
   const idxAfter=marketIndex(), fxAfter=fx.usd;
   const held=Object.keys(heldBefore).map(id=>{ const s=stock(id); const p0=heldBefore[id]||s.price; return {name:s.name, ret:p0>0?s.price/p0-1:0}; }).sort((a,b)=>Math.abs(b.ret)-Math.abs(a.ret)).slice(0,3);
   const periods=sec/15;
@@ -2916,9 +2946,38 @@ function applyOfflineProgress(){
     <div class="kpi"><small>환율</small><b class="${fxAfter>=fxBefore?"up":"down"}">${pct(fxBefore>0?fxAfter/fxBefore-1:0)}</b></div>
     ${held.length?held.map(h=>`<div class="kpi"><small>${escHtml(h.name)}</small><b class="${h.ret>=0?"up":"down"}">${pct(h.ret)}</b></div>`).join(""):`<div class="kpi"><small>보유 종목</small><b>없음</b></div>`}
   </div>
-  <p style="margin-top:10px;font-size:12px;color:#667085">끼져 있던 시간만큼 시장을 그대로 재생해 보여 줍니다(같은 시간이면 모든 플레이어가 같은 시세). 이자·배당·임대료는 위에서 함께 정산했습니다.</p>`);
+  <p style="margin-top:10px;font-size:12px;color:#667085">꺼져 있던 시간만큼 시장을 그대로 재생해 보여 줍니다(같은 시간이면 모든 플레이어가 같은 시세). 이자·배당·임대료는 위에서 함께 정산했습니다.</p>`);
   saveGame();
+  if(opts&&opts.refresh){ try{ update(); dashboardPage(); portfolio(); }catch(e){} }
   return summary;
+}
+// 테스트·내부용: 한 번에 동기 정산.
+function applyOfflineProgress(){
+  const sec=offlineElapsedSeconds();
+  if(!sec) return null;
+  const start=offlineMarketStart();
+  replayOfflineMarket(sec);
+  return offlineSettle(sec,start);
+}
+// 화면용: 재생을 나눠 돌려 로딩 중에도 화면이 멈추지 않습니다.
+async function applyOfflineProgressChunked(){
+  const sec=offlineElapsedSeconds();
+  if(!sec) return null;
+  const start=offlineMarketStart();
+  const showProgress=sec>600;
+  let lastPct=-1;
+  const onProgress=(done,total)=>{
+    const pct=Math.max(0,Math.min(100,Math.round(done/total*100)));
+    if(!showProgress || pct===lastPct || pct%5!==0) return;
+    lastPct=pct;
+    try{
+      openModal("복귀 준비 중",`<p style="font-size:13px">${Math.floor(total/60)}분 동안의 시장을 다시 계산하고 있습니다.</p>
+        <div class="bar" style="margin:10px 0"><span style="width:${pct}%"></span></div>
+        <p class="muted-sm">${pct}% · 게임은 바로 이어서 할 수 있습니다.</p>`);
+    }catch(e){}
+  };
+  await replayOfflineMarketChunked(sec, 60, onProgress);
+  return offlineSettle(sec,start,{refresh:true});
 }
 
 // ── 결산 리포트 ───────────────────────────────
@@ -5294,15 +5353,30 @@ const UNLOCK_RULES=[
   {id:"rebirth", label:"환생", need:100000000, pages:["rebirth"], hint:"순자산 1억원"}
 ];
 function ensureOnboard(){
-  if(!state.onboard||typeof state.onboard!=="object") state.onboard={done:false, dismissed:false, seen:{}, firstTrade:false};
+  if(!state.onboard||typeof state.onboard!=="object") state.onboard={done:false, dismissed:false, seen:{}, unlocked:{}, firstTrade:false};
   if(!state.onboard.seen||typeof state.onboard.seen!=="object") state.onboard.seen={};
+  if(!state.onboard.unlocked||typeof state.onboard.unlocked!=="object") state.onboard.unlocked={};
   return state.onboard;
 }
 function unlockReach(){ return Math.max(totalAssetsKRW(), +state.peakNet||0); }
 function unlockRuleFor(page){ return UNLOCK_RULES.find(u=>u.pages.includes(page))||null; }
+// 한 번이라도 기준을 넘으면 영구 해금입니다(환생·초기화 뒤에도 다시 잠기지 않음).
+function unlockedMap(){
+  const ob=ensureOnboard();
+  if(!ob.unlocked||typeof ob.unlocked!=="object") ob.unlocked={};
+  return ob.unlocked;
+}
+function syncUnlocks(){
+  const map=unlockedMap(), reach=unlockReach();
+  let changed=false;
+  UNLOCK_RULES.forEach(r=>{ if(!map[r.id] && reach>=r.need){ map[r.id]=true; changed=true; } });
+  return changed;
+}
 function isPageLocked(page){
   const rule=unlockRuleFor(page);
   if(!rule) return false;
+  if(unlockedMap()[rule.id]) return false;
+  if(syncUnlocks() && unlockedMap()[rule.id]) return false;
   return unlockReach()<rule.need;
 }
 function openUnlockModal(rule){
@@ -5343,6 +5417,7 @@ function checkUnlocks(){
   if(now-unlockCheckAt<5000) return;
   unlockCheckAt=now;
   const ob=ensureOnboard(), reach=unlockReach();
+  syncUnlocks();
   UNLOCK_RULES.forEach(u=>{
     if(ob.seen[u.id] || reach<u.need) return;
     ob.seen[u.id]=true;
@@ -5366,7 +5441,8 @@ function init(){
   ensureAdvancedState();
   ensureCalendar();
   state.lastGrade=currentGrade();
-  applyOfflineProgress();
+  // 큰 계산은 덩어리로 나눠 돌려 첫 화면이 멈추지 않게 합니다.
+  Promise.resolve().then(()=>applyOfflineProgressChunked()).catch(()=>{});
   trackEvent("app_open",{version:SAVE_VERSION,firstRun:!state.savedAt?1:0});
   banking();fxPage();news();portfolio();dashboardPage();holdingsPage();
   const initialStats=document.querySelector(".stats"); if(initialStats) initialStats.classList.add("hidden");

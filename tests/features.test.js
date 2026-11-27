@@ -440,6 +440,13 @@ function check(name, ok, detail) {
   b.run('replayOfflineMarket(3600)');
   check('오프라인 재생 결과 = 온라인 진행 결과', a.run('JSON.stringify(stocks.map(s=>s.price))') === b.run('JSON.stringify(stocks.map(s=>s.price))'));
   check('오프라인 재생도 환율·부동산에 동일하게 반영', a.run('fx.usd') === b.run('fx.usd') && a.run('JSON.stringify(state.altPrices)') === b.run('JSON.stringify(state.altPrices)'));
+
+  // 덩어리로 나눠 돌려도(화면 양보) 결과가 같아야 합니다.
+  const c1 = createGame(63), c2 = createGame(64);
+  c1.run(setup); c2.run(setup);
+  c1.run('replayOfflineSteps(0,600); replayOfflineSteps(600,1200); replayOfflineSteps(1200,1800);');
+  c2.run('replayOfflineMarket(1800)');
+  check('나눠서 재생해도 결과 동일', c1.run('JSON.stringify(stocks.map(s=>s.price))') === c2.run('JSON.stringify(stocks.map(s=>s.price))') && c1.run('fx.usd') === c2.run('fx.usd'));
 }
 
 // ── 관측성(오류·이벤트 기록) ─────────────────
@@ -475,6 +482,25 @@ function check(name, ok, detail) {
   check('잠긴 화면은 안내 창을 열고 이동하지 않음', gated.modal.includes('아직 잠겨') && !gated.page.includes('영구 업그레이드'), gated.modal.slice(0, 40));
   const unlocked = g.run(`(()=>{ state.cash=120000000; state.peakNet=120000000; show('rebirth'); return {locked:isPageLocked('rebirth'), page:(document.getElementById('rebirth').innerHTML||'').includes('영구 업그레이드')}; })()`);
   check('기준을 넘으면 잠금 해제·화면 표시', unlocked.locked === false && unlocked.page === true);
+
+  // 한 번 열린 화면은 환생·초기화 뒤에도 다시 잠기지 않아야 합니다.
+  const keep = g.run(`(()=>{
+    state.cash=0; state.peakNet=0; state.onboard={done:false,dismissed:false,seen:{},unlocked:{},firstTrade:false};
+    const lockedBefore=isPageLocked('company');
+    state.cash=31000000; state.peakNet=31000000;
+    isPageLocked('company'); // 기준 달성 시 영구 해금으로 등록
+    const flag=!!state.onboard.unlocked.company;
+    state.cash=0; state.peakNet=0; state.rebirth.count=(state.rebirth.count||0)+1;
+    const afterReset=isPageLocked('company');
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    state.onboard.unlocked={}; state.cash=0;
+    applySaveData(data);
+    const afterReload=isPageLocked('company');
+    return {lockedBefore, flag, afterReset, afterReload};
+  })()`);
+  check('기준 전에는 잠김', keep.lockedBefore === true);
+  check('한 번 달성하면 환생·초기화 뒤에도 열려 있음', keep.flag === true && keep.afterReset === false, JSON.stringify(keep));
+  check('저장·불러오기 후에도 해금 유지', keep.afterReload === false);
 
   const ob = g.run(`(()=>{
     state.onboard={done:false,dismissed:false,seen:{},firstTrade:false};
