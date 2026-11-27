@@ -19,10 +19,12 @@ CREATE TABLE IF NOT EXISTS saves (
 );
 
 CREATE TABLE IF NOT EXISTS scores (
-  season     TEXT NOT NULL,                    -- YYYY-MM (UTC)
-  player_id  TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  score      INTEGER NOT NULL,                 -- 순자산(원)
-  updated_at INTEGER NOT NULL,
+  season        TEXT NOT NULL,                 -- YYYY-MM (UTC)
+  player_id     TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  score         INTEGER NOT NULL,              -- 순자산(원)
+  verified      INTEGER NOT NULL DEFAULT 0,    -- 서버가 저장 파일과 대조해 검증했는지
+  checked_worth INTEGER NOT NULL DEFAULT 0,    -- 저장 파일에서 계산한 순자산(감사용)
+  updated_at    INTEGER NOT NULL,
   PRIMARY KEY (season, player_id)
 );
 

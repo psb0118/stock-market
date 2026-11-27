@@ -43,7 +43,7 @@ p{margin:0;color:#667085;line-height:1.45}
 .pill{display:inline-flex;align-items:center;border-radius:999px;background:#edf2f7;color:#334155;font-size:12px;padding:5px 8px;white-space:nowrap}
 .price{font-size:25px;font-weight:900;margin:12px 0 3px}
 /* 국내 증권 표기: 상승은 빨강, 하락은 파랑. 색을 구분하지 못해도 화살표로 방향을 알 수 있습니다. */
-.up{color:#d92d20}.down{color:#1d4ed8}
+.up{color:var(--up)}.down{color:var(--down)}
 .up::before{content:"▲ ";font-size:.8em}.down::before{content:"▼ ";font-size:.8em}
 .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0}
 .mini div,.product-grid div{border:1px solid #d8ded4;background:#fafafa;border-radius:7px;padding:8px}
@@ -245,12 +245,16 @@ body.dark .product-grid div,body.dark .mini div{background:#0f1a26;border-color:
 body.dark .toast{background:#1b2a3a;color:#e2e8f0}
 body.dark .trend{background:#0f1a26;border-color:#2a3a4d}
 body.dark .breaking{background:#060b12}
-body.dark .up{color:#ff8a80}body.dark .down{color:#8ab4f8}
+body.dark{--up:#ff8a80;--down:#8ab4f8}
+/* 색약 대응: 적록 대신 주황·파랑을 쓰고, 화살표(▲▼)로 방향을 함께 알립니다. */
+body.cb{--up:#b45309;--down:#0369a1}
+body.dark.cb{--up:#ffb74d;--down:#64b5f6}
+body.cb .up,body.cb .down{font-weight:800}
 /* ── 2026 UI 리디자인: 금융 대시보드 ───────────────────────── */
 :root{
   --bg:#f2f4f7; --surface:#ffffff; --surface-2:#f8fafc; --ink:#101828; --muted:#667085;
   --line:#e4e8ee; --accent:#0f766e; --accent-2:#0b5f59; --gold:#f2c14e; --navy:#0c1523;
-  --danger:#b42318; --radius:12px;
+  --danger:#b42318; --radius:12px; --up:#d92d20; --down:#1d4ed8;
 }
 body{background:var(--bg);color:var(--ink);font-family:"Pretendard","Noto Sans KR",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .app{grid-template-columns:244px minmax(0,1fr)}
@@ -406,7 +410,7 @@ kbd{background:#eef2f6;border:1px solid var(--line);border-radius:5px;padding:1p
 .chip{background:#eef1f5;border:1px solid var(--line);min-height:40px}
 .chip.on{background:var(--ink);border-color:var(--ink)}
 .stats .box b{font-variant-numeric:tabular-nums}
-.dash-total,.metric b,.holding-row b,.kpi b{font-variant-numeric:tabular-nums}
+.dash-total,.metric b,.holding-row b,.kpi b,.price,.box b,.rank-row,.asset-grid b,.snap-row b,.tax-preview-line b,.journal b,.compare-table td,.lot-row span,.challenge-meta span{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 .mission-top small{color:var(--muted)}
 .bar{background:#edf1f5;height:7px}
 .journal{font-size:12px}
@@ -569,6 +573,25 @@ body.dark .flow-line b{color:#dbe4ef}
 .labor-options{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .labor-options button{min-height:46px;font-size:18px}
 .labor-math-q{font-size:26px;font-weight:900;text-align:center;margin:14px 0}
+/* ── 숫자 가독성 · 접근성 ───────────────────────────────
+   큰 글씨 모드는 핵심 수치와 조작 요소를 함께 키워 작은 화면에서도 읽기 쉽게 합니다. */
+body.large-text{font-size:16px}
+body.large-text .metric b{font-size:25px}
+body.large-text .box b{font-size:23px}
+body.large-text .dash-total{font-size:33px}
+body.large-text .holding-row{font-size:14px}
+body.large-text .holding-row b{font-size:15px}
+body.large-text .holding-row small,body.large-text .muted-sm,body.large-text .setting-copy small{font-size:13px}
+body.large-text .section h3,body.large-text .settings-section h3{font-size:16px}
+body.large-text button,body.large-text input,body.large-text select{font-size:15px;min-height:44px}
+body.large-text .toast{font-size:14px}
+body.large-text .news-line{font-size:14px}
+body.large-text .pill{font-size:12px}
+.pill.ok{background:#e7f5ef;color:#0f766e;border-color:#b7e4cf}
+body.dark .pill.ok{background:#0d2b26;color:#7dd3c7;border-color:#1f5148}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+}
 
 </style>
 </head>
@@ -668,6 +691,9 @@ const TAX_YEAR_SECONDS=18000; // 게임 30일 = 1세금연도
 const SAVE_VERSION=4;
 const DIVIDEND_YIELD = 0.001;   // 배당수익률(보유 평가액 대비, 120초 주기)
 const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
+// 후반 밸런스: 순자산 10억원 초과분에 60초마다 자산 관리 수수료를 부과합니다.
+// 초반(1억~10억)에는 영향이 없고, 장기 복리로 자산이 폭주하는 구간만 완만하게 눌러 줍니다.
+const WEALTH_FEE={free:1000000000, tiers:[{from:1e9,rate:0.0001},{from:1e10,rate:0.0002}]};
 const MAX_DAILY_GAIN = 0.50; // 하루 상한 +50%
 const MAX_DAILY_LOSS = 0.30; // 하루 하한 -30%
 const MIN_TOTAL_RATIO = 0.40; // 시작가 대비 장기 하한 -60%
@@ -692,10 +718,12 @@ const REBIRTH_UPGRADES=[
   {id:"offline",name:"야간 정산",       desc:"오프라인 정산 +2시간",             max:3,  base:4, step:2}
 ];
 // master: 모든 알림 끄기, toast: 화면 토스트, center: 알림 센터 기록, news: 시황 속보 배너
-const NOTIFY_DEFAULT={master:false,toast:true,center:true,news:true,newsGap:15,toastMs:4200,toastMax:3,order:true,dividend:true,stock:true,maturity:true,loan:true,earnings:true,economy:true,goal:true,mission:true,achievement:true,grade:true,rebirth:true,tax:true,system:true,sound:false,haptic:false};
+const NOTIFY_DEFAULT={master:false,toast:true,center:true,news:true,newsGap:15,toastMs:4200,toastMax:3,order:true,dividend:true,stock:true,maturity:true,loan:true,earnings:true,economy:true,goal:true,mission:true,achievement:true,grade:true,rebirth:true,tax:true,system:true,sound:false,haptic:false,push:false};
+// 앱 밖(OS) 알림으로 보낼 만한, 놓치면 손해인 알림 종류입니다. 시장 뉴스·경제 이벤트는 화면 알림만 씁니다.
+const PUSH_KINDS=["order","dividend","stock","maturity","loan","goal","mission","achievement","grade","rebirth","tax","system"];
 // 종류별 알림 목록(설정 화면과 알림 센터가 함께 사용)
 const NOTIFY_KINDS=[["order","지정가 체결"],["dividend","배당금"],["stock","주가 급등·급락"],["maturity","예금 만기"],["loan","대출 이자"],["earnings","실적 발표"],["economy","경제 이벤트"],["news","시장 뉴스"],["goal","목표 달성"],["mission","미션 완료"],["achievement","업적 달성"],["grade","등급 상승"],["rebirth","환생 가능"],["tax","세금"],["system","시스템"]];
-const SETTINGS_DEFAULT={theme:"light",confirmTrades:true,animations:true,effects:true,numberFormat:"full",autoSave:true};
+const SETTINGS_DEFAULT={theme:"light",confirmTrades:true,animations:true,effects:true,numberFormat:"full",autoSave:true,colorblind:false,largeText:false};
 // 달성 목표(총자산 기준)와 일시금 보상
 const MILESTONES = [
   {id:"m30", target:30000000, reward:500000, label:"총자산 3,000만원 달성"},
@@ -1093,7 +1121,8 @@ const state={
   speed: 1, paused: false, lastSeen: 0,
   revision: 0, savedAt: 0, // 저장 리바이전(기기 간 충돌 판단용)
   seasonBase: START_CASH, seasonBaseIndex: 1000, reportMonth: "", lastGrade: "브론즈",
-  cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""},
+  cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:"", verified:false},
+  wealthFeePaid: 0, wealthFeeAt: 0, // 고액 자산 관리 수수료 누적·마지막 차감 시각
   // ── 확장 자산·성장 시스템 ──
   estate:{}, metals:{gold:{qty:0,avg:0},silver:{qty:0,avg:0}}, altPrices:{}, company:null,
   economy:Object.assign({},ECON_DEFAULT),
@@ -1133,6 +1162,31 @@ function grossAssetsKRW(){ return (state.cash||0) + (state.usd||0)*fx.usd + stoc
 function netAssetsKRW(){ return grossAssetsKRW() - (state.loan||0); }
 // 기존 함수 이름은 순자산 기준으로 유지합니다(등급·목표·랭킹 공통).
 function totalAssetsKRW(){ return netAssetsKRW(); }
+
+// 고액 자산 관리 수수료: 10억원 초과분 0.01%/60초, 100억원 초과분 0.02%/60초(구간별 합산).
+function wealthFeeDue(net=totalAssetsKRW()){
+  const n=Math.max(0,+net||0), free=WEALTH_FEE.free;
+  if(n<=free) return 0;
+  const first=Math.min(n,WEALTH_FEE.tiers[1].from)-free;
+  const second=Math.max(0,n-WEALTH_FEE.tiers[1].from);
+  return Math.round(first*WEALTH_FEE.tiers[0].rate + second*WEALTH_FEE.tiers[1].rate);
+}
+function wealthFeeRateText(net){
+  return Math.max(0,+net||0)>WEALTH_FEE.tiers[1].from?"0.02%" : "0.01%";
+}
+function chargeWealthFee(){
+  const due=wealthFeeDue();
+  if(due<1) return 0;
+  const paid=Math.min(due,Math.max(0,+state.cash||0));
+  if(paid<=0) return 0;
+  state.cash-=paid;
+  state.wealthFeePaid=Math.max(0,+state.wealthFeePaid||0)+paid;
+  state.wealthFeeAt=state.marketSeconds;
+  if(state.marketSeconds%600===0 && paid>=1000){
+    notify("tax","자산 관리 수수료",`${won(paid)} 차감 · 누적 ${won(state.wealthFeePaid)}`);
+  }
+  return paid;
+}
 
 // ── 환생(영구 성장) ─────────────────────────────────────────
 function ensureRebirth(){
@@ -1272,12 +1326,14 @@ function notify(kind,title,text){
   const n=state.notify||{};
   if(n.master===true) return;      // 모든 알림 끄기
   if(n[kind]===false) return;      // 종류별 끄기
-  if(n.toast===false && n.center===false) return; // 둘 다 끄면 기록도 토스트도 남기지 않습니다.
   // 같은 이벤트가 짧은 간격으로 반복되면 토스트·알림을 한 번만 남깁니다.
   const dedupeKey=kind+"|"+title+(kind==="stock"?"|"+(text||"").slice(0,24):"");
   const now=Date.now();
   if(notifySeen[dedupeKey] && now-notifySeen[dedupeKey]<15000) return;
   notifySeen[dedupeKey]=now;
+  // 화면 토스트·알림 센터를 모두 끈 상태라도, 앱 밖 알림을 켜 두었으면 전달합니다.
+  if(PUSH_KINDS.includes(kind)) sendPushNotification(title,text,{tag:kind});
+  if(n.toast===false && n.center===false) return; // 둘 다 끄면 기록도 토스트도 남기지 않습니다.
   if(n.center!==false){
     if(!Array.isArray(state.alerts)) state.alerts=[];
     state.alerts.unshift({at:Date.now(),kind,title,text,read:false});
@@ -1287,6 +1343,75 @@ function notify(kind,title,text){
   if(n.toast!==false) showToast(title,text);
   if(n.sound) beep(kind);
   if(n.haptic && typeof navigator!=="undefined" && navigator.vibrate) navigator.vibrate(25);
+}
+// ── PWA 앱 밖 알림 ─────────────────────────────────
+// 탭이 백그라운드일 때 OS 알림으로 중요한 소식을 보냅니다. 페이지가 완전히 닫힌 뒤의
+// 알림은 push 서버(VAPID)가 있어야 하므로, 여기서는 서비스워커의 showNotification을 씁니다.
+function pushSupported(){
+  return typeof window!=="undefined" && !!window.Notification && typeof navigator!=="undefined" && "serviceWorker" in navigator;
+}
+function pushPermission(){ try{ return pushSupported() ? (window.Notification.permission||"default") : "unsupported"; }catch(e){ return "unsupported"; } }
+function pushEnabled(){ return !!(state.notify&&state.notify.push) && pushPermission()==="granted"; }
+function pushStatusText(){
+  if(!pushSupported()) return "이 브라우저는 지원하지 않습니다";
+  const p=pushPermission();
+  if(p==="denied") return "브라우저에서 차단됨";
+  if(state.notify&&state.notify.push&&p==="granted") return "켜짐 · 백그라운드 알림";
+  if(state.notify&&state.notify.push) return "알림 권한을 다시 허용해 주세요";
+  return "꺼짐";
+}
+function pushControlHtml(){
+  if(!pushSupported()) return `<span class="pill">지원 안 함</span>`;
+  if(pushPermission()==="denied") return `<span class="pill">브라우저 설정에서 허용 필요</span>`;
+  if(state.notify&&state.notify.push&&pushPermission()==="granted") return `<span class="pill ok">켜짐</span> <button class="ghost" onclick="disablePushNotifications()">끄기</button>`;
+  if(state.notify&&state.notify.push) return `<span class="pill">권한 필요</span> <button class="buy" onclick="enablePushNotifications()">알림 허용</button>`;
+  return `<button class="buy" onclick="enablePushNotifications()">알림 허용</button>`;
+}
+async function enablePushNotifications(){
+  if(!pushSupported()){ alert("이 브라우저는 앱 밖 알림을 지원하지 않습니다."); return false; }
+  let perm=pushPermission();
+  if(perm!=="granted"){
+    try{ perm=await window.Notification.requestPermission(); }
+    catch(e){ perm="denied"; }
+  }
+  if(perm!=="granted"){
+    alert("브라우저에서 알림이 허용되지 않았습니다. 주소창 왼쪽의 사이트 설정에서 알림을 허용으로 바꾼 뒤 다시 시도해 주세요.");
+    if(activePage()==="settings") settingsPage();
+    return false;
+  }
+  state.notify=Object.assign({},NOTIFY_DEFAULT,state.notify||{},{push:true});
+  saveGame();
+  sendPushNotification("머니 플레이그라운드","앱 밖 알림이 켜졌습니다. 탭을 내려 두어도 중요한 소식을 보내 드립니다.",{force:true,tag:"test"});
+  if(activePage()==="settings") settingsPage();
+  return true;
+}
+function disablePushNotifications(){
+  state.notify=Object.assign({},NOTIFY_DEFAULT,state.notify||{},{push:false});
+  saveGame();
+  if(activePage()==="settings") settingsPage();
+}
+function sendPushNotification(title,text,opts){
+  if(!pushEnabled()) return Promise.resolve(false);
+  const visible=typeof document!=="undefined" && document.visibilityState!=="hidden";
+  if(visible && !(opts&&opts.force)) return Promise.resolve(false);
+  const tag="mpg-"+((opts&&opts.tag)||"alert");
+  const body=String(text==null?"":text);
+  const options={body,icon:"icon.svg",badge:"icon.svg",tag,data:{url:(opts&&opts.url)||"./"}};
+  const fallback=()=>{
+    try{ new window.Notification(title,{body,icon:"icon.svg",tag}); return true; }
+    catch(e){ return false; }
+  };
+  try{
+    if(navigator.serviceWorker && navigator.serviceWorker.ready){
+      return Promise.resolve(navigator.serviceWorker.ready)
+        .then(reg=>{
+          if(reg && typeof reg.showNotification==="function") return reg.showNotification(title,options).then(()=>true);
+          return fallback();
+        })
+        .catch(()=>fallback());
+    }
+  }catch(e){}
+  return Promise.resolve(fallback());
 }
 function toastDurationMs(){
   return Math.max(2000,Math.min(8000,Math.round(+((state.notify||{}).toastMs)||4200)));
@@ -1332,6 +1457,7 @@ function notifyAlways(title,text,opts){
     if(state.alerts.length>40) state.alerts.pop();
     updateBell();
   }
+  sendPushNotification(title,text,{tag:"important"});
   showToast(title,text,Object.assign({className:"toast-ipo",durationMs:Math.max(8000,toastDurationMs())},opts||{}));
   if(n.sound) beep("system");
   if(n.haptic && typeof navigator!=="undefined" && navigator.vibrate) navigator.vibrate(25);
@@ -2622,6 +2748,8 @@ function applyTheme(){
     document.body.classList.toggle("dark",s.theme==="dark");
     document.body.classList.toggle("no-anim",s.animations===false);
     document.body.classList.toggle("no-effects",s.effects===false);
+    document.body.classList.toggle("cb",s.colorblind===true);
+    document.body.classList.toggle("large-text",s.largeText===true);
   }
 }
 function openSettings(){ goPage("settings"); }
@@ -2648,8 +2776,8 @@ function openGlobalRanking(){
   if(!cloudConfigured()){ openModal("글로벌 랭킹",`<p style="font-size:13px">글로벌 랭킹은 클라우드 서버가 연결되면 켜집니다. <code>meta[name=cloud-api]</code>에 Worker 주소를 넣어 주세요.</p>`); return; }
   openModal("글로벌 랭킹",`<div id="rank-modal-body"><p>불러오는 중…</p></div>`);
   cloudCall(`/api/leaderboard?season=${encodeURIComponent(seasonKey())}&limit=20`,{auth:!!cloudCreds()}).then(d=>{
-    const rows=((d&&d.entries)||[]).map(e=>`<div class="rank-row"><b>${e.rank}</b><span>${escHtml(e.nickname)}</span><span>${won(e.score)}</span></div>`).join("");
-    const body=$("rank-modal-body"); if(body) body.innerHTML=(d&&d.me?`<p style="font-size:13px">내 순위 <b>${d.me.rank}위</b> · ${won(d.me.score)}</p>`:"")+(rows||"<p>등록된 순위가 없습니다.</p>");
+    const rows=((d&&d.entries)||[]).map(e=>`<div class="rank-row"><b>${e.rank}</b><span>${escHtml(e.nickname)}${e.verified?` <span class="pill ok" title="저장 파일과 대조해 검증">검증</span>`:""}</span><span>${won(e.score)}</span></div>`).join("");
+    const body=$("rank-modal-body"); if(body) body.innerHTML=(d&&d.me?`<p style="font-size:13px">내 순위 <b>${d.me.rank}위</b> · ${won(d.me.score)}${d.me.verified?` <span class="pill ok">검증됨</span>`:""}</p>`:"")+(rows||"<p>등록된 순위가 없습니다.</p>")+"<p class='muted-sm'>검증 표시는 서버가 저장 파일의 순자산과 점수를 대조했다는 뜻입니다.</p>";
   }).catch(e=>{ const body=$("rank-modal-body"); if(body) body.innerHTML=`<p>${escHtml(cloudErr(e))}</p>`; });
 }
 // 진행 초기화는 환생(rebirthNow)만 제공합니다. 은퇴·시즌 종료 같은 별도 초기화 경로는 두지 않습니다.
@@ -4039,7 +4167,7 @@ function challengePanelHtml(){
     const on=!!a&&a.id===spec.id;
     return `<div class="challenge-card${on?" active":""}"><div class="challenge-meta"><b>${spec.name}</b><span class="pill">${pct(spec.target)}</span></div><p class="muted-sm">${spec.desc}</p><div class="challenge-meta"><span>보상 ${won(spec.reward)}</span><button class="${on?"ghost":"buy"} small" ${a&&!on?"disabled":""} onclick="startChallenge('${spec.id}')" ${on?"disabled":""}>${on?"진행 중":"시작"}</button></div></div>`;
   }).join("");
-  const progress=a?(()=>{ const p=challengeProgress(a), goal=a.startNet*(1+a.target); return `<div class="challenge-card active" style="margin-top:10px"><div class="challenge-meta"><b>${a.name} 진행 중</b><span class="pill">${clockText(realSeconds(Math.max(0,a.endsAt-state.marketSeconds)))} 남음</span></div><div class="bar"><span style="width:${Math.max(0,Math.min(100,p/Math.max(.0001,a.target)*100)).toFixed(1)}%"></span></div><div class="challenge-meta"><span>${won(netAssetsKRW())} / ${won(goal)}</span><span class="${p>=0?"up":"down"}">${pct(p)}</span></div><button class="ghost small" onclick="cancelChallenge()">포기 (진행은 유지)</button></div>`; })():"";
+  const progress=a?(()=>{ const p=challengeProgress(a), goal=a.startNet*(1+a.target); return `<div class="challenge-card active" style="margin-top:10px"><div class="challenge-meta"><b>${a.name} 진행 중</b><span class="pill">${clockText(realSeconds(Math.max(0,a.endsAt-state.marketSeconds)))} 남음</span></div><div class="bar"><span data-live-style="challengeWidth" style="width:${Math.max(0,Math.min(100,p/Math.max(.0001,a.target)*100)).toFixed(1)}%"></span></div><div class="challenge-meta"><span data-live="challengeNet">${won(netAssetsKRW())} / ${won(goal)}</span><span class="${p>=0?"up":"down"}" data-live="challengePct">${pct(p)}</span></div><button class="ghost small" onclick="cancelChallenge()">포기 (진행은 유지)</button></div>`; })():"";
   const last=c.last?`<p class="muted-sm" style="margin-top:8px">최근 결과: <b>${c.last.name}</b> · ${c.last.status==="success"?"성공":c.last.status==="canceled"?"포기":"미달"} · ${pct(c.last.returnPct||0)}</p>`:"";
   return `<section class="section"><div class="section-head"><h3>시나리오 챌린지</h3><span class="pill">현재 진행에서 시작 · 초기화 없음</span></div><div class="panel"><p class="muted-sm">현재 순자산을 시작점으로 기록하고 제한 시간 안에 목표 수익률을 달성합니다. 실패해도 자산·진행은 초기화되지 않습니다.</p><div class="challenge-grid" style="margin-top:10px">${cards}</div>${progress}${last}</div></section>`;
 }
@@ -4239,10 +4367,19 @@ async function cloudUpload(force){
 }
 
 async function cloudSubmitScore(){
-  const out=await cloudCall("/api/score",{method:"POST",body:{season:seasonKey(),score:Math.round(totalAssetsKRW())}});
-  state.cloud=Object.assign({},state.cloud,{rank:out.rank,best:out.best,season:out.season});
-  saveGame();
-  return out;
+  try{
+    const out=await cloudCall("/api/score",{method:"POST",body:{season:seasonKey(),score:Math.round(totalAssetsKRW()),revision:state.cloud.revision||0}});
+    state.cloud=Object.assign({},state.cloud,{rank:out.rank,best:out.best,season:out.season,verified:out.verified===true});
+    saveGame();
+    return out;
+  }catch(e){
+    // 서버가 저장 파일의 순자산과 점수를 대조해 거부한 경우입니다. 점수만 올려 순위를 조작할 수 없습니다.
+    if(e&&e.code==="score_mismatch"){
+      notify("system","순위 점수 검증 실패","업로드한 저장 파일의 순자산과 점수가 달라 순위에 올리지 못했습니다. 잠시 뒤 다시 저장해 주세요.");
+      return null;
+    }
+    throw e;
+  }
 }
 
 async function cloudDownload(){
@@ -4318,12 +4455,12 @@ function cloudPanelHTML(msg){
       <label>닉네임<input id="cloud-name" maxlength="16" placeholder="2~16자"></label>
       <label>&nbsp;<button class="buy" onclick="cloudRegister()">연결하기</button></label>
     </div>
-    <p style="font-size:12px;margin-top:8px;">닉네임과 순자산 순위가 공개됩니다. 비밀번호는 없고, 이 기기에만 저장되는 열쇠로 저장/복원합니다.</p>
+    <p style="font-size:12px;margin-top:8px;">닉네임과 순자산 순위가 공개됩니다. 비밀번호는 없고, 이 기기에만 저장되는 열쇠로 저장/복원합니다. 점수는 서버가 저장 파일과 대조해 검증합니다.</p>
     ${msg?`<p style="font-size:12px;color:#b54708;">${escHtml(msg)}</p>`:""}`;
   }
   const c=state.cloud||{};
   const last=c.lastSync?new Date(c.lastSync).toLocaleTimeString("ko-KR"):"아직 없음";
-  const rows=((cloudBoard&&cloudBoard.entries)||[]).map(e=>`<div class="rank-row${e.playerId===creds.playerId?" me":""}"><b>${e.rank}</b><span>${escHtml(e.nickname)}</span><span>${won(e.score)}</span></div>`).join("");
+  const rows=((cloudBoard&&cloudBoard.entries)||[]).map(e=>`<div class="rank-row${e.playerId===creds.playerId?" me":""}"><b>${e.rank}</b><span>${escHtml(e.nickname)}${e.verified?` <span class="pill ok" title="서버가 저장 파일과 대조해 검증한 점수">검증</span>`:""}</span><span>${won(e.score)}</span></div>`).join("");
   const me=(cloudBoard&&cloudBoard.me)||(c.rank?{rank:c.rank,score:c.best}:null);
   return `<div class="cloud-head">
       <div><b>${escHtml(creds.nickname)}</b> <span class="pill">연결됨</span></div>
@@ -4340,9 +4477,10 @@ function cloudPanelHTML(msg){
     </label>
     ${msg?`<p style="font-size:12px;color:#b54708;">${escHtml(msg)}</p>`:""}
     <h3 style="margin:16px 0 8px;font-size:15px;">월간 리더보드 · ${seasonKey()}</h3>
-    ${me?`<p style="font-size:13px;">내 순위 <b>${me.rank}위</b> · ${won(me.score)}</p>`:`<p style="font-size:12px;">순위를 불러오는 중입니다.</p>`}
+    ${me?`<p style="font-size:13px;">내 순위 <b>${me.rank}위</b> · ${won(me.score)}${me.verified?` <span class="pill ok">검증됨</span>`:""}</p>`:`<p style="font-size:12px;">순위를 불러오는 중입니다.</p>`}
+    <p class="muted-sm">점수는 업로드한 저장 파일의 순자산과 대조해 검증됩니다. 검증 표시가 없는 점수는 신뢰할 수 없습니다.</p>
     <div class="rank">${rows||`<div style="font-size:12px;">아직 등록된 순위가 없습니다.</div>`}</div>
-    <p style="font-size:11px;color:#667085;margin-top:8px;">서버는 클라이언트가 보낸 순자산을 그대로 기록하므로 100% 위조 방지는 아닙니다. 시즌은 매월 1일(UTC)에 바뀝니다.</p>`;
+    <p style="font-size:11px;color:#667085;margin-top:8px;">서버가 저장 파일에서 순자산을 다시 계산해 점수와 대조하지만, 저장 파일 자체를 위조하는 것까지는 막지 못합니다. 시즌은 매월 1일(UTC)에 바뀝니다.</p>`;
 }
 
 function cloudRenderPanel(msg){
@@ -4698,7 +4836,7 @@ async function firebaseLeaderboard(){
     const snap=await api.db.getDocs(q);
     const rows=snap.docs.map((d,i)=>{ const x=d.data()||{}; return `<div class="rank-row${fbUser&&x.uid===fbUser.uid?" me":""}"><b>${i+1}</b><span>${escHtml(x.nickname||"익명")}</span><span>${won(x.score||0)}</span></div>`; }).join("");
     const box=document.getElementById("fb-board");
-    if(box) box.innerHTML=(rows||`<p>이번 시즌 기록이 없습니다.</p>`)+`<p class="muted-sm" style="margin-top:8px">시즌 ${seasonKey()} · 상위 20명 · 순위는 로그인한 Google 계정의 순자산입니다.</p>`;
+    if(box) box.innerHTML=(rows||`<p>이번 시즌 기록이 없습니다.</p>`)+`<p class="muted-sm" style="margin-top:8px">시즌 ${seasonKey()} · 상위 20명 · 순위는 로그인한 Google 계정의 순자산입니다.</p><p class="muted-sm">Google 랭킹은 Firestore에 클라이언트가 기록하므로 서버 검증이 없습니다. 저장 파일과 대조한 검증 순위는 <b>기기 연결 클라우드</b>의 글로벌 랭킹을 봐 주세요.</p>`;
   }catch(e){
     const info=firebaseNoteError(e,"리더보드");
     const box=document.getElementById("fb-board");
@@ -4935,32 +5073,32 @@ function dashboardPage(){
   const jobs=LABOR_JOBS.slice(0,2);
   $("dashboard").innerHTML=`${pageHeader("OVERVIEW","대시보드",`${currentGrade()} · ${currentTitle()} · 총자산 ${won(gross)} · 순자산 ${won(net)}`, `${dashNarrow()?`<button class="ghost dash-toggle" onclick="toggleDashMore()">${dashMoreOpen()?"접기":"더 보기"}</button>`:""}<button class="ghost" onclick="show('portfolio')">자산 상세</button><button class="buy" onclick="show('domestic')">주식 시장</button>`)}
     <section class="kpi-strip">
-      <div class="metric"><small>총자산</small><b>${wonShort(gross)}</b><span class="delta">${currentGrade()} · ${currentTitle()}</span></div>
-      <div class="metric"><small>현금</small><b>${wonShort(state.cash)}</b><span class="muted-sm">보유 ${usdStr(state.usd||0)}</span></div>
-      <div class="metric"><small>부채</small><b>${debt>0?wonShort(debt):"없음"}</b><span class="muted-sm">${debt>0?`연 ${((state.loanRate||0)*100).toFixed(1)}%`:"부채 없음"}</span></div>
-      <div class="metric"><small>이번 달</small><b class="${(reportData().ret>=0)?"up":"down"}">${pct(reportData().ret)}</b><span class="muted-sm">시장 ${pct(reportData().indexRet)}</span></div>
+      <div class="metric"><small>총자산</small><b data-live="grossShort">${wonShort(gross)}</b><span class="delta">${currentGrade()} · ${currentTitle()}</span></div>
+      <div class="metric"><small>현금</small><b data-live="cashShort">${wonShort(state.cash)}</b><span class="muted-sm">보유 <span data-live="usd">${usdStr(state.usd||0)}</span></span></div>
+      <div class="metric"><small>부채</small><b data-live="debtShort">${debt>0?wonShort(debt):"없음"}</b><span class="muted-sm">${debt>0?`연 ${((state.loanRate||0)*100).toFixed(1)}%`:"부채 없음"}</span></div>
+      <div class="metric"><small>이번 달</small><b class="${(reportData().ret>=0)?"up":"down"}" data-live="reportRet">${pct(reportData().ret)}</b><span class="muted-sm">시장 ${pct(reportData().indexRet)}</span></div>
     </section>
     ${dashPanelHtml()}
     ${onboardPanelHtml()}
     ${challengePanelHtml()}
     <section class="section"><div class="section-head"><h3>자산 구성</h3><button class="ghost small" onclick="show('portfolio')">전체 보기</button></div>
       <div class="breakdown">
-        ${[["주식",stockV,"자산","show('domestic')"],["금융상품",prodV,"자산","show('banking')"],["부동산",estateV,"자산","show('realestate')"],["실물자산",metalV,"자산","show('realestate')"],["기업",companyV,"자산","show('company')"]].map(([label,val,,go])=>`<button class="breakdown-row" onclick="${go}"><span>${label}</span><b>${won(val)}</b><i>›</i></button>`).join("")}
+        ${[["주식",stockV,"stock","show('domestic')"],["금융상품",prodV,"product","show('banking')"],["부동산",estateV,"estate","show('realestate')"],["실물자산",metalV,"metal","show('realestate')"],["기업",companyV,"company","show('company')"]].map(([label,val,key,go])=>`<button class="breakdown-row" onclick="${go}"><span>${label}</span><b data-live="asset:${key}">${won(val)}</b><i>›</i></button>`).join("")}
       </div>
     </section>
     <div class="dash-more" ${dashMoreOpen()?"":"hidden"}>
     <div class="two-col">
       <section class="section"><div class="section-head"><h3>시장 스냅샷</h3><button class="ghost small" onclick="show('news')">뉴스</button></div>
         <div class="panel market-snap">
-          <div class="snap-row"><span>시장 지수</span><b>${Math.round(marketIndex())}</b></div>
-          <div class="snap-row"><span>경기 국면</span><b>${eco.phase}</b></div>
-          <div class="snap-row"><span>기준금리</span><b>${(eco.baseRate*100).toFixed(2)}%</b></div>
-          <div class="snap-row"><span>환율</span><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div>
-          <div class="snap-row"><span>시장 상태</span><b>${state.marketOpen?"개장":"휴장"} · ${speedNow()}x</b></div>
+          <div class="snap-row"><span>시장 지수</span><b data-live="index">${Math.round(marketIndex())}</b></div>
+          <div class="snap-row"><span>경기 국면</span><b data-live="phase">${eco.phase}</b></div>
+          <div class="snap-row"><span>기준금리</span><b data-live="baseRate">${(eco.baseRate*100).toFixed(2)}%</b></div>
+          <div class="snap-row"><span>환율</span><b data-live="fx">${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div>
+          <div class="snap-row"><span>시장 상태</span><b data-live="marketStatus">${state.marketOpen?"개장":"휴장"} · ${speedNow()}x</b></div>
         </div>
       </section>
       <section class="section"><div class="section-head"><h3>보유 종목</h3><button class="ghost small" onclick="show('portfolio')">자산</button></div>
-        <div class="panel stack">${top.length?top.map(r=>`<div class="holding-row compact"><b>${escHtml(r.name)}</b><span>${won(r.value)}</span><b class="${r.roi>=0?"up":"down"}">${pct(r.roi)}</b></div>`).join(""):`<div class="empty-state small"><b>보유 종목 없음</b><p>주식 시장에서 첫 종목을 매수해 보세요.</p></div>`}</div>
+        <div class="panel stack">${top.length?top.map(r=>`<div class="holding-row compact"><b>${escHtml(r.name)}</b><span data-live="stock:${r.id}:value">${won(r.value)}</span><b class="${r.roi>=0?"up":"down"}" data-live="stock:${r.id}:roi">${pct(r.roi)}</b></div>`).join(""):`<div class="empty-state small"><b>보유 종목 없음</b><p>주식 시장에서 첫 종목을 매수해 보세요.</p></div>`}</div>
       </section>
     </div>
     <section class="section"><div class="section-head"><h3>생활비 벌기</h3><button class="ghost small" onclick="openLabor()">노동 열기</button></div>
@@ -4980,24 +5118,24 @@ function realestatePage(){
     const h=state.estate[e.id]||{qty:0,avgBuy:0}, price=estatePrice(e.id);
     const r=h.qty*price*e.rent*rebirthBonus("estate",.04), u=h.qty*price*e.upkeep;
     return `<article class="asset-card">
-      <div class="asset-head"><div><b>${e.name}</b><small>${e.desc}</small></div><span class="pill">${h.qty}채</span></div>
-      <div class="asset-grid"><span>현재가 <b>${won(price)}</b></span><span>월세(60초) <b>${won(r)}</b></span><span>유지비(60초) <b>${won(u)}</b></span><span>평단 <b>${h.avgBuy?won(h.avgBuy):"-"}</b></span></div>
+      <div class="asset-head"><div><b>${e.name}</b><small>${e.desc}</small></div><span class="pill" data-live="estate:${e.id}:qty">${h.qty}채</span></div>
+      <div class="asset-grid"><span>현재가 <b data-live="estate:${e.id}:price">${won(price)}</b></span><span>월세(60초) <b data-live="estate:${e.id}:rent">${won(r)}</b></span><span>유지비(60초) <b data-live="estate:${e.id}:upkeep">${won(u)}</b></span><span>평단 <b data-live="estate:${e.id}:avg">${h.avgBuy?won(h.avgBuy):"-"}</b></span></div>
       <div class="button-row"><button class="buy" onclick="buyEstate('${e.id}')">매수</button><button class="ghost" onclick="sellEstate('${e.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('estate','${e.id}')">상세</button></div>
     </article>`;
   }).join("");
   const metals=METALS.map(m=>{
     const h=state.metals[m.id]||{qty:0,avg:0}, price=metalPrice(m.id);
     return `<article class="asset-card">
-      <div class="asset-head"><div><b>${m.name}</b><small>원자재 · ${m.unit} 단위</small></div><span class="pill">${h.qty}${m.unit}</span></div>
-      <div class="asset-grid"><span>현재가 <b>${won(price)}</b></span><span>평가액 <b>${won(h.qty*price)}</b></span><span>평단 <b>${h.avg?won(h.avg):"-"}</b></span></div>
+      <div class="asset-head"><div><b>${m.name}</b><small>원자재 · ${m.unit} 단위</small></div><span class="pill" data-live="metal:${m.id}:qty">${h.qty}${m.unit}</span></div>
+      <div class="asset-grid"><span>현재가 <b data-live="metal:${m.id}:price">${won(price)}</b></span><span>평가액 <b data-live="metal:${m.id}:value">${won(h.qty*price)}</b></span><span>평단 <b data-live="metal:${m.id}:avg">${h.avg?won(h.avg):"-"}</b></span></div>
       <div class="button-row"><input id="metal-qty-${m.id}" type="number" min="1" step="1" value="1" class="qty-input"><button class="buy" onclick="buyMetal('${m.id}')">매수</button><button class="ghost" onclick="sellMetal('${m.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('metal','${m.id}')">상세</button></div>
     </article>`;
   }).join("");
   $("realestate").innerHTML=`${pageHeader("ASSETS","부동산 · 실물자산","임대 수익과 시세 차익을 함께 노리는 실물 자산입니다.",`<span class="pill">보유 평가 ${won(estateValue()+metalValue())}</span>`)}
     <section class="kpi-strip">
-      <div class="metric"><small>부동산 평가</small><b>${wonShort(estateValue())}</b></div>
-      <div class="metric"><small>월세 수입(60초)</small><b>${won(rent)}</b><span class="muted-sm">유지비 ${won(upkeep)}</span></div>
-      <div class="metric"><small>실물자산</small><b>${wonShort(metalValue())}</b></div>
+      <div class="metric"><small>부동산 평가</small><b data-live="estateShort">${wonShort(estateValue())}</b></div>
+      <div class="metric"><small>월세 수입(60초)</small><b data-live="estateRent">${won(rent)}</b><span class="muted-sm">유지비 <span data-live="estateUpkeep">${won(upkeep)}</span></span></div>
+      <div class="metric"><small>실물자산</small><b data-live="metalShort">${wonShort(metalValue())}</b></div>
     </section>
     <section class="section"><h3>부동산</h3><div class="asset-cards">${cards}</div></section>
     <section class="section"><h3>실물자산 (금·은)</h3><div class="asset-cards">${metals}</div></section>
@@ -5040,9 +5178,9 @@ function companyPage(){
     const cL=c.listed;
     const listedCard=cL?`<div class="kpis" style="margin-top:10px">
         <div class="kpi"><small>공모가</small><b>${won(cL.ipoPrice)}</b></div>
-        <div class="kpi"><small>현재 주가</small><b>${won(cL.price)}</b></div>
+        <div class="kpi"><small>현재 주가</small><b data-live="companyListedPrice">${won(cL.price)}</b></div>
         <div class="kpi"><small>내 지분</small><b>${cL.ownPct}%</b></div>
-        <div class="kpi"><small>내 지분 가치</small><b>${won(cL.shares*cL.ownPct/100*cL.price)}</b></div>
+        <div class="kpi"><small>내 지분 가치</small><b data-live="companyListedValue">${won(cL.shares*cL.ownPct/100*cL.price)}</b></div>
       </div>
       <div class="inline-form" style="margin-top:8px">
         <label>지분 매각 (%)<input id="company-sell-pct" type="number" min="5" max="${Math.max(5,cL.ownPct)}" step="5" value="5"></label>
@@ -5052,9 +5190,9 @@ function companyPage(){
       :`<p class="muted-sm" style="margin-top:10px">Lv.2 이상 · 기업 가치 1억원 이상이면 상장할 수 있습니다. 상장하면 30%를 공모해 현금을 조달합니다(수수료 기업 가치의 2%, 최소 500만원).</p>
       <button class="buy" style="margin-top:8px" onclick="listCompany()">기업 상장(IPO)</button>`;
     body=`<div class="panel">
-      <div class="company-head"><div><span class="pill" style="color:${cg.color};border-color:${cg.color}">${cg.name}</span> <span class="pill">Lv.${c.level}</span>${cL?` <span class="pill">상장 · ${cL.shares.toLocaleString("ko-KR")}주</span>`:""}<h2>${escHtml(c.name)}</h2></div><div class="company-value"><small>기업 가치</small><b>${won(c.valuation)}</b></div></div>
-      <div class="mission" style="border:0;padding:0"><div class="mission-top"><small>다음 등급 ${cg.next?cg.next.name:"최고 등급"} · 인수 ${Object.keys(c.acquired||{}).length}개</small><small>${cg.next?`${Math.round(cg.progress*100)}%`:"MAX"}</small></div><div class="bar"><span style="width:${(cg.progress*100).toFixed(0)}%"></span></div></div>
-      <div class="kpis" style="margin-top:12px"><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>30초 배당</small><b>${won(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)*(cL?cL.ownPct/100:1))}</b></div></div>
+      <div class="company-head"><div><span class="pill" style="color:${cg.color};border-color:${cg.color}">${cg.name}</span> <span class="pill">Lv.${c.level}</span>${cL?` <span class="pill">상장 · ${cL.shares.toLocaleString("ko-KR")}주</span>`:""}<h2>${escHtml(c.name)}</h2></div><div class="company-value"><small>기업 가치</small><b data-live="companyValue">${won(c.valuation)}</b></div></div>
+      <div class="mission" style="border:0;padding:0"><div class="mission-top"><small>다음 등급 ${cg.next?cg.next.name:"최고 등급"} · 인수 ${Object.keys(c.acquired||{}).length}개</small><small data-live="companyProgress">${cg.next?`${Math.round(cg.progress*100)}%`:"MAX"}</small></div><div class="bar"><span data-live-style="companyProgress" style="width:${(cg.progress*100).toFixed(0)}%"></span></div></div>
+      <div class="kpis" style="margin-top:12px"><div class="kpi"><small>매출</small><b data-live="companyRevenue">${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b data-live="companyProfit">${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>30초 배당</small><b data-live="companyDividend">${won(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)*(cL?cL.ownPct/100:1))}</b></div></div>
       <div class="inline-form" style="margin-top:10px">
         <label>기업명<input id="company-rename" maxlength="12" value="${escAttr(c.name)}"></label>
         <label>&nbsp;<button class="ghost" onclick="updateCompanyName()">이름 저장</button></label>
@@ -5090,8 +5228,8 @@ function marketHealthPanelHtml(){
   const top=ranked.slice(0,3), bottom=ranked.slice(-3).reverse();
   const pctUp=b.total?Math.round(b.up/b.total*100):0;
   return `<section class="section"><div class="section-head"><h3>시장 건강</h3><span class="pill">${b.total}종목 · 상승 ${pctUp}%</span></div><div class="panel">
-    <div class="bar" style="height:10px"><span style="width:${pctUp}%;background:#d92d20"></span></div>
-    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>상승</small><b class="up">${b.up}</b></div><div class="kpi"><small>하락</small><b class="down">${b.down}</b></div><div class="kpi"><small>보합</small><b>${b.flat}</b></div><div class="kpi"><small>시작가 대비</small><b>${Math.round(r.min*100)}% ~ ${Math.round(r.max*100)}%</b></div></div>
+    <div class="bar" style="height:10px"><span data-live-style="breadthUpWidth" style="width:${pctUp}%;background:#d92d20"></span></div>
+    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>상승</small><b class="up" data-live="breadthUp">${b.up}</b></div><div class="kpi"><small>하락</small><b class="down" data-live="breadthDown">${b.down}</b></div><div class="kpi"><small>보합</small><b data-live="breadthFlat">${b.flat}</b></div><div class="kpi"><small>시작가 대비</small><b data-live="breadthRange">${Math.round(r.min*100)}% ~ ${Math.round(r.max*100)}%</b></div></div>
     <div class="two-col" style="margin-top:10px"><div><b class="up">상위</b>${top.map(x=>`<div class="snap-row"><span>${escHtml(x.s.name)}</span><b class="up">${pct(x.ret)}</b></div>`).join("")}</div><div><b class="down">하위</b>${bottom.map(x=>`<div class="snap-row"><span>${escHtml(x.s.name)}</span><b class="down">${pct(x.ret)}</b></div>`).join("")}</div></div>
     <p class="muted-sm" style="margin-top:8px">장기 범위는 시작가의 ${Math.round(MIN_TOTAL_RATIO*100)}%~${Math.round(MAX_TOTAL_RATIO*100)}%로 제한됩니다. 이 패널은 밸런스 이상치를 빨리 발견하기 위한 관측용입니다.</p>
   </div></section>`;
@@ -5142,6 +5280,8 @@ function settingsPage(){
       ${settingRow("일시정지","진행을 멈추고 설정을 바꿀 수 있습니다",`<button class="ghost" id="pauseBtn" onclick="togglePause();settingsPage()">${state.paused?"▶ 재개":"⏸ 일시정지"}</button>`)}
       ${settingRow("숫자 표시","금액을 원 단위 또는 억·만원 요약으로 표시",`<select onchange="setSetting('numberFormat',this.value)"><option value="full" ${s.numberFormat!=="short"?"selected":""}>원 단위 (1,234,567원)</option><option value="short" ${s.numberFormat==="short"?"selected":""}>요약 (123.5만원)</option></select>`)}
       ${settingRow("테마","라이트/다크 테마",`<select onchange="setSetting('theme',this.value)"><option value="light" ${s.theme!=="dark"?"selected":""}>라이트</option><option value="dark" ${s.theme==="dark"?"selected":""}>다크</option></select>`)}
+      ${settingToggle("largeText","큰 글씨 모드","핵심 수치와 버튼을 크게 표시합니다")}
+      ${settingToggle("colorblind","색약 대응 팔레트","상승·하락을 주황·파랑과 화살표로 구분합니다")}
       ${settingToggle("animations","화면 애니메이션","페이지 전환·카드 효과를 끕니다")}
       ${settingToggle("effects","화면 효과","그림자·토스트 효과를 줄입니다")}
       ${settingToggle("autoSave","자동 저장","10초마다 현재 진행을 저장합니다")}
@@ -5162,6 +5302,8 @@ function settingsPage(){
       ${settingRow("토스트 표시 시간","알림 토스트가 화면에 머무는 시간입니다",`<select onchange="setNotifyNum('toastMs',this.value)">${[2,3,4,5,6,7,8].map(sec=>`<option value="${sec*1000}" ${Math.round(+state.notify.toastMs||4200)===sec*1000?"selected":""}>${sec}초</option>`).join("")}</select>`)}
       ${settingRow("토스트 최대 개수","동시에 보이는 토스트 수입니다. 넘치면 오래된 것부터 사라집니다",`<select onchange="setNotifyNum('toastMax',this.value)">${[1,2,3,4,5].map(n=>`<option value="${n}" ${Math.round(+state.notify.toastMax||3)===n?"selected":""}>${n}개</option>`).join("")}</select>`)}
       ${settingRow("토스트 미리보기","현재 표시 시간·최대 개수로 실제 토스트를 띄워 확인합니다",`<button class="ghost" onclick="previewToasts()">미리보기 (${toastPreviewLabel()})</button>`)}
+      ${settingRow("앱 밖 알림 (PWA)","탭이 백그라운드일 때 공모주·체결·가격 알림을 운영체제 알림으로 보냅니다. 앱을 완전히 닫은 상태의 알림은 푸시 서버가 필요합니다.",pushControlHtml())}
+      <p class="muted-sm" style="margin:-4px 0 10px">상태: <b>${pushStatusText()}</b> · 알림은 이 기기에서 한 번 허용하면 브라우저 설정에서 언제든 끌 수 있습니다.</p>
       ${settingRow("시황 속보 최소 간격","배너가 이 간격보다 자주 뜨지 않습니다. 뉴스 탭 기록은 항상 남습니다.",`<select onchange="setNotifyGap(this.value)">${[0,5,10,15,30,60].map(sec=>`<option value="${sec}" ${Math.round(+state.notify.newsGap||0)===sec?"selected":""}>${sec?sec+"초":"제한 없음"}</option>`).join("")}</select>`)}
       <h4 style="margin:14px 0 8px;font-size:13px">종류별 알림</h4>
       <div class="notify-grid">${notifies.map(([k,l])=>notifyToggle(k,l)).join("")}</div>
@@ -5584,9 +5726,13 @@ function buildSaveData() {
     state: state,
     fx: fx,
     stocks: stocks.map(s => ({id:s.id, own:s.own, price:s.price, avgBuy:s.avgBuy, realizedProfit:s.realizedProfit, lastMove:s.lastMove, revenue:s.revenue, opProfit:s.opProfit,
+      market:s.market, group:s.group,
       volume:s.volume, foreignFlow:s.foreignFlow, instFlow:s.instFlow, taxLots:ensureTaxLots(s).map(l=>({qty:l.qty,price:l.price,at:l.at,account:l.account})),
       prevClose:s.prevClose, dayOpen:s.dayOpen, dayRet:s.dayRet, dayIndex:s.dayIndex})),
-    products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate, bank:p.bank||null, startedAt:Number.isFinite(p.startedAt)?p.startedAt:null, matured:!!p.matured}))
+    products: products.map(p => ({id:p.id, amount:p.amount, rate:p.rate, bank:p.bank||null, startedAt:Number.isFinite(p.startedAt)?p.startedAt:null, matured:!!p.matured})),
+    // 서버 순위 검증용 원화 평가 스냅샷입니다. 주식·현금·상품은 서버가 저장 값으로 직접 계산하고,
+    // 시세가 저장에 없는 자산(부동산·금속·기업·채권·공매도)만 이 값을 합산합니다.
+    valuation: {estate:estateValue(), metals:metalValue(), company:companyValue(), bonds:bondValueKRW(), shorts:shortValueKRW(), fx:fx.usd}
   };
 }
 
@@ -5717,8 +5863,8 @@ function applySaveData(data) {
   if(!Array.isArray(state.listedIds)) state.listedIds = [];
   if(!Number.isFinite(+state.shortRealized)) state.shortRealized = 0;
   if(!state.goals || typeof state.goals !== "object") state.goals = {};
-  ["loan","loanRate","realizedYTD","taxedProfit","taxPaid"].forEach(k => {
-    if(!Number.isFinite(state[k])) state[k] = 0;
+  ["loan","loanRate","realizedYTD","taxedProfit","taxPaid","wealthFeePaid","wealthFeeAt"].forEach(k => {
+    if(!Number.isFinite(state[k]) || state[k] < 0) state[k] = 0;
   });
   if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
   // 신규 기능 필드 기본값 보정
@@ -5728,8 +5874,9 @@ function applySaveData(data) {
   if(!state.achievements || typeof state.achievements!=="object") state.achievements={};
   ["loanTotal","dividendTotal","feesTotal"].forEach(k=>{ if(!Number.isFinite(state[k])) state[k]=0; });
   state.notify=Object.assign({},NOTIFY_DEFAULT,(state.notify&&typeof state.notify==="object")?state.notify:{});
-  Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic"&&k!=="master"&&k!=="newsGap"&&k!=="toastMs"&&k!=="toastMax") state.notify[k]=state.notify[k]!==false; });
+  Object.keys(NOTIFY_DEFAULT).forEach(k=>{ if(k!=="sound"&&k!=="haptic"&&k!=="master"&&k!=="newsGap"&&k!=="toastMs"&&k!=="toastMax"&&k!=="push") state.notify[k]=state.notify[k]!==false; });
   state.notify.master=state.notify.master===true;
+  state.notify.push=state.notify.push===true;
   state.notify.newsGap=Math.max(0,Math.min(600,Math.round(+state.notify.newsGap||0)));
   state.notify.toastMs=Math.max(2000,Math.min(8000,Math.round(+state.notify.toastMs||4200)));
   state.notify.toastMax=Math.max(1,Math.min(5,Math.round(+state.notify.toastMax||3)));
@@ -5761,6 +5908,7 @@ function applySaveData(data) {
   state.settings.theme=state.settings.theme==="dark"?"dark":"light";
   state.settings.numberFormat=state.settings.numberFormat==="short"?"short":"full";
   ["confirmTrades","animations","effects","autoSave"].forEach(k=>{ state.settings[k]=state.settings[k]!==false; });
+  ["colorblind","largeText"].forEach(k=>{ state.settings[k]=state.settings[k]===true; });
   ensureRebirth();
   if(!state.ui || typeof state.ui!=="object") state.ui={assetTab:"overview"};
   if(!["overview","stocks","finance","estate","metals","company","journal","growth","risk"].includes(state.ui.assetTab)) state.ui.assetTab="overview";
@@ -5817,6 +5965,7 @@ function applySaveData(data) {
     state.seasonBaseIndex=marketIndex();
   }
   state.lastGrade=currentGrade();
+  applyTheme(); // 불러온 설정(큰 글씨·색약·테마)을 즉시 반영합니다.
 }
 
 function clearGame(skipConfirm) {
@@ -5843,6 +5992,8 @@ function clearGame(skipConfirm) {
   state.realizedYTD = 0;
   state.taxedProfit = 0;
   state.taxPaid = 0;
+  state.wealthFeePaid = 0;
+  state.wealthFeeAt = 0;
   state.tax = {mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1};
   state.calendar = [];
   state.disclosures = [];
@@ -5943,6 +6094,7 @@ function goPage(id, force){
   const activeNav=document.querySelector(".nav button.on");
   if(activeNav&&activeNav.parentElement){ const n=activeNav.parentElement; n.scrollLeft=Math.max(0,activeNav.offsetLeft-n.clientWidth/2+activeNav.offsetWidth/2); }
   renderPage(id);
+  if(LIVE_PAGES.includes(id)) livePageKeys[id]=livePageKey(id);
   refreshLaborUI();
   renderMobileTradeBar();
 }
@@ -6170,27 +6322,27 @@ function dashPanelHtml(){
   const changePct=firstV>0?(total-firstV)/firstV:0;
   const hasTrend=assetHistory.points.length>=2;
   const alloc=allocation();
-  const allocBar=alloc.parts.map(p=>p.pct>0.4?`<span style="width:${p.pct.toFixed(2)}%;background:${p.color}" title="${p.label} ${p.pct.toFixed(1)}%"></span>`:"").join("");
-  const allocLegend=alloc.parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} ${p.pct.toFixed(1)}%</span>`).join("");
+  const allocBar=alloc.parts.map(p=>p.pct>0.4?`<span data-live-style="alloc:${p.label}:width" style="width:${p.pct.toFixed(2)}%;background:${p.color}" title="${p.label} ${p.pct.toFixed(1)}%"></span>`:"").join("");
+  const allocLegend=alloc.parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} <b data-live="alloc:${p.label}:value">${p.pct.toFixed(1)}%</b></span>`).join("");
   const expDiv=expectedDividend();
   return `<section class="panel dash">
     <div class="dash-top">
-      <div><small>순자산</small><b class="dash-total" title="${won(total)}">${wonShort(total)}</b></div>
+      <div><small>순자산</small><b class="dash-total" data-live="netShort" title="${won(total)}">${wonShort(total)}</b></div>
       <div class="dash-meta">
-        ${hasTrend?`<span class="pill">구간 <b class="${changePct>=0?"up":"down"}">${pct(changePct)}</b></span>`:`<span class="pill">기록 수집 중</span>`}
+        ${hasTrend?`<span class="pill">구간 <b class="${changePct>=0?"up":"down"}" data-live="dashChange">${pct(changePct)}</b></span>`:`<span class="pill">기록 수집 중</span>`}
         <span class="pill grade-pill" style="color:${GRADE_COLORS[currentGrade()]}">${currentGrade()} · ${currentTitle()}</span>
-        <span class="pill">고점 ${wonShort(Math.max(peak,state.peakNet||0))}</span>
-        <span class="pill">시즌 ${pct(reportData().ret)}</span>
+        <span class="pill">고점 <b data-live="peakShort">${wonShort(Math.max(peak,state.peakNet||0))}</b></span>
+        <span class="pill">시즌 <b data-live="reportRet">${pct(reportData().ret)}</b></span>
       </div>
     </div>
-    <div class="trend">${assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 그래프가 표시됩니다.</small></div>`}</div>
+    <div class="trend" data-live-trend-graph>${assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 그래프가 표시됩니다.</small></div>`}</div>
     <div class="alloc-bar" role="img" aria-label="자산 배분">${allocBar||'<span style="width:100%;background:#e7ebef"></span>'}</div>
     <div class="alloc-legend">${allocLegend}</div>
     <div class="section-head" style="margin-top:10px"><h3>세금 계좌별 주식</h3><span class="pill">평가액 기준</span></div>
     ${taxAccountAllocationHtml()}
     <div class="dash-foot">
       <span>다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b></span>
-      <span>총부채 <b>${debt>0?won(debt):"없음"}</b></span>
+      <span>총부채 <b data-live="debt">${debt>0?won(debt):"없음"}</b></span>
     </div>
   </section>`;
 }
@@ -6222,8 +6374,8 @@ function goalsPanelHtml(){
     const p=Math.min(1,Math.max(0,m.target>0?total/m.target:0));
     return `<div class="goal">
       <div><b>${done?"✅":"▫️"} ${m.label}</b> <small>보상 ${won(m.reward)}</small></div>
-      <div class="bar"><span style="width:${(p*100).toFixed(1)}%"></span></div>
-      <small>${won(Math.min(total,m.target))} / ${won(m.target)}${done?" · 달성 완료":""}</small>
+      <div class="bar"><span data-live-style="goal:${m.id}:width" style="width:${(p*100).toFixed(1)}%"></span></div>
+      <small data-live="goal:${m.id}">${won(Math.min(total,m.target))} / ${won(m.target)}${done?" · 달성 완료":""}</small>
     </div>`;
   }).join("");
 }
@@ -6254,9 +6406,9 @@ function stockHoldingsHtml(){
     const cost=s.avgBuy*s.own, now=s.price*s.own, roi=cost>0?(now-cost)/cost:0;
     return `<div class="holding-row">
       <div class="holding-main"><b>${s.name}</b><small>${s.own}주 · 평단 ${avg}</small></div>
-      <div><small>현재가</small><b>${cur}</b></div>
-      <div><small>평가금액</small><b>${foreign?usdStr(now):won(now)}</b></div>
-      <div><small>수익률</small><b class="${roi>=0?"up":"down"}">${pct(roi)}</b></div>
+      <div><small>현재가</small><b data-live="stock:${s.id}:price">${cur}</b></div>
+      <div><small>평가금액</small><b data-live="stock:${s.id}:valueNative">${foreign?usdStr(now):won(now)}</b></div>
+      <div><small>수익률</small><b class="${roi>=0?"up":"down"}" data-live="stock:${s.id}:roi">${pct(roi)}</b></div>
     </div>`;
   }).join("");
 }
@@ -6266,8 +6418,8 @@ function productHoldingsHtml(){
   if(!hp.length) return `<div class="empty-state"><b>가입한 금융상품이 없습니다</b><p>예금·적금으로 현금을 안정적으로 굴려 보세요.</p><button class="buy" onclick="show('banking')">금융상품 보기</button></div>`;
   return hp.map(p=>`<div class="holding-row">
     <div class="holding-main"><b>${p.name}</b><small>${p.type} · ${p.bank?((BANKS.find(b=>b.id===p.bank)||{}).name||""):"은행 미지정"}</small></div>
-    <div><small>확정 이율</small><b>연 ${(p.rate*100).toFixed(1)}%</b></div>
-    <div><small>평가금액</small><b>${won(p.amount)}</b></div>
+    <div><small>확정 이율</small><b data-live="product:${p.id}:rate">연 ${(p.rate*100).toFixed(1)}%</b></div>
+    <div><small>평가금액</small><b data-live="product:${p.id}:amount">${won(p.amount)}</b></div>
     <div><small>만기</small><b>${productMaturityText(p)}</b></div>
   </div>`).join("");
 }
@@ -6278,10 +6430,10 @@ function estateSummaryHtml(){
   return held.map(e=>{
     const h=state.estate[e.id], price=estatePrice(e.id), rent=h.qty*price*e.rent*rebirthBonus("estate",.04);
     return `<div class="holding-row">
-      <div class="holding-main"><b>${e.name}</b><small>${h.qty}채 · 평단 ${won(h.avgBuy)}</small></div>
-      <div><small>현재가</small><b>${won(price)}</b></div>
-      <div><small>평가금액</small><b>${won(h.qty*price)}</b></div>
-      <div><small>월세(60초)</small><b>${won(rent)}</b></div>
+      <div class="holding-main"><b>${e.name}</b><small><span data-live="estate:${e.id}:qty">${h.qty}채</span> · 평단 <span data-live="estate:${e.id}:avg">${won(h.avgBuy)}</span></small></div>
+      <div><small>현재가</small><b data-live="estate:${e.id}:price">${won(price)}</b></div>
+      <div><small>평가금액</small><b data-live="estate:${e.id}:value">${won(h.qty*price)}</b></div>
+      <div><small>월세(60초)</small><b data-live="estate:${e.id}:rent">${won(rent)}</b></div>
     </div>`;
   }).join("");
 }
@@ -6292,10 +6444,10 @@ function metalSummaryHtml(){
   return held.map(m=>{
     const h=state.metals[m.id], price=metalPrice(m.id);
     return `<div class="holding-row">
-      <div class="holding-main"><b>${m.name}</b><small>${h.qty}${m.unit} · 평단 ${won(h.avg)}</small></div>
-      <div><small>현재가</small><b>${won(price)}</b></div>
-      <div><small>평가금액</small><b>${won(h.qty*price)}</b></div>
-      <div><small>평가손익</small><b class="${h.qty*price-h.qty*h.avg>=0?"up":"down"}">${won(h.qty*price-h.qty*h.avg)}</b></div>
+      <div class="holding-main"><b>${m.name}</b><small><span data-live="metal:${m.id}:qty">${h.qty}${m.unit}</span> · 평단 <span data-live="metal:${m.id}:avg">${won(h.avg)}</span></small></div>
+      <div><small>현재가</small><b data-live="metal:${m.id}:price">${won(price)}</b></div>
+      <div><small>평가금액</small><b data-live="metal:${m.id}:value">${won(h.qty*price)}</b></div>
+      <div><small>평가손익</small><b class="${h.qty*price-h.qty*h.avg>=0?"up":"down"}" data-live="metal:${m.id}:pnl">${won(h.qty*price-h.qty*h.avg)}</b></div>
     </div>`;
   }).join("");
 }
@@ -6362,7 +6514,7 @@ function dexPanelHtml(){
 
 function economyPanelHtml(){
   const eco=state.economy||ECON_DEFAULT;
-  return `<div class="kpis"><div class="kpi"><small>경기 국면</small><b>${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b>${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>물가 상승률</small><b>${((eco.inflation??ECON_DEFAULT.inflation)*100).toFixed(1)}%</b></div><div class="kpi"><small>실업률</small><b>${((eco.unemployment??ECON_DEFAULT.unemployment)*100).toFixed(1)}%</b></div><div class="kpi"><small>GDP 성장률</small><b>${((eco.gdpGrowth??ECON_DEFAULT.gdpGrowth)*100).toFixed(1)}%</b></div><div class="kpi"><small>다음 전환 (실제)</small><b>${realSeconds(eco.cycleLeft||0)}초</b></div><div class="kpi"><small>시장 지수</small><b>${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b>${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b>${won(state.peakNet||netAssetsKRW())}</b></div></div>
+  return `<div class="kpis"><div class="kpi"><small>경기 국면</small><b data-live="phase">${eco.phase}</b></div><div class="kpi"><small>기준금리</small><b data-live="baseRate">${(eco.baseRate*100).toFixed(2)}%</b></div><div class="kpi"><small>물가 상승률</small><b data-live="inflation">${((eco.inflation??ECON_DEFAULT.inflation)*100).toFixed(1)}%</b></div><div class="kpi"><small>실업률</small><b data-live="unemployment">${((eco.unemployment??ECON_DEFAULT.unemployment)*100).toFixed(1)}%</b></div><div class="kpi"><small>GDP 성장률</small><b data-live="gdp">${((eco.gdpGrowth??ECON_DEFAULT.gdpGrowth)*100).toFixed(1)}%</b></div><div class="kpi"><small>다음 전환 (실제)</small><b data-live="cycle">${realSeconds(eco.cycleLeft||0)}초</b></div><div class="kpi"><small>시장 지수</small><b data-live="index">${Math.round(marketIndex())}</b></div><div class="kpi"><small>환율</small><b data-live="fx">${Math.round(fx.usd).toLocaleString("ko-KR")}원</b></div><div class="kpi"><small>최고 순자산</small><b data-live="peak">${won(state.peakNet||netAssetsKRW())}</b></div></div>
     <p class="muted-sm" style="margin-top:8px">금리·물가·실업률·성장률은 경기 국면에 따라 변합니다. 호황에는 주가 상승 압력과 물가 상승이, 불황에는 금융 위기와 주가 하락 압력이 커집니다.</p>`;
 }
 
@@ -6541,7 +6693,8 @@ function guidePage(){
     ${section("6. 금융상품", ul([
       "예금·적금·파킹·채권·ETF·연금·프라이빗 뱅킹은 등급이 오르면 열립니다. 15초마다 이자가 붙습니다.",
       "한 상품 원금이 3,000만원을 넘으면 초과분 이율이 절반으로 줄고, 이자 계산 원금은 최대 3억원입니다.",
-      "금리연동 채권: 기준금리가 내려가면 가격이 올라 차익이 생기고, 올라가면 가격이 내려갑니다. 액면가 기준 연 3.6% 이자가 현금으로 들어옵니다."]))}
+      "금리연동 채권: 기준금리가 내려가면 가격이 올라 차익이 생기고, 올라가면 가격이 내려갑니다. 액면가 기준 연 3.6% 이자가 현금으로 들어옵니다.",
+      "후반에는 순자산 10억원 초과분에 60초마다 자산 관리 수수료가 붙습니다(100억원 초과분은 0.02%). 세금 탭에서 다음 차감액과 누적액을 볼 수 있습니다."]))}
     ${section("7. 부동산·실물자산", ul([
       "부동산은 시세 차익과 임대 수익(60초마다)을 주고, 유지비가 나갑니다.",
       "금·은은 인플레이션 방어 수단으로, 부동산보다 변동성이 큽니다."]))}
@@ -6628,6 +6781,7 @@ function taxPanelHtml(){
     <p class="muted-sm">세금 연도 ${t.year||1}년차 · 다음 결산까지 ${clockText(taxYearRemaining())} · 연간 손익·기본공제·ISA 한도·납입한도가 리셋되고 이월 손실은 유지됩니다. <b>일반</b> ${won(state.realizedYTD||0)} · <b>ISA</b> ${won(t.isaGains||0)} · <b>연금</b> ${won(t.pensionDeferred||0)}</p>
     ${taxAccountSummaryHtml()}
     <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>이번 연도 납부</small><b>${won(yearPaid)}</b></div><div class="kpi"><small>누적 납부</small><b>${won(state.taxPaid||0)}</b></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b><span class="delta">차감 가능 ${won(t.carryLossBase||0)}</span></div></div>
+    <div class="notice" style="margin-top:10px"><b>고액 자산 관리 수수료</b> · 순자산 10억원 초과분에 60초마다 <b>${wealthFeeRateText(netAssetsKRW())}</b>가 현금에서 차감됩니다(100억원 초과분은 0.02%). 초반 진행에는 영향이 없고, 후반 복리만 완만하게 눌러 줍니다. 다음 60초 예상 <b>${won(wealthFeeDue())}</b> · 누적 <b>${won(state.wealthFeePaid||0)}</b></div>
     ${t.mode==="pension"?`<div class="notice" style="margin-top:10px">인출 시 5.5% 세금이 적용됩니다. <button class="ghost small" onclick="withdrawPensionTax()">연금 세금 납부 (${won((t.pensionDeferred||0)*.055)})</button></div>`:""}
     <div class="section-head tax-sec-head" style="margin-top:14px"><h3>매도 전 세후 미리보기</h3><span class="pill">현재 계좌 · FIFO</span></div>
     ${taxPreviewHtml()}
@@ -6661,7 +6815,7 @@ function portfolio(){
   const tab=(state.ui&&state.ui.assetTab)||"overview";
   const total=netAssetsKRW(), debt=state.loan||0;
   const panels={
-    overview:`<section class="kpi-strip"><div class="metric"><small>총자산</small><b>${wonShort(grossAssetsKRW())}</b></div><div class="metric"><small>순자산</small><b>${wonShort(netAssetsKRW())}</b></div><div class="metric"><small>현금</small><b>${wonShort(state.cash)}</b></div><div class="metric"><small>부채</small><b>${debt>0?wonShort(debt):"없음"}</b></div></section>`+dashPanelHtml()+`<div class="section" id="labor-section"><h3>노동 · 생계</h3><div class="panel">${laborPanelHtml()}</div></div><div class="section"><h3>목표</h3><div class="panel">${goalsPanelHtml()}</div></div>`,
+    overview:`<section class="kpi-strip"><div class="metric"><small>총자산</small><b data-live="grossShort">${wonShort(grossAssetsKRW())}</b></div><div class="metric"><small>순자산</small><b data-live="netShort">${wonShort(netAssetsKRW())}</b></div><div class="metric"><small>현금</small><b data-live="cashShort">${wonShort(state.cash)}</b></div><div class="metric"><small>부채</small><b data-live="debtShort">${debt>0?wonShort(debt):"없음"}</b></div></section>`+dashPanelHtml()+`<div class="section" id="labor-section"><h3>노동 · 생계</h3><div class="panel">${laborPanelHtml()}</div></div><div class="section"><h3>목표</h3><div class="panel">${goalsPanelHtml()}</div></div>`,
     stocks:`<div class="section"><h3>주식 자산</h3><div class="panel stack">${stockHoldingsHtml()}</div></div>`,
     finance:`<div class="section"><h3>금융상품</h3><div class="panel stack">${productHoldingsHtml()}</div><div class="button-row" style="margin-top:8px"><button class="ghost" onclick="show('banking')">금융상품 관리</button><button class="ghost" onclick="show('loan')">대출</button><button class="ghost" onclick="show('tax')">세금</button></div></div>`,
     estate:`<div class="section"><h3>부동산</h3><div class="panel stack">${estateSummaryHtml()}</div></div>`,
@@ -7039,6 +7193,8 @@ function tickSeconds() {
 
   // 배당 지급·실적 캘린더·기업 공시·목표 판정
   if(state.marketSeconds % DIVIDEND_EVERY === 0) payDividends();
+  // 후반 밸런스: 60초마다 고액 자산 관리 수수료를 현금에서 차감합니다(현금 부족 시 0원까지만).
+  if(state.marketSeconds % 60 === 0) chargeWealthFee();
   tickCalendar();
   tickDisclosures();
 
@@ -7318,6 +7474,216 @@ function interest(){
   update();
 }
 
+// ── 온라인 부분 갱신 ───────────────────────────────
+// 예전에는 1초마다 update()가 현재 페이지의 innerHTML을 통째로 다시 썼습니다. 이제 화면 구조가
+// 바뀌었을 때(보유 종목·탭·주문·미션 등)만 다시 그리고, 가격·평가액처럼 자주 바뀌는 숫자만
+// data-live 표식을 찾아 제자리에서 갱신합니다. 입력 중인 칸과 스크롤이 그대로 유지됩니다.
+const LIVE_PAGES=["portfolio","dashboard","realestate","company","economy"];
+const livePageKeys={};
+function livePageKey(page){
+  const ownSig=stocks.filter(s=>s.own>0||s.realizedProfit!==0).map(s=>s.id+":"+s.own).join(",");
+  const prodSig=products.filter(p=>p.amount>0).map(p=>p.id).join(",");
+  const estateSig=ESTATES.filter(e=>(state.estate[e.id]||{}).qty>0).map(e=>e.id+":"+state.estate[e.id].qty).join(",");
+  const metalSig=METALS.filter(m=>(state.metals[m.id]||{}).qty>0).map(m=>m.id+":"+state.metals[m.id].qty).join(",");
+  // 15게임초마다 한 번은 전체를 다시 그려, data-live로 잡지 않은 보조 수치도 놓치지 않습니다.
+  const slow=Math.floor((+state.marketSeconds||0)/15);
+  if(page==="dashboard"){
+    const c=ensureChallenge();
+    return [dashMoreOpen(), ownSig, stockReturnRows().slice(0,4).map(r=>r.id).join(","), (state.news||[]).length,
+      JSON.stringify((state.onboard&&state.onboard.seen)||{}), c.active?`${c.active.id}:${c.active.endsAt}`:"",
+      JSON.stringify(state.daily&&state.daily.counts||{}), slow].join("|");
+  }
+  if(page==="portfolio") return [ownSig, prodSig, estateSig, metalSig,
+    state.company?`${state.company.level}:${Object.keys(state.company.acquired||{}).length}:${state.company.listed?state.company.listed.ownPct:"-"}:${state.company.name}`:"none",
+    Object.keys(state.goals||{}).length, Object.keys(state.achievements||{}).length, (state.journal||[]).length,
+    JSON.stringify(state.daily&&state.daily.counts||{}), JSON.stringify(state.weekly&&state.weekly.counts||{}),
+    (state.news||[]).length, JSON.stringify(state.ui&&state.ui.dashMore), slow].join("|");
+  if(page==="realestate") return estateSig+"|"+metalSig+"|"+slow;
+  if(page==="company") return (state.company?`${state.company.level}|${Object.keys(state.company.acquired||{}).length}|${state.company.listed?state.company.listed.ownPct:"-"}|${state.company.name}|${state.company.payout}`:"none")+"|"+slow;
+  return `${marketDayIndex(state.marketSeconds)}|${(state.news||[]).length}|${slow}`;
+}
+function liveNumber(key){
+  const k=String(key||"");
+  if(k==="reportRet") return reportData().ret;
+  if(k==="dashChange"){
+    const pts=assetHistory.points;
+    return pts.length>1 && pts[0].v>0 ? (netAssetsKRW()-pts[0].v)/pts[0].v : 0;
+  }
+  if(k.startsWith("stock:")){
+    const [,id,prop]=k.split(":"); const s=stock(id); if(!s) return null;
+    if(prop==="roi") return s.avgBuy>0?(s.price-s.avgBuy)/s.avgBuy:0;
+    if(prop==="pnl") return stockPriceKRW(s)*(s.own||0)-(+s.avgBuy||0)*(s.own||0)*(isForeignStock(s)?fx.usd:1);
+  }
+  if(k.startsWith("estate:")){
+    const [,id,prop]=k.split(":"); const e=ESTATES.find(x=>x.id===id); const h=state.estate[id]||{qty:0,avgBuy:0}; if(!e) return null;
+    const price=estatePrice(id);
+    if(prop==="rent") return (h.qty||0)*price*e.rent*rebirthBonus("estate",.04);
+    if(prop==="upkeep") return (h.qty||0)*price*e.upkeep;
+    if(prop==="value") return (h.qty||0)*price;
+  }
+  if(k.startsWith("metal:")){
+    const [,id,prop]=k.split(":"); const h=state.metals[id]||{qty:0,avg:0}; if(!METALS.some(m=>m.id===id)) return null;
+    if(prop==="value") return (h.qty||0)*metalPrice(id);
+    if(prop==="pnl") return (h.qty||0)*(metalPrice(id)-(+h.avg||0));
+  }
+  if(k.startsWith("product:")){
+    const [,id]=k.split(":"); const p=product(id); return p?p.amount:null;
+  }
+  return null;
+}
+function liveValue(key){
+  const k=String(key||"");
+  if(k==="net") return won(netAssetsKRW());
+  if(k==="netShort") return wonShort(netAssetsKRW());
+  if(k==="gross") return won(grossAssetsKRW());
+  if(k==="grossShort") return wonShort(grossAssetsKRW());
+  if(k==="cash") return won(state.cash||0);
+  if(k==="cashShort") return wonShort(state.cash||0);
+  if(k==="stock") return won(stockValueKRW());
+  if(k==="stockShort") return wonShort(stockValueKRW());
+  if(k==="product") return won(productValueKRW());
+  if(k==="productShort") return wonShort(productValueKRW());
+  if(k==="debt") return state.loan>0?won(state.loan):"없음";
+  if(k==="debtShort") return state.loan>0?wonShort(state.loan):"없음";
+  if(k==="usd") return usdStr(state.usd||0);
+  if(k==="fx") return Math.round(fx.usd).toLocaleString("ko-KR")+"원";
+  if(k==="index") return String(Math.round(marketIndex()));
+  if(k==="marketStatus") return `${state.marketOpen?"개장":"휴장"} · ${speedNow()}x`;
+  if(k==="phase") return (state.economy||ECON_DEFAULT).phase;
+  if(k==="baseRate") return ((state.economy||ECON_DEFAULT).baseRate*100).toFixed(2)+"%";
+  if(k==="inflation") return (((state.economy||ECON_DEFAULT).inflation??0)*100).toFixed(1)+"%";
+  if(k==="unemployment") return (((state.economy||ECON_DEFAULT).unemployment??0)*100).toFixed(1)+"%";
+  if(k==="gdp") return (((state.economy||ECON_DEFAULT).gdpGrowth??0)*100).toFixed(1)+"%";
+  if(k==="cycle") return realSeconds((state.economy||ECON_DEFAULT).cycleLeft||0)+"초";
+  if(k==="peak") return won(state.peakNet||netAssetsKRW());
+  if(k==="estateShort") return wonShort(estateValue());
+  if(k==="metalShort") return wonShort(metalValue());
+  if(k==="companyShort") return wonShort(companyValue());
+  if(k==="estateValue") return won(estateValue());
+  if(k==="metalValue") return won(metalValue());
+  if(k==="companyValue") return won(companyValue());
+  if(k==="reportRet") return pct(reportData().ret);
+  if(k==="indexRet") return pct(reportData().indexRet);
+  if(k==="dashChange") return pct(liveNumber(k));
+  if(k==="peakShort") return wonShort(state.peakNet||netAssetsKRW());
+  if(k==="asset:stock") return won(stockValueKRW());
+  if(k==="asset:product") return won(productValueKRW());
+  if(k==="asset:estate") return won(estateValue());
+  if(k==="asset:metal") return won(metalValue());
+  if(k==="asset:company") return won(companyValue());
+  if(k.startsWith("goal:")){
+    const [,id,prop]=k.split(":"); const m=MILESTONES.find(x=>x.id===id); if(!m) return null;
+    const total=netAssetsKRW(), done=!!state.goals[m.id], p=Math.min(1,Math.max(0,m.target>0?total/m.target:0));
+    if(prop==="width") return `${(p*100).toFixed(1)}%`;
+    return `${won(Math.min(total,m.target))} / ${won(m.target)}${done?" · 달성 완료":""}`;
+  }
+  if(k==="breadthUp"||k==="breadthDown"||k==="breadthFlat"){
+    const b=marketBreadth(); return String(k==="breadthUp"?b.up:k==="breadthDown"?b.down:b.flat);
+  }
+  if(k==="breadthUpWidth"){ const b=marketBreadth(); return `${b.total?Math.round(b.up/b.total*100):0}%`; }
+  if(k==="breadthRange"){
+    const list=stocks.filter(s=>!isIndexFund(s)); if(!list.length) return "-";
+    const rets=list.map(s=>s.price/Math.max(1,s.start));
+    return `${Math.round(Math.min(...rets)*100)}% ~ ${Math.round(Math.max(...rets)*100)}%`;
+  }
+  if(k==="companyListedPrice") return won((state.company&&state.company.listed&&state.company.listed.price)||0);
+  if(k==="companyListedValue"){
+    const c=state.company; if(!c||!c.listed) return "-";
+    return won(c.listed.shares*c.listed.ownPct/100*c.listed.price);
+  }
+  if(k==="estateRent"){
+    return won(ESTATES.reduce((a,e)=>a+(((state.estate[e.id]||{}).qty||0)*estatePrice(e.id)*e.rent*rebirthBonus("estate",.04)),0));
+  }
+  if(k==="estateUpkeep"){
+    return won(ESTATES.reduce((a,e)=>a+(((state.estate[e.id]||{}).qty||0)*estatePrice(e.id)*e.upkeep),0));
+  }
+  if(k.startsWith("alloc:")){
+    const [,label,prop]=k.split(":"); const p=allocation().parts.find(x=>x.label===label); if(!p) return null;
+    return prop==="width"?p.pct.toFixed(2)+"%":p.pct.toFixed(1)+"%";
+  }
+  if(k.startsWith("stock:")){
+    const [,id,prop]=k.split(":"); const s=stock(id); if(!s) return null;
+    if(prop==="price") return isForeignStock(s)?usdStr(s.price):won(s.price);
+    if(prop==="value") return won(stockPriceKRW(s)*(s.own||0));
+    if(prop==="valueNative") return isForeignStock(s)?usdStr(s.price*(s.own||0)):won(stockPriceKRW(s)*(s.own||0));
+    if(prop==="own") return qtyText(s.own);
+    if(prop==="roi") return pct(liveNumber(k));
+    if(prop==="pnl"){ const n=liveNumber(k); return (n>=0?"+":"")+won(n); }
+  }
+  if(k.startsWith("estate:")){
+    const [,id,prop]=k.split(":"); const e=ESTATES.find(x=>x.id===id); const h=state.estate[id]||{qty:0,avgBuy:0}; if(!e) return null;
+    if(prop==="price") return won(estatePrice(id));
+    if(prop==="qty") return `${h.qty||0}채`;
+    if(prop==="avg") return h.avgBuy?won(h.avgBuy):"-";
+    if(prop==="rent") return won(liveNumber(k));
+    if(prop==="upkeep") return won(liveNumber(k));
+    if(prop==="value") return won(liveNumber(k));
+  }
+  if(k.startsWith("metal:")){
+    const [,id,prop]=k.split(":"); const m=METALS.find(x=>x.id===id); const h=state.metals[id]||{qty:0,avg:0}; if(!m) return null;
+    if(prop==="price") return won(metalPrice(id))+"/"+m.unit;
+    if(prop==="qty") return `${h.qty||0}${m.unit}`;
+    if(prop==="avg") return h.avg?won(h.avg):"-";
+    if(prop==="value") return won(liveNumber(k));
+    if(prop==="pnl") return won(liveNumber(k));
+  }
+  if(k.startsWith("product:")){
+    const [,id,prop]=k.split(":"); const p=product(id); if(!p) return null;
+    if(prop==="amount") return won(p.amount);
+    if(prop==="rate") return p.rate>0?`연 ${(p.rate*100).toFixed(1)}%`:"미가입";
+  }
+  if(k==="companyRevenue") return won((state.company||{}).revenue||0);
+  if(k==="companyProfit") return won((state.company||{}).profit||0);
+  if(k==="companyDividend"){
+    const c=state.company; if(!c) return "-";
+    return won(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)*(c.listed?c.listed.ownPct/100:1));
+  }
+  if(k==="companyProgress"){
+    const c=state.company; if(!c) return null;
+    const cg=companyGradeInfo(c);
+    return cg.next?`${Math.round(cg.progress*100)}%`:"MAX";
+  }
+  if(k==="challengeNet"||k==="challengePct"||k==="challengeWidth"){
+    const a=ensureChallenge().active; if(!a) return null;
+    const p=challengeProgress(a), goal=a.startNet*(1+a.target);
+    if(k==="challengeNet") return `${won(netAssetsKRW())} / ${won(goal)}`;
+    if(k==="challengePct") return pct(p);
+    return `${Math.max(0,Math.min(100,p/Math.max(.0001,a.target)*100)).toFixed(1)}%`;
+  }
+  return null;
+}
+function patchLivePage(){
+  if(typeof document==="undefined" || typeof document.querySelectorAll!=="function") return;
+  document.querySelectorAll("[data-live]").forEach(el=>{
+    const key=el.getAttribute("data-live");
+    const v=liveValue(key);
+    if(v==null) return;
+    if(el.textContent!==v) el.textContent=v;
+    const sign=liveNumber(key);
+    if((key.endsWith(":roi")||key.endsWith(":pnl")||key==="reportRet"||key==="indexRet"||key==="dashChange") && sign!=null && el.classList){
+      el.classList.remove("up","down"); el.classList.add(sign>=0?"up":"down");
+    }
+  });
+  document.querySelectorAll("[data-live-style]").forEach(el=>{
+    const key=el.getAttribute("data-live-style");
+    const v=liveValue(key);
+    if(v!=null) el.style.width=v;
+  });
+  // 자산 추이 그래프는 15초 기록 주기에 맞춰서만 다시 그립니다.
+  if(state.marketSeconds%15===0){
+    document.querySelectorAll("[data-live-trend-graph]").forEach(el=>{
+      el.innerHTML=assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 그래프가 표시됩니다.</small></div>`;
+    });
+  }
+}
+function renderLivePage(page){
+  if(page==="portfolio") portfolio();
+  else if(page==="dashboard") dashboardPage();
+  else if(page==="realestate") realestatePage();
+  else if(page==="company") companyPage();
+  else if(page==="economy") economyPage();
+}
+
 function update(){
   // 모든 화면이 같은 총자산 계산을 쓰도록 한 곳으로 통일했습니다.
   let svWon=stockValueKRW();
@@ -7402,18 +7768,22 @@ function update(){
   const rb=ensureRebirth();
   if(!rb.notified && canRebirth()){ rb.notified=true; notify("rebirth","환생 가능",`순자산 ${wonShort(totalAssetsKRW())} · 환생 화면에서 영구 업그레이드를 확인하세요.`); saveGame(); }
 
-  // 입력·클릭 중에는 다시 그리지 않습니다(5초마다 재렌더로 입력이 끊기는 문제 방지).
+  // 입력·클릭 중에는 건드리지 않고, 구조가 바뀔 때만 전체를 다시 그립니다.
   const livePage=activePage();
-  if(["portfolio","dashboard","realestate","company","economy"].includes(livePage)){
+  if(LIVE_PAGES.includes(livePage)){
     const pf=document.getElementById(livePage);
     const hovered=pf && typeof pf.matches==="function" && pf.matches(":hover");
     const focused=pf && document.activeElement && typeof pf.contains==="function" && pf.contains(document.activeElement);
-    if(!hovered && !focused){
-      if(livePage==="portfolio") portfolio();
-      else if(livePage==="dashboard") dashboardPage();
-      else if(livePage==="realestate") realestatePage();
-      else if(livePage==="company") companyPage();
-      else if(livePage==="economy") economyPage();
+    if(!focused){
+      const key=livePageKey(livePage);
+      if(livePageKeys[livePage]!==key && !hovered){
+        livePageKeys[livePage]=key;
+        renderLivePage(livePage);
+      }else{
+        // 마우스가 페이지 위에 있어도 숫자는 계속 갱신합니다. 구조가 바뀐 경우에는
+        // 마우스를 떼는 다음 틱에 전체 렌더로 따라잡습니다(입력 중 포커스는 건드리지 않음).
+        patchLivePage();
+      }
     }
   }
 }

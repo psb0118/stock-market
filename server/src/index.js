@@ -115,15 +115,31 @@ async function postScore(req, env) {
   if (!Number.isFinite(score) || score < 0 || score > MAX_SCORE) {
     throw httpError(400, "bad_score", "점수 범위가 올바르지 않습니다.");
   }
+  // 점수는 반드시 서버에 저장된 최신 세이브와 대조합니다. 클라이언트가 점수만 부풀려
+  // 올리는 것을 막고, 검증 표시를 순위표에 남깁니다(세이브 자체를 위조하는 것까지는 막지 못함).
+  const saveRow = await env.DB.prepare("SELECT data FROM saves WHERE player_id = ?").bind(player.id).first();
+  if (!saveRow) throw httpError(400, "save_required", "먼저 클라우드 저장을 올린 뒤 순위에 등록해 주세요.");
+  let saveData;
+  try {
+    saveData = JSON.parse(saveRow.data);
+  } catch (e) {
+    throw httpError(500, "corrupt_save", "서버 저장이 손상되었습니다.");
+  }
+  const checkedWorth = netWorthFromSave(saveData);
+  const tolerance = Math.max(50000, Math.round(checkedWorth * 0.02));
+  if (score > checkedWorth + tolerance) {
+    throw httpError(400, "score_mismatch", "저장된 자산과 점수가 맞지 않습니다. 다시 저장한 뒤 시도해 주세요.");
+  }
   const now = Date.now();
   await env.DB.prepare(
-    `INSERT INTO scores (season, player_id, score, updated_at) VALUES (?, ?, ?, ?)
+    `INSERT INTO scores (season, player_id, score, verified, checked_worth, updated_at) VALUES (?, ?, ?, 1, ?, ?)
      ON CONFLICT(season, player_id) DO UPDATE SET
-       score = MAX(scores.score, excluded.score), updated_at = excluded.updated_at`
-  ).bind(season, player.id, score, now).run();
-  const mine = await env.DB.prepare("SELECT score FROM scores WHERE season = ? AND player_id = ?").bind(season, player.id).first();
+       score = MAX(scores.score, excluded.score), verified = 1,
+       checked_worth = MAX(scores.checked_worth, excluded.checked_worth), updated_at = excluded.updated_at`
+  ).bind(season, player.id, score, checkedWorth, now).run();
+  const mine = await env.DB.prepare("SELECT score, verified FROM scores WHERE season = ? AND player_id = ?").bind(season, player.id).first();
   const above = await env.DB.prepare("SELECT COUNT(*) AS n FROM scores WHERE season = ? AND score > ?").bind(season, mine.score).first();
-  return json({ season, best: mine.score, rank: (above ? above.n : 0) + 1 });
+  return json({ season, best: mine.score, rank: (above ? above.n : 0) + 1, verified: mine.verified === 1, checkedWorth });
 }
 
 async function leaderboard(req, url, env) {
@@ -132,21 +148,22 @@ async function leaderboard(req, url, env) {
   if (!isSeasonKey(season)) throw httpError(400, "bad_season", "시즌 형식이 올바르지 않습니다.");
   const limit = Math.max(1, Math.min(50, Number(url.searchParams.get("limit")) || 10));
   const rows = await env.DB.prepare(
-    `SELECT p.id AS player_id, p.nickname, s.score, s.updated_at FROM scores s JOIN players p ON p.id = s.player_id
+    `SELECT p.id AS player_id, p.nickname, s.score, s.verified, s.updated_at FROM scores s JOIN players p ON p.id = s.player_id
      WHERE s.season = ? ORDER BY s.score DESC, s.updated_at ASC LIMIT ?`
   ).bind(season, limit).all();
   const entries = (rows.results || []).map((r, i) => ({
-    rank: i + 1, playerId: r.player_id, nickname: r.nickname, score: r.score, updatedAt: r.updated_at
+    rank: i + 1, playerId: r.player_id, nickname: r.nickname, score: r.score,
+    verified: r.verified === 1, updatedAt: r.updated_at
   }));
   const totalRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM scores WHERE season = ?").bind(season).first();
 
   let me = null;
   try {
     const player = await requirePlayer(req, env);
-    const mine = await env.DB.prepare("SELECT score FROM scores WHERE season = ? AND player_id = ?").bind(season, player.id).first();
+    const mine = await env.DB.prepare("SELECT score, verified FROM scores WHERE season = ? AND player_id = ?").bind(season, player.id).first();
     if (mine) {
       const above = await env.DB.prepare("SELECT COUNT(*) AS n FROM scores WHERE season = ? AND score > ?").bind(season, mine.score).first();
-      me = { rank: (above ? above.n : 0) + 1, score: mine.score };
+      me = { rank: (above ? above.n : 0) + 1, score: mine.score, verified: mine.verified === 1 };
     }
   } catch (e) {
     // 비로그인/만료 토큰은 순위만 보여 줍니다.
@@ -155,11 +172,40 @@ async function leaderboard(req, url, env) {
 }
 
 // ── 검증/유틸 ────────────────────────────────────
+// 저장 파일에서 순자산을 다시 계산합니다. 클라이언트가 보낸 점수를 그대로 믿지 않기 위한
+// 최소 검증으로, 현금·달러·주식·금융상품은 저장 값으로 직접 계산하고 시세가 저장에 없는
+// 부동산·금속·기업·채권·공매도는 buildSaveData()의 valuation 스냅샷을 사용합니다.
+function positiveNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function netWorthFromSave(data) {
+  const state = (data && data.state) || {};
+  const fx = Math.max(1, positiveNumber((data && data.fx && data.fx.usd) || state.fxRate || 1390));
+  let worth = positiveNumber(state.cash) + positiveNumber(state.usd) * fx;
+  const foreignGroups = new Set(["foreign", "mega", "special"]);
+  for (const s of (data && data.stocks) || []) {
+    const price = Math.min(positiveNumber(s && s.price), MAX_SCORE);
+    const own = positiveNumber(s && s.own);
+    const foreign = (s && s.market && s.market !== "국내") || foreignGroups.has(s && s.group);
+    worth += price * own * (foreign ? fx : 1);
+  }
+  for (const p of (data && data.products) || []) worth += positiveNumber(p && p.amount);
+  const v = (data && data.valuation) || {};
+  // 공매도 평가손익은 마이너스가 될 수 있으므로 그대로 반영해야 실제 순자산과 맞습니다.
+  for (const k of ["estate", "metals", "company", "bonds"]) worth += positiveNumber(v[k]);
+  const shorts = Number(v.shorts);
+  if (Number.isFinite(shorts)) worth += Math.max(-MAX_SCORE, Math.min(MAX_SCORE, shorts));
+  worth -= positiveNumber(state.loan);
+  return Math.max(0, Math.round(worth));
+}
+
 function validateSave(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) throw httpError(400, "bad_save", "저장 데이터가 없습니다.");
   if (!data.state || typeof data.state !== "object" || Array.isArray(data.state)) throw httpError(400, "bad_save", "state가 없습니다.");
   if (data.stocks != null && !Array.isArray(data.stocks)) throw httpError(400, "bad_save", "stocks 형식이 올바르지 않습니다.");
   if (data.products != null && !Array.isArray(data.products)) throw httpError(400, "bad_save", "products 형식이 올바르지 않습니다.");
+  if (data.valuation != null && (typeof data.valuation !== "object" || Array.isArray(data.valuation))) throw httpError(400, "bad_save", "valuation 형식이 올바르지 않습니다.");
   if ((data.stocks || []).length > 300 || (data.products || []).length > 100) throw httpError(400, "bad_save", "항목 수가 너무 많습니다.");
   // 실수로 딸려 온 인증 토큰은 저장하지 않습니다.
   if (data.state.cloud && typeof data.state.cloud === "object") delete data.state.cloud.token;

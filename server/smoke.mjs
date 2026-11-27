@@ -73,10 +73,11 @@ ok("저장 없음 404", emptySave.status === 404 && emptySave.json.error === "no
 
 const saveBody = {
   costBasisIncludesFee: true,
-  state: { cash: 12345678, cloud: { nickname: nameA, auto: true, token: "SHOULD_NOT_STORE" } },
+  state: { cash: 12345678, loan: 0, cloud: { nickname: nameA, auto: true, token: "SHOULD_NOT_STORE" } },
   fx: { usd: 1400 },
-  stocks: [{ id: "future_ai", own: 3, price: 50000, avgBuy: 49000 }],
+  stocks: [{ id: "future_ai", own: 3, price: 50000, avgBuy: 49000, market: "국내", group: "domestic" }],
   products: [{ id: "parking", amount: 0 }],
+  valuation: { estate: 0, metals: 0, company: 0, bonds: 0, shorts: 0, fx: 1400 },
 };
 const put1 = await call("/api/save", { method: "PUT", token: tokenA, body: { data: saveBody, revision: 0 } });
 ok("저장 1회차 revision 1", put1.status === 200 && put1.json.revision === 1, put1.json);
@@ -114,13 +115,25 @@ ok("지난 시즌 등록 400", oldSeason.status === 400, oldSeason.status);
 const badScore = await call("/api/score", { method: "POST", token: tokenA, body: { score: -5 } });
 ok("음수 점수 400", badScore.status === 400 && badScore.json.error === "bad_score", badScore.status);
 
+const scoreTooHigh = await call("/api/score", { method: "POST", token: tokenA, body: { score: 99000000 } });
+ok("저장 자산과 다른 점수 400", scoreTooHigh.status === 400 && scoreTooHigh.json.error === "score_mismatch", scoreTooHigh.json);
+
 const scoreA = await call("/api/score", { method: "POST", token: tokenA, body: { score: 12000000 } });
 ok("점수 등록 1위", scoreA.status === 200 && scoreA.json.rank === 1 && scoreA.json.best === 12000000, scoreA.json);
+ok("점수 서버 검증 표시", scoreA.json.verified === true && scoreA.json.checkedWorth >= 12000000, scoreA.json);
 
 const regB = await call("/api/register", { method: "POST", body: { nickname: nameB } });
 const tokenB = regB.json.token;
+const noSaveScore = await call("/api/score", { method: "POST", token: tokenB, body: { score: 1000 } });
+ok("저장 없는 점수 400", noSaveScore.status === 400 && noSaveScore.json.error === "save_required", noSaveScore.json);
+const saveB = await call("/api/save", {
+  method: "PUT",
+  token: tokenB,
+  body: { data: { state: { cash: 34000000, loan: 0 }, fx: { usd: 1400 }, stocks: [], products: [], valuation: {} }, revision: 0 },
+});
+ok("B 저장 준비", saveB.status === 200, saveB.status);
 const scoreB = await call("/api/score", { method: "POST", token: tokenB, body: { score: 34000000 } });
-ok("두 번째 플레이어 1위", scoreB.status === 200 && scoreB.json.rank === 1, scoreB.json);
+ok("두 번째 플레이어 1위", scoreB.status === 200 && scoreB.json.rank === 1 && scoreB.json.verified === true, scoreB.json);
 
 const lowerAgain = await call("/api/score", { method: "POST", token: tokenB, body: { score: 1000 } });
 ok("낮은 점수는 최고 기록 유지", lowerAgain.json.best === 34000000, lowerAgain.json);
@@ -128,8 +141,22 @@ ok("낮은 점수는 최고 기록 유지", lowerAgain.json.best === 34000000, l
 const board = await call("/api/leaderboard?limit=10", { token: tokenB });
 ok("리더보드 200", board.status === 200 && Array.isArray(board.json.entries), board.status);
 ok("리더보드 정렬", board.json.entries[0].nickname === nameB && board.json.entries[0].score === 34000000, board.json.entries[0]);
-ok("리더보드 내 순위", board.json.me && board.json.me.rank === 1, board.json.me);
+ok("리더보드 검증 표시", board.json.entries.every(e => e.verified === true), board.json.entries.map(e => e.verified));
+ok("리더보드 내 순위", board.json.me && board.json.me.rank === 1 && board.json.me.verified === true, board.json.me);
 ok("리더보드에 플레이어 id 포함", board.json.entries[0].playerId === regB.json.playerId, board.json.entries[0].playerId);
+
+// 공매도 평가손익이 마이너스면 서버 검증 순자산에서도 줄어들어야 합니다.
+const saveBNegShort = await call("/api/save", {
+  method: "PUT",
+  token: tokenB,
+  body: {
+    data: { state: { cash: 34000000, loan: 0 }, fx: { usd: 1400 }, stocks: [], products: [], valuation: { shorts: -1000000 } },
+    revision: saveB.json.revision,
+  },
+});
+ok("음수 공매도 저장", saveBNegShort.status === 200, saveBNegShort.status);
+const negShortScore = await call("/api/score", { method: "POST", token: tokenB, body: { score: 34000000 } });
+ok("공매도 손실을 반영해 점수 거부", negShortScore.status === 400 && negShortScore.json.error === "score_mismatch", negShortScore.json);
 
 const boardA = await call("/api/leaderboard?limit=10", { token: tokenA });
 ok("A의 순위는 2위", boardA.json.me && boardA.json.me.rank === 2, boardA.json.me);
