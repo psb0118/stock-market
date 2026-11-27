@@ -324,6 +324,23 @@ function check(name, ok, detail) {
   const panel = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'}; fbAutoPaused=false; fbLastError=null; fbUser={uid:'u1',displayName:'T',email:'e'}; state.settings.cloudAuto=true; const h=firebasePanelHtml(); fbUser=null; FIREBASE_CONFIG=keep; return h; })()`);
   check('설정 화면에 자동 저장 설명', panel.includes('자동 클라우드 저장') && panel.includes('saves/{uid}'), panel.slice(0, 60));
   check('로그인 없이 자동 업로드를 불러도 조용히 넘어감', typeof g.run('firebaseAutoUpload()') === 'object');
+
+  // 연결 상태 점검: 도메인 매칭 · 결과 표시 · 설정 없을 때
+  const domOk = g.run(`[fbDiagDomainOk(['localhost','a.com'],'a.com'), fbDiagDomainOk(['localhost'],'127.0.0.1'), fbDiagDomainOk(['localhost'],'evil.com'), fbDiagDomainOk([],'a.com')]`);
+  check('승인된 도메인 비교(정확 일치·localhost 예외)', domOk[0] === true && domOk[1] === true && domOk[2] === false && domOk[3] === false, JSON.stringify(domOk));
+  check('점검 전에는 결과 없음', g.run('fbDiagHtml()') === '');
+  const diagHtml = g.run(`(()=>{
+    fbDiag={at:Date.now(),running:false,rows:[
+      {key:'domain',label:'승인된 도메인',state:'pass',detail:'example.com 승인됨',fix:''},
+      {key:'index',label:'리더보드 색인',state:'fail',detail:'복합 색인이 <아직> 없습니다',fix:'Firestore → 색인'}]};
+    const h=fbDiagHtml(), b=fbDiagBtnHtml(); fbDiag=null; return {h,b};
+  })()`);
+  check('점검 결과에 통과/실패 아이콘', diagHtml.h.includes('✅') && diagHtml.h.includes('❌'));
+  check('점검 결과 요약에 실패 개수', diagHtml.h.includes('1개 실패'), diagHtml.h.slice(0, 80));
+  check('점검 상세 문구는 이스케이프', diagHtml.h.includes('&lt;아직&gt;') && !diagHtml.h.includes('<아직>'));
+  check('점검 버튼은 다시 점검으로 바뀜', diagHtml.b.includes('다시 점검'), diagHtml.b.slice(0, 60));
+  const noCfg = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG=null; fbDiag=null; firebaseDiagnose(); const r={running:fbDiag.running, n:fbDiag.rows.length, state:fbDiag.rows[0].state}; fbDiag=null; FIREBASE_CONFIG=keep; return r; })()`);
+  check('설정이 비면 점검 즉시 실패로 표시', noCfg.running === false && noCfg.n === 1 && noCfg.state === 'fail', JSON.stringify(noCfg));
   const hit = g.run(`(()=>{
     state.priceAlerts=[{stockId:'future_ai',price:1,dir:'above',armed:true}];
     const n=checkPriceAlerts();

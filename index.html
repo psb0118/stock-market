@@ -4491,7 +4491,7 @@ function firebasePanelHtml(){
   if(!fbUser){
     return `<p style="font-size:13px;">Google 계정으로 로그인하면 다른 기기에서도 진행을 이어서 할 수 있고, 월간 리더보드에 참여합니다.</p>
       <div class="button-row" style="margin-top:10px"><button class="buy" onclick="firebaseSignIn()">Google로 로그인</button></div>
-      <p class="muted-sm" style="margin-top:8px">로그인 전에도 게임과 로컬 저장은 그대로 동작합니다.</p>${help}`;
+      <p class="muted-sm" style="margin-top:8px">로그인 전에도 게임과 로컬 저장은 그대로 동작합니다.</p>${fbDiagBtnHtml()}${help}`;
   }
   const autoOn=state.settings&&state.settings.cloudAuto!==false;
   const retry=fbAutoPaused?`<div class="button-row" style="margin-top:8px"><button class="ghost small" onclick="firebaseAutoRetry()">자동 저장 다시 시도</button></div>`:"";
@@ -4504,9 +4504,121 @@ function firebasePanelHtml(){
       <button class="ghost" onclick="firebaseLeaderboard()">리더보드</button>
       <button class="sell" onclick="firebaseSignOut()">로그아웃</button>
     </div>
-    <p class="muted-sm" style="margin-top:8px;">저장은 Firestore의 <code>saves/{uid}</code>, 순위는 <code>scores</code>에 기록됩니다. 불러오기는 확인 후 이 기기의 진행을 덮어씁니다.</p>${help}`;
+    <p class="muted-sm" style="margin-top:8px;">저장은 Firestore의 <code>saves/{uid}</code>, 순위는 <code>scores</code>에 기록됩니다. 불러오기는 확인 후 이 기기의 진행을 덮어씁니다.</p>${fbDiagBtnHtml()}${help}`;
+}
+function fbDiagBtnHtml(){
+  const label=(fbDiag&&fbDiag.rows.length)?"연결 상태 다시 점검":"연결 상태 점검";
+  return `<div class="button-row" style="margin-top:12px"><button class="${fbDiag&&fbDiag.rows.length?"ghost":"buy"}" onclick="firebaseDiagnose()" ${fbDiag&&fbDiag.running?"disabled":""}>${fbDiag&&fbDiag.running?"점검 중…":label}</button></div>${fbDiagHtml()}`;
 }
 function firebaseAutoRetry(){ fbAutoPaused=false; fbLastError=null; fbLastSync=Date.now()-FB_SYNC_MIN_MS; scheduleCloudSync(); settingsPage(); }
+
+// ── 연결 상태 점검: 승인된 도메인 · Google 로그인 · 규칙 · 색인을 하나씩 확인 ──
+let fbDiag=null; // {at, running, rows:[{key,label,state,detail,fix}]}
+function fbDiagDomainOk(list,host){
+  const h=String(host||"").toLowerCase();
+  return (list||[]).map(x=>String(x).toLowerCase()).some(d=>d===h || (h==="127.0.0.1"&&d==="localhost"));
+}
+const FB_DIAG_ICON={pass:"✅",fail:"❌",warn:"⚠️",run:"⏳"};
+function fbDiagHtml(){
+  if(!fbDiag) return "";
+  const rows=fbDiag.rows.map(r=>`<div class="fb-diag-row" style="display:flex;gap:8px;padding:7px 0;border-top:1px solid rgba(0,0,0,.06)">
+      <div style="font-size:14px;line-height:1.4">${FB_DIAG_ICON[r.state]||"⬜"}</div>
+      <div style="flex:1;min-width:0">
+        <b style="font-size:12.5px;${r.state==="fail"?"color:#b42318":""}">${escHtml(r.label)}</b>
+        ${r.detail?`<div class="muted-sm" style="font-size:11.5px">${escHtml(r.detail)}</div>`:""}
+        ${r.state==="fail"&&r.fix?`<div style="font-size:11.5px;color:#7a271a;margin-top:3px">→ ${escHtml(r.fix)}</div>`:""}
+      </div></div>`).join("");
+  const important=fbDiag.rows.filter(r=>r.state==="fail").length;
+  const passed=fbDiag.rows.filter(r=>r.state==="pass").length;
+  const head=fbDiag.running?"점검 중…":(important?`${passed}개 통과 · <b style="color:#b42318">${important}개 실패</b>`:`${passed}개 모두 통과`);
+  return `<div style="margin-top:10px;padding:8px 12px;border:1px solid rgba(0,0,0,.1);border-radius:10px">
+    <div style="font-size:12px;font-weight:700">연결 점검 결과 · ${head}</div>${rows}</div>`;
+}
+function fbDiagPush(key,label,state,detail,fix){
+  if(!fbDiag) return;
+  const row={key,label,state,detail:detail||"",fix:fix||""};
+  const i=fbDiag.rows.findIndex(r=>r.key===key);
+  if(i>=0) fbDiag.rows[i]=row; else fbDiag.rows.push(row);
+  try{ firebasePanelRefresh(""); }catch(e){}
+}
+async function firebaseDiagnose(){
+  if(fbDiag&&fbDiag.running) return;
+  fbDiag={at:Date.now(),running:true,rows:[]};
+  try{ firebasePanelRefresh(""); }catch(e){}
+  fbDiagPush("config","웹 앱 설정",firebaseConfigured()?"pass":"fail",firebaseConfigured()?`프로젝트 ${fbProject()}`:"meta[name=firebase-config]가 비어 있습니다",firebaseConfigured()?"":"index.html의 meta[name=firebase-config]에 웹 앱 설정 JSON을 넣으세요");
+  if(!firebaseConfigured()){ fbDiag.running=false; firebasePanelRefresh(""); return; }
+  let api=null;
+  try{ api=await firebaseLoad(); fbDiagPush("sdk","Firebase SDK","pass","app · auth · firestore 로드 완료"); }
+  catch(e){ fbDiagPush("sdk","Firebase SDK","fail","SDK를 불러오지 못했습니다",firebaseHelpFor("firebase_sdk").steps[0]); }
+
+  // 1) 승인된 도메인: 콘솔에 등록된 목록을 읽어 지금 주소와 비교합니다.
+  const host=fbHost();
+  try{
+    const r=await fetch(`https://identitytoolkit.googleapis.com/v1/projects?key=${FIREBASE_CONFIG.apiKey}&fields=authorizedDomains`);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j=await r.json();
+    const list=j.authorizedDomains||[];
+    if(fbDiagDomainOk(list,host)) fbDiagPush("domain","승인된 도메인","pass",`${host} 승인됨`);
+    else fbDiagPush("domain","승인된 도메인","fail",`${host} 가 목록에 없습니다`,`Firebase 콘솔 → Authentication → Settings → 승인된 도메인에 ${host} 추가`);
+  }catch(e){
+    fbDiagPush("domain","승인된 도메인","warn","목록을 확인하지 못했습니다","네트워크 또는 apiKey를 확인하세요");
+  }
+
+  // 2) Google 로그인: 이미 로그인했다면 확실한 증거이고, 아니면 제공자 설정을 조회합니다.
+  if(fbUser){
+    fbDiagPush("google","Google 로그인","pass",`${fbUser.email||fbUser.displayName||"Google 사용자"}로 로그인됨`);
+  }else{
+    try{
+      const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${FIREBASE_CONFIG.apiKey}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({continueUri:location.origin+"/",providerId:"google.com",email:"check@example.com"})});
+      const j=await r.json();
+      const msg=String((j.error&&j.error.message)||"");
+      if(msg.includes("OPERATION_NOT_ALLOWED")) fbDiagPush("google","Google 로그인","fail","Google 로그인이 꺼져 있습니다","Authentication → Sign-in method → Google 사용 설정");
+      else if(msg.includes("UNAUTHORIZED_DOMAIN")||msg.includes("INVALID_CONTINUE_URI")) fbDiagPush("google","Google 로그인","fail","이 주소에서는 로그인할 수 없습니다",`승인된 도메인에 ${host} 추가`);
+      else if(j.authUri) fbDiagPush("google","Google 로그인","pass","사용 설정됨 · 아직 로그인 전");
+      else fbDiagPush("google","Google 로그인","warn",msg||"응답을 해석하지 못했습니다","Google로 로그인을 한 번 눌러 확인하세요");
+    }catch(e){
+      fbDiagPush("google","Google 로그인","warn","확인하지 못했습니다","Google로 로그인을 한 번 눌러 확인하세요");
+    }
+  }
+
+  // 3) Firestore 규칙: 공개 읽기(scores)와 내 저장(saves/uid)을 실제로 읽어 봅니다.
+  if(api){
+    let rulesState="pass", rulesDetail="공개 읽기 허용", rulesFix="";
+    try{
+      await api.db.getDocs(api.db.query(api.db.collection(fbDb,"scores"),api.db.limit(1)));
+    }catch(e){
+      const c=firebaseErrorCode(e);
+      rulesState="fail";
+      rulesDetail=c==="permission-denied"?"scores 공개 읽기가 거부되었습니다":`Firestore 오류 ${c}`;
+      rulesFix=firebaseHelpFor(c).steps[0];
+    }
+    if(rulesState==="pass"&&fbUser){
+      try{ await api.db.getDoc(api.db.doc(fbDb,"saves",fbUser.uid)); rulesDetail="공개 읽기 · 내 저장 읽기 모두 허용"; }
+      catch(e){
+        const c=firebaseErrorCode(e);
+        rulesState="fail";
+        rulesDetail=c==="permission-denied"?"내 저장(saves/{uid}) 읽기가 거부되었습니다":`Firestore 오류 ${c}`;
+        rulesFix=firebaseHelpFor(c).steps[0];
+      }
+    }
+    if(rulesState==="pass"&&!fbUser) rulesDetail="공개 읽기 허용(로그인하면 저장 규칙도 확인합니다)";
+    fbDiagPush("rules","Firestore 규칙",rulesState,rulesDetail,rulesFix);
+
+    // 4) 색인: 리더보드 쿼리를 그대로 실행해 봅니다.
+    try{
+      const q=api.db.query(api.db.collection(fbDb,"scores"),api.db.where("season","==",seasonKey()),api.db.orderBy("score","desc"),api.db.limit(1));
+      await api.db.getDocs(q);
+      fbDiagPush("index","리더보드 색인","pass",`시즌 ${seasonKey()} 쿼리 성공`);
+    }catch(e){
+      const c=firebaseErrorCode(e);
+      if(c==="failed-precondition") fbDiagPush("index","리더보드 색인","fail","복합 색인이 아직 없습니다","Firestore → 색인 → scores: season 오름차순 + score 내림차순 생성");
+      else if(c==="permission-denied") fbDiagPush("index","리더보드 색인","warn","규칙에서 먼저 막혔습니다","규칙을 게시한 뒤 다시 점검하세요");
+      else fbDiagPush("index","리더보드 색인","warn",`확인하지 못했습니다 (${c})`,firebaseHelpFor(c).steps[0]);
+    }
+  }
+  if(fbDiag){ fbDiag.running=false; }
+  try{ firebasePanelRefresh(""); }catch(e){}
+}
 
 // ── 대시보드 ────────────────────────────────────────────────
 function dashNarrow(){ try{ return typeof window!=="undefined" && +window.innerWidth>0 && +window.innerWidth<=760; }catch(e){ return false; } }
