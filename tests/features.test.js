@@ -292,6 +292,30 @@ function check(name, ok, detail) {
   check('가격 알림 1회 발동 후 해제', hit.n === 1 && hit.armed === false && hit.alert === true, JSON.stringify(hit));
 }
 
+// ── 공유 시장 · 자동 매수 차단 ─────────────────────
+{
+  // 난수 시드가 다른 두 플레이어가 같은 게임 시각에서 정확히 같은 시장을 보는지 확인합니다.
+  const step = sec => `state.marketSeconds=${sec}; if(${sec}%5===0) tickMarket(); if(${sec}%15===0) tickAlt(); if(${sec}%7===0) marketEventsAndNews(); if(${sec}%15===0) updateFX(); 1`;
+  const a = createGame(101), b = createGame(202);
+  for (let sec = 1; sec <= 1200; sec++) { a.run(step(sec)); b.run(step(sec)); }
+  const sig = g => g.run(`JSON.stringify({p:stocks.map(s=>s.price),alt:state.altPrices,fx:fx.usd,news:state.news.slice(0,4),eco:[state.economy.phase,state.economy.baseRate]})`);
+  check('같은 게임 시각이면 모든 플레이어의 시세가 동일', sig(a) === sig(b), sig(a).length);
+  check('같은 게임 시각이면 부동산·금·환율도 동일', a.run('state.altPrices.apt') === b.run('state.altPrices.apt') && a.run('fx.usd') === b.run('fx.usd'));
+  check('같은 게임 시각이면 뉴스·경제도 동일', a.run('state.news[0]') === b.run('state.news[0]') && a.run('state.economy.phase') === b.run('state.economy.phase'));
+
+  // 규칙 저장은 자동 투자를 켜지 않습니다(원치 않는 자동 매수의 원인 제거).
+  const g = createGame(303);
+  g.run('state.cash=50000000; state.auto.enabled=false; saveAutoSettings(); 1');
+  check('규칙만 저장해도 자동 매수는 꺼짐', g.run('state.auto.enabled') === false);
+  check('꺼진 상태에서는 자동 적립이 매수하지 않음', g.run('state.auto.enabled===false && autoInvest()===0'));
+  g.run('saveAutoSettings(true); 1');
+  check('켜기 버튼을 눌러야 자동 매수가 켜짐', g.run('state.auto.enabled') === true);
+  g.run('state.orders=[{id:"d1",stockId:"future_ai",type:"dca",side:"buy",amount:100000,every:15,lastAt:0}]; 1');
+  check('자동 매수 항목이 화면에 표시됨', g.run('autoBuySources().join(",")') === '자동 투자,분할 매수' && g.run('renderAutoBadge(),$("autoBadge").style.display') === 'block');
+  const stopped = g.run('(()=>{ const ok=quickDisableAuto(); return {ok, auto:state.auto.enabled, orders:state.orders.length, label:document.getElementById("autoBadge").style.display}; })()');
+  check('자동 매수 한 번에 끄기', stopped.ok === true && stopped.auto === false && stopped.orders === 0 && stopped.label === 'none', JSON.stringify(stopped));
+}
+
 console.log('');
 console.log(`== ${pass}/${pass + fail} passed ==`);
 process.exit(fail ? 1 : 0);

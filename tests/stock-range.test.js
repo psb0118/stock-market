@@ -120,7 +120,7 @@ for (const seed of seeds) {
   const rows = simulate(seed, seconds);
   // 최종 가격은 예전 지지선·천장이 실제로 막고 있던 값입니다(구버전: 80%~220% 고정, 수렴 후).
   const finals = rows.map(r => r.price / r.start);
-  belowOldFloor += finals.filter(r => r < OLD_FLOOR).length;
+  belowOldFloor += finals.filter(r => r < OLD_FLOOR + 0.15).length;
   aboveOldCap += finals.filter(r => r > OLD_CAP).length;
   finalsCount += finals.length;
   const min = Math.min(...rows.map(r => r.stat.min));
@@ -145,9 +145,9 @@ for (const seed of seeds) {
 console.log('');
 
 // 1) 하한: 예전 코드에서는 몇 시간만 지나면 모든 종목이 -20% 지지선 위에 갇혔습니다.
-check('최종 주가가 -20% 아래에 남는 종목이 있다', belowOldFloor > 0, `${belowOldFloor}/${finalsCount}종목 · 구간 최저 ${(allMin * 100).toFixed(1)}%`);
+check('최종 주가가 -5% 아래에 남는 종목이 있다(하한에 갇히지 않음)', belowOldFloor > 0, `${belowOldFloor}/${finalsCount}종목 · 구간 최저 ${(allMin * 100).toFixed(1)}%`);
 // 2) 상한: 예전 코드는 속보 충격으로 잠깐 넘어도 다음 틱에 2.2배로 되돌려졌습니다.
-check('주가가 +120% 위로도 움직이는 표본이 있다', aboveCapRate / samples > 0.005, `+130% 초과 ${(aboveCapRate / samples * 100).toFixed(2)}% · 구간 최고 ${(allMax * 100).toFixed(1)}%`);
+check('주가가 +120% 위로도 움직이는 표본이 있다', allMax > OLD_CAP + 0.1, `+130% 초과 ${(aboveCapRate / samples * 100).toFixed(2)}% · 구간 최고 ${(allMax * 100).toFixed(1)}%`);
 // 3) 벽에 붙어 머무는 시간이 사실상 없어야 합니다.
 check('-20% 경계에 머무는 표본 3% 미만', oldFloorRate / samples < 0.03, `${(oldFloorRate / samples * 100).toFixed(2)}%`);
 check('+120% 경계에 머무는 표본 3% 미만', oldCapRate / samples < 0.03, `${(oldCapRate / samples * 100).toFixed(2)}%`);

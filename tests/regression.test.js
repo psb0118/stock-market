@@ -158,7 +158,7 @@ const RESET = total => `
   const before = g.run("product('parking').amount");
   g.run('interest(); 1');
   const gained = g.run("product('parking').amount") - before;
-  check('하향 후에도 확정 이율로 이자 지급', Math.abs(gained - before * 0.018 * 0.015) < 1e-6, gained.toFixed(2));
+  check('하향 후에도 확정 이율로 이자 지급', Math.abs(gained - before * 0.018 * g.run('INTEREST_PERIOD')) < 1e-6, gained.toFixed(2));
   check('하향 후 확정 이율 유지(1.8%)', Math.abs(g.run("product('parking').rate") - 0.018) < 1e-12, g.run("product('parking').rate"));
 }
 
@@ -806,13 +806,15 @@ const RESET = total => `
 
   // 경력이 쌓이면 고소득 노동이 열립니다.
   g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
-  check('경력 10회에 긴급 외주 해금', g.run('state.cash') === 610000 && g.run('state.labor.shifts') === 11, g.run('state.cash'));
-  check('노동 경력·수입 저장', g.run('buildSaveData().state.labor.shifts') === 11 && g.run('buildSaveData().state.labor.earned') === 610000);
+  // 일당은 경력 레벨 배율이 붙어 정확한 금액 대신 "지급되었는지"를 확인합니다.
+  const freelancePay = g.run('state.cash');
+  check('경력 10회에 긴급 외주 해금', freelancePay > 0 && g.run('state.labor.shifts') === 11, freelancePay);
+  check('노동 경력·수입 저장', g.run('buildSaveData().state.labor.shifts') === 11 && g.run('buildSaveData().state.labor.earned') === freelancePay, freelancePay);
 
   const saved = JSON.parse(JSON.stringify(g.run('buildSaveData()')));
   const g2 = createGame();
   g2.run('applySaveData(' + JSON.stringify(saved) + '); 1');
-  check('노동 저장 복원', g2.run('state.labor.shifts') === 11 && g2.run('state.labor.earned') === 610000, g2.run('state.labor.shifts'));
+  check('노동 저장 복원', g2.run('state.labor.shifts') === 11 && g2.run('state.labor.earned') === freelancePay, g2.run('state.labor.shifts'));
 
   g2.run('clearGame(true); 1');
   check('초기화 시 노동 경력 리셋', g2.run('state.labor.shifts') === 0 && g2.run('state.labor.earned') === 0);
@@ -856,7 +858,7 @@ const RESET = total => `
     g.run(`
       state.news=[]; state.company=null; state.cash=1000000;
       state.economy=Object.assign({},ECON_DEFAULT,{cycleLeft:15,phase:'중립',gdpGrowth:.02,unemployment:.035,inflation:.025});
-      Math.random=()=>0; tickAlt();
+      enterEconomyPhase('호황');
       1
     `);
     check('경기 호황 이벤트 발생', g.run('state.news.some(n=>n.includes("경기 호황"))') === true, g.run('state.news[0]'));
@@ -865,7 +867,7 @@ const RESET = total => `
     g.run(`
       state.news=[];
       state.economy=Object.assign({},ECON_DEFAULT,{cycleLeft:15,phase:'호황',gdpGrowth:.02,unemployment:.035,inflation:.025});
-      Math.random=()=>0.99; tickAlt();
+      enterEconomyPhase('불황');
       1
     `);
     check('금융 위기·경기 침체 이벤트 발생', g.run('state.news.some(n=>n.includes("금융 위기")&&n.includes("경기 침체"))') === true, g.run('state.news[0]'));

@@ -626,6 +626,7 @@ body.dark .flow-line b{color:#dbe4ef}
   </main>
 </div>
 
+<div id="autoBadge" onclick="quickDisableAuto()" title="자동 매수를 모두 끕니다" style="display:none;position:fixed;right:12px;bottom:104px;z-index:80;background:#111827;color:#fff;border:0;border-radius:999px;padding:9px 14px;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer">🤖 자동 매수 ON · 끄기</div>
 <div id="toastWrap" class="toast-wrap" role="status" aria-live="polite"></div>
 <div id="modalRoot" class="modal" role="dialog" aria-modal="true" aria-hidden="true"></div>
 <div id="bottomBar">
@@ -653,6 +654,9 @@ body.dark .flow-line b{color:#dbe4ef}
 
 <script>
 const START_FX=1390, START_CASH=0; // 첫 시작은 0원. 환생 '창업 자금' 업그레이드만 예외입니다.
+// 예금 이자 계수: 연이율 × 이 값 × (15초마다). 0.0035면 연 4.2% 상품이 시간당 약 3.5%입니다.
+// 예전 0.015(시간당 약 16%)는 예금만 넣어도 주식보다 훨씬 많이 벌려 투자할 이유가 없었습니다.
+const INTEREST_PERIOD=0.0035;
 const FEE_STOCK = 0.0015; // 주식 수수료 0.15%
 const FEE_FX = 0.01;      // 환전 수수료 1%(브론즈 기준)
 const TAX_TRADE = 0.002;        // 매도 거래세 0.2%
@@ -782,6 +786,24 @@ let stocks = stockDefinitions.map(x=>{
 // 지수 연동 ETF(지수·2X·인버스)는 랜덤워크 대신 시장 지수를 따라 움직입니다.
 const isIndexFund=s=>!!(s&&s.indexPower);
 
+// ── 공유 시장 ──────────────────────────────────────
+// 시세·뉴스·경제의 난수를 전역 시드와 게임 시각으로 고정했습니다. 모두 0초에서 시작하므로,
+// 같은 게임 시각(며칠째 · 몇 초)에 있는 플레이어는 누구나 정확히 같은 가격과 이벤트를 봅니다.
+// 즉 서버 없이도 모든 플레이어의 시장이 동일합니다.
+const WORLD_SEED=20261126;
+function worldHash(str){ let h=2166136261; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+// FNV 해시를 그대로 쓰면 마지막 글자만 다른 키(날짜·종목)의 값이 거의 붙어 나옵니다.
+// mulberry32 한 단계로 섞어 0~1 난수를 고르게 만듭니다.
+function worldRand(...parts){
+  let a=worldHash(WORLD_SEED+"|"+parts.join("|"));
+  a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a);
+  t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296;
+}
+// 같은 게임 시각에 같은 값을 보는 공용 난수(0~1).
+function worldTickRand(scope,...parts){ return worldRand(scope,Math.max(0,Math.floor(+state.marketSeconds||0)),...parts); }
+
 // ── 하루 단위 시세 ─────────────────────────────────────────
 // 게임 10분 = 하루. 하루가 지나면 "전일 종가"에 새 일일 변동률을 적용합니다(복리).
 // 예) 1,000원 → -30% = 700원, 다음 날 변동률은 700원을 기준으로 적용됩니다.
@@ -804,7 +826,7 @@ function marketDayText(){
   const offer=state.ipo&&state.ipo.offer;
   const tail=offer?` · 📢 ${offer.name} 청약 중`:"";
   const clock=`다음 날까지 실제 ${clockText(realSeconds(marketDaySecondsLeft()))} (${speedNow()}x)`;
-  return `📅 ${marketDayNumber()}일차 · ${clock}${state.paused?" · 일시정지":""}${tail}`;
+  return `📅 ${marketDayNumber()}일차 · 🌐 공유 시장 · ${clock}${state.paused?" · 일시정지":""}${tail}`;
 }
 function marketDayBarHTML(){ return `<div class="notice market-day" data-market-day>${marketDayText()}</div>`; }
 function updateMarketDayBar(){
@@ -853,29 +875,31 @@ function clampStockPrice(s,v){
 }
 // 그날 시장 전체에 적용되는 변동률(경기·금리·이벤트 반영).
 // 장기 보유 보상이 너무 낮지 않도록 시장 자체에 완만한 우상향 드리프트를 둡니다.
-function dailyMarketReturn(){
+function dailyMarketReturn(day){
+  const d=Number.isFinite(+day)?+day:marketDayIndex(state.marketSeconds);
   const e=state.economy||{};
   const phase=e.phase==="호황"?1:e.phase==="불황"?-1:0;
-  let r=(Math.random()-.48)*.045 + .0015;
-  r += phase*.004;
-  r += ((Number.isFinite(+e.gdpGrowth)?+e.gdpGrowth:.02)-.02)*.45;
-  r -= ((Number.isFinite(+e.baseRate)?+e.baseRate:.03)-.03)*.6;
-  if(state.currentEvent==="AI_BOOM") r+=.012;
-  if(state.currentEvent==="SEMI_STRONG") r+=.008;
-  if(state.currentEvent==="MARKET_CRASH") r-=.025;
-  if(state.currentEvent==="BUBBLE_SHOCK") r-=.012;
+  // 시장은 완만한 우상향(하루 +0.2%p 안팎)을 기본으로 합니다. 예전에는 하루 평균이 거의 0이라
+  // 오래 들고 있어도 자산이 줄어드는 느낌이 강했습니다.
+  // 난수는 전역 시드+날짜로 고정해, 모든 플레이어가 같은 날에 같은 시장 변동률을 봅니다.
+  let r=(worldRand("mkt",d)-.47)*.045 + .0036;
+  // 경기 국면은 방향만 살짝 더합니다. 금리·성장률을 그대로 넣으면 기준금리 평균(4.5%)이
+  // 매일 -0.5%씩 시장을 끌어내려 장기 하락 드리프트가 생겼습니다.
+  r += phase*.002;
   return Math.max(-.08,Math.min(.08,r));
 }
 // 종목별 하루 변동률: 시장 변동 + 종목 고유 성장 드리프트 + 변동성 + 가끔 뉴스성 급등·급락
-function dailyStockReturn(s, marketR){
+function dailyStockReturn(s, marketR, day){
+  const d=Number.isFinite(+day)?+day:marketDayIndex(state.marketSeconds);
   const dayVol=Math.max(.012,Math.min(.09,.018+(+s.vol||.02)*1.8));
   const trend=Math.max(0,Math.min(.0025,+s.drift||0));
   const start=(+s.start>0)?+s.start:((+s.price>0)?+s.price:1);
   const totalRatio=(+s.price>0)?+s.price/start:1;
   // 시작가에서 멀어질수록 기준 범위(1.05배)로 천천히 되돌아오게 해 장기 추세가 한쪽으로 폭주하지 않게 합니다.
-  const reversion=Math.max(-.08,Math.min(.10,-Math.log(Math.max(.01,totalRatio)/1.05)*.05));
-  let r=marketR + .0025 + trend*.5 + reversion + (Math.random()-.485)*2*dayVol;
-  if(Math.random()<.04) r += (Math.random()<.5?-1:1)*(.04+Math.random()*.08);
+  const reversion=Math.max(-.08,Math.min(.10,-Math.log(Math.max(.01,totalRatio)/1.05)*.03));
+  // 종목별 난수도 (날짜, 종목)으로 고정해 모든 플레이어의 같은 날 시세가 동일합니다.
+  let r=marketR + .0018 + trend*.5 + reversion + (worldRand("stk",d,s.id,1)-.485)*2*dayVol;
+  if(worldRand("stk",d,s.id,2)<.04) r += (worldRand("stk",d,s.id,3)<.5?-1:1)*(.04+worldRand("stk",d,s.id,4)*.08);
   return Math.max(-MAX_DAILY_LOSS,Math.min(MAX_DAILY_GAIN,r));
 }
 
@@ -1400,7 +1424,37 @@ function bestProductForAuto(){
   });
   return best;
 }
-function saveAutoSettings(){
+// 자동으로 주식을 사는 경로(자동 투자·분할 매수·돌파 매수)를 한곳에서 모읍니다.
+// 화면에 항상 표시해, 켠 적 없는 자동 매수가 몰래 돌아가는 일을 막습니다.
+function autoBuySources(){
+  const list=[];
+  if(state.auto && state.auto.enabled) list.push("자동 투자");
+  (Array.isArray(state.orders)?state.orders:[]).forEach(o=>{
+    if(!o) return;
+    if(o.type==="dca") list.push("분할 매수");
+    else if(o.type==="bracket") list.push("브래킷 매수");
+    else if(o.type==="stop" && o.side==="buy") list.push("돌파 매수");
+  });
+  return [...new Set(list)];
+}
+function renderAutoBadge(){
+  const el=$("autoBadge"); if(!el || !el.style) return;
+  const list=autoBuySources();
+  el.style.display=list.length?"block":"none";
+  if(list.length) el.textContent=`🤖 자동 매수 ON · ${list.join("·")} · 끄기`;
+}
+// 배지·설정 화면에서 한 번에 모든 자동 매수를 끕니다(보유 주식은 그대로).
+function quickDisableAuto(){
+  if(!confirm("자동 매수를 모두 끌까요?\n자동 투자 규칙과 분할·돌파 매수 예약 주문이 중지됩니다. 보유 주식은 그대로 남습니다.")) return false;
+  state.auto=Object.assign({},state.auto,{enabled:false});
+  state.orders=(Array.isArray(state.orders)?state.orders:[]).filter(o=>!(o && (o.type==="dca" || (o.type==="bracket") || (o.type==="stop" && o.side==="buy"))));
+  saveGame(); renderAutoBadge(); update();
+  if(activePage()==="settings") settingsPage();
+  else if(activePage()==="orders") ordersPage();
+  notify("system","자동 매수","자동 투자와 자동 매수 예약 주문을 모두 껐습니다.");
+  return true;
+}
+function saveAutoSettings(enable){
   const pct=+($("auto-pct")?$("auto-pct").value:60)||0;
   const min=+($("auto-min")?$("auto-min").value:0)||0;
   const goldPct=+($("auto-gold")?$("auto-gold").value:0)||0;
@@ -1414,9 +1468,16 @@ function saveAutoSettings(){
   const rebBand=Math.max(2,Math.min(20,Math.round(+($("auto-reb-band")?$("auto-reb-band").value:5)||5)));
   const taxAware=$("auto-tax")?$("auto-tax").checked:!!(state.auto||{}).taxAware;
   const taxBudget=Math.max(0,Math.floor(+($("auto-tax-budget")?$("auto-tax-budget").value:((state.auto||{}).taxBudget||0))||0));
-  state.auto=Object.assign({},state.auto,{enabled:true,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every,autoSell,takeProfit,stopLoss,rebalance,rebStockPct,rebBand,taxAware,taxBudget});
+  // 예전에는 이 버튼이 값을 저장하면서 자동 투자까지 켰습니다(원치 않는 자동 매수의 원인).
+  // 이제는 "규칙 저장"과 "자동 투자 켜기"를 분리합니다. enable를 넘기지 않으면 켜짐/꺼짐 상태를 그대로 둡니다.
+  const wasOn=!!(state.auto&&state.auto.enabled);
+  const nextOn=enable===true?true:(enable===false?false:wasOn);
+  state.auto=Object.assign({},state.auto,{enabled:nextOn,stockPct:Math.max(0,Math.min(100,pct)),minCash:Math.max(0,min),goldPct:Math.max(0,Math.min(100,goldPct)),estatePct:Math.max(0,Math.min(100,estatePct)),every,autoSell,takeProfit,stopLoss,rebalance,rebStockPct,rebBand,taxAware,taxBudget});
   saveGame(); if(activePage()==="settings") settingsPage(); else portfolio(); update();
-  notify("system","자동 투자",`주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)} · ${state.auto.every}초 주기${state.auto.autoSell?` · 익절 ${state.auto.takeProfit}%/손절 ${state.auto.stopLoss}%`:''}`);
+  renderAutoBadge();
+  if(nextOn && !wasOn) notify("system","자동 투자","자동 매수를 켰습니다. 화면의 🤖 배지를 누르면 바로 끌 수 있습니다.");
+  else if(!nextOn && wasOn) notify("system","자동 투자","자동 매수를 껐습니다.");
+  else notify("system","자동 투자",`규칙만 저장했습니다 · 자동 매수 ${nextOn?"켜짐":"꺼짐"} · 주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)} · ${state.auto.every}초 주기`);
 }
 function disableAuto(){
   state.auto=Object.assign({},state.auto,{enabled:false});
@@ -1615,7 +1676,9 @@ function laborShiftPay(job,results,condition){
   // 컨디션은 지급액에, 서비스 스킬은 추가 보너스에 반영합니다. 기존 호출(2개 인자)은 100% 컨디션입니다.
   const cond=condition==null?1:Math.max(.55,Math.min(1.2,+condition||0));
   const skill=1+.02*(l.skills.service||0);
-  return {pay:Math.max(0,Math.round(base*rate*bonus*cond*skill/1000)*1000),perfect,good,miss,rate,bonus,condition:cond,skill};
+  // 경력 레벨이 오를수록 같은 일의 일당이 올라갑니다(최대 2.5배). 반복 노동이 성장으로 이어지게 합니다.
+  const career=Math.min(2.5,1+0.06*Math.max(0,laborCareerLevel()-1));
+  return {pay:Math.max(0,Math.round(base*rate*bonus*cond*skill*career/1000)*1000),perfect,good,miss,rate,bonus,condition:cond,skill,career};
 }
 function laborModeOf(job){ return (job&&job.mode)||"timing"; }
 function laborModeLabel(mode){ return {timing:"타이밍",tap:"연타",memory:"기억",math:"계산"}[mode]||"타이밍"; }
@@ -2262,8 +2325,8 @@ function tickIPO(){
   if(state.marketSeconds<ipo.nextAt) return;
   const pool=IPO_POOL.filter(d=>!stocks.some(s=>s.id===d.id));
   if(!pool.length){ ipo.nextAt=state.marketSeconds+300; return; }
-  const d=pool[Math.floor(Math.random()*pool.length)];
-  const price=Math.max(100,Math.round(d.price*(0.9+Math.random()*0.2)/100)*100);
+  const d=pool[Math.floor(worldTickRand("ipo",1)*pool.length)];
+  const price=Math.max(100,Math.round(d.price*(0.9+worldTickRand("ipo",2)*0.2)/100)*100);
   ipo.offer={id:d.id,name:d.name,ticker:d.ticker,group:"domestic",theme:d.theme,vol:d.vol,price,qty:60000,closesAt:state.marketSeconds+120,subscribed:0,mine:0,reminded:false};
   publishBreakingNews("📢 공모주 청약", `${d.name}(${d.ticker}) 공모가 ${won(price)} · 120초간 청약 접수 중`);
   announceIPO(ipo.offer,false);
@@ -2312,14 +2375,14 @@ function closeIPO(){
   const ipo=ensureIPO(),o=ipo.offer; if(!o) return;
   const mine=Math.max(0,+o.mine||0);
   const mineShares=o.price>0?mine/o.price:0;
-  const demandShares=Math.round(o.qty*(0.3+Math.random()*2.2))+mineShares;
+  const demandShares=Math.round(o.qty*(0.3+worldRand("ipo",o.id,1)*2.2))+mineShares;
   const ratio=Math.min(1,o.qty/Math.max(1,demandShares));
   const alloc=mine>0?Math.max(0,Math.floor(mineShares*ratio)):0;
   const acct=TAX_ACCOUNTS.includes(o.account)?o.account:"general", reserved=Math.max(0,+o.reserved||0);
   if(mine>0) state.cash+=mine-alloc*o.price;
   if(reserved>0) releaseTaxContribution(acct,Math.max(0,reserved-alloc*o.price));
   o.reserved=0;
-  const open=Math.max(100,Math.round(o.price*(0.9+Math.random()*0.35)/100)*100);
+  const open=Math.max(100,Math.round(o.price*(0.9+worldRand("ipo",o.id,2)*0.35)/100)*100);
   const s=ensureListedStock(o,o.price);
   s.start=o.price; s.price=open; s.lastMove=(open-o.price)/o.price; s.hist=[o.price,open];
   if(alloc>0){ s.own=alloc; s.avgBuy=o.price; addTaxLot(s,alloc,o.price,acct); recordTrade(s,"buy",alloc,o.price,0); }
@@ -2328,7 +2391,7 @@ function closeIPO(){
   ipo.history=ipo.history.slice(0,8);
   ipo.offer=null;
   ipo.lastResult={name:o.name,price:o.price,open,alloc,mine,refund:Math.max(0,mine-alloc*o.price),at:state.marketSeconds};
-  ipo.nextAt=state.marketSeconds+300+Math.floor(Math.random()*300);
+  ipo.nextAt=state.marketSeconds+300+Math.floor(worldTickRand("ipoNext",1)*300);
   addLog(`📈 신규 상장: ${o.name} 공모가 ${won(o.price)} → 시초가 ${won(open)}${alloc?` · ${alloc}주 배정`:""}${mine&&!alloc?" · 전액 환불":""}`);
   publishBreakingNews("📈 신규 상장", `${o.name}(${o.ticker}) 상장 · 공모가 ${won(o.price)} · 시초가 ${won(open)}`);
   if(mine>0){
@@ -2390,16 +2453,46 @@ function autoRebalance(){
   }
   return moved;
 }
+// 경기 국면 전환: 같은 게임 시각이면 모든 플레이어가 같은 국면·지표·뉴스를 봅니다.
+function enterEconomyPhase(phase){
+  const eco=state.economy||(state.economy=Object.assign({},ECON_DEFAULT));
+  const wr=k=>worldTickRand("eco",k);
+  eco.phase=phase||["호황","중립","불황"][Math.floor(wr(1)*3)];
+  eco.cycleLeft=60+Math.floor(wr(2)*60);
+  eco.rateAdj=eco.phase==="호황"?.004:eco.phase==="불황"?-.004:0;
+  const dir=wr(3)<.5?-1:1;
+  eco.baseRate=Math.max(.01,Math.min(.08,(eco.baseRate||.03)+dir*.0025));
+  // 경기 국면에 따라 물가·실업률·성장률이 움직이고, 이는 시장 방향에도 반영됩니다.
+  const phaseBias=eco.phase==="호황"?1:eco.phase==="불황"?-1:0;
+  eco.inflation=Math.max(.005,Math.min(.08,(+eco.inflation||.025)+phaseBias*.003+(wr(4)-.5)*.002));
+  eco.unemployment=Math.max(.015,Math.min(.15,(+eco.unemployment||.035)-phaseBias*.004+(wr(5)-.5)*.0015));
+  eco.gdpGrowth=Math.max(-.06,Math.min(.08,(+eco.gdpGrowth||.02)+phaseBias*.007+(wr(6)-.5)*.003));
+  if(eco.phase==="불황"){
+    stocks.forEach((s,i)=>applyShock(s,-(0.008+wr(10+i)*.020)));
+    publishBreakingNews("📉 금융 위기 · 경기 침체", `경기 침체가 시작되었습니다. 물가 ${(eco.inflation*100).toFixed(1)}% · 실업률 ${(eco.unemployment*100).toFixed(1)}% · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+    notify("economy","경제 위기",`금융 위기 · 실업률 ${(eco.unemployment*100).toFixed(1)}%`);
+  } else if(eco.phase==="호황"){
+    stocks.forEach((s,i)=>applyShock(s,0.008+wr(40+i)*.020));
+    publishBreakingNews("🚀 경기 호황", `소비와 투자가 살아납니다. 물가 ${(eco.inflation*100).toFixed(1)}% · 실업률 ${(eco.unemployment*100).toFixed(1)}% · 성장률 ${(eco.gdpGrowth*100).toFixed(1)}%`);
+    notify("economy","경기 호황",`성장률 ${(eco.gdpGrowth*100).toFixed(1)}% · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+  } else {
+    publishBreakingNews("🏦 기준금리", `기준금리 ${(eco.baseRate*100).toFixed(2)}% · 경기 ${eco.phase} 국면이 시작되었습니다.`);
+    notify("economy","경제 지표",`경기 ${eco.phase} · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
+  }
+  return eco;
+}
 function tickAlt(){
   if(!state.altPrices||typeof state.altPrices!=="object") state.altPrices={};
-  ESTATES.forEach(e=>{
+  // 부동산·금·은 가격도 같은 게임 시각이면 모두 같은 값이 되도록 공용 난수를 씁니다.
+  const ar=k=>worldTickRand("alt",k);
+  ESTATES.forEach((e,ei)=>{
     const p=estatePrice(e.id);
-    const shock=Math.random()<.03?(Math.random()-.5)*.12:0;
-    state.altPrices[e.id]=Math.max(Math.round(e.price*.35),Math.round(p*(1+(Math.random()-.5)*e.vol+shock)));
+    const shock=ar(10+ei)<.03?(ar(20+ei)-.5)*.12:0;
+    state.altPrices[e.id]=Math.max(Math.round(e.price*.35),Math.round(p*(1+(ar(30+ei)-.5)*e.vol+shock)));
   });
-  METALS.forEach(m=>{
+  METALS.forEach((m,mi)=>{
     const p=metalPrice(m.id);
-    state.altPrices[m.id]=Math.max(Math.round(m.price*.35*100)/100,Math.round(p*(1+(Math.random()-.5)*m.vol)*100)/100);
+    state.altPrices[m.id]=Math.max(Math.round(m.price*.35*100)/100,Math.round(p*(1+(ar(40+mi)-.5)*m.vol)*100)/100);
   });
   if(state.marketSeconds%60===0){
     let rent=0,upkeep=0;
@@ -2440,35 +2533,11 @@ function tickAlt(){
   // tickAlt는 15게임초마다 실행되므로 남은 시간도 15초씩 줄여야 합니다.
   // (기존에는 1씩 줄어 90초 표시가 실제로는 1,350초가 되는 버그가 있었습니다.)
   eco.cycleLeft=(eco.cycleLeft||0)-15;
-  if(eco.cycleLeft<=0){
-    const phases=["호황","중립","불황"];
-    eco.phase=phases[Math.floor(Math.random()*3)];
-    eco.cycleLeft=60+Math.floor(Math.random()*60);
-    eco.rateAdj=eco.phase==="호황"?.004:eco.phase==="불황"?-.004:0;
-    const dir=Math.random()<.5?-1:1;
-    eco.baseRate=Math.max(.01,Math.min(.08,(eco.baseRate||.03)+dir*.0025));
-    // 경기 국면에 따라 물가·실업률·성장률이 움직이고, 이는 시장 방향에도 반영됩니다.
-    const phaseBias=eco.phase==="호황"?1:eco.phase==="불황"?-1:0;
-    eco.inflation=Math.max(.005,Math.min(.08,(+eco.inflation||.025)+phaseBias*.003+(Math.random()-.5)*.002));
-    eco.unemployment=Math.max(.015,Math.min(.15,(+eco.unemployment||.035)-phaseBias*.004+(Math.random()-.5)*.0015));
-    eco.gdpGrowth=Math.max(-.06,Math.min(.08,(+eco.gdpGrowth||.02)+phaseBias*.007+(Math.random()-.5)*.003));
-    if(eco.phase==="불황"){
-      stocks.forEach(s=>applyShock(s,-(0.01+Math.random()*.025)));
-      publishBreakingNews("📉 금융 위기 · 경기 침체", `경기 침체가 시작되었습니다. 물가 ${(eco.inflation*100).toFixed(1)}% · 실업률 ${(eco.unemployment*100).toFixed(1)}% · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
-      notify("economy","경제 위기",`금융 위기 · 실업률 ${(eco.unemployment*100).toFixed(1)}%`);
-    } else if(eco.phase==="호황"){
-      stocks.forEach(s=>applyShock(s,0.008+Math.random()*.02));
-      publishBreakingNews("🚀 경기 호황", `소비와 투자가 살아납니다. 물가 ${(eco.inflation*100).toFixed(1)}% · 실업률 ${(eco.unemployment*100).toFixed(1)}% · 성장률 ${(eco.gdpGrowth*100).toFixed(1)}%`);
-      notify("economy","경기 호황",`성장률 ${(eco.gdpGrowth*100).toFixed(1)}% · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
-    } else {
-      publishBreakingNews("🏦 기준금리", `기준금리 ${(eco.baseRate*100).toFixed(2)}% · 경기 ${eco.phase} 국면이 시작되었습니다.`);
-      notify("economy","경제 지표",`경기 ${eco.phase} · 기준금리 ${(eco.baseRate*100).toFixed(2)}%`);
-    }
-  }
-  if(state.marketSeconds%180===0 && Math.random()<.5){
-    const sector=["AI","반도체","배터리","우주","디지털 자산"][Math.floor(Math.random()*5)];
-    const up=Math.random()<.5;
-    stocks.filter(s=>s.theme.includes(sector)).forEach(s=>applyShock(s,(up?1:-1)*(.01+Math.random()*.03)));
+  if(eco.cycleLeft<=0) enterEconomyPhase();
+  if(state.marketSeconds%180===0 && worldTickRand("sector",1)<.5){
+    const sector=["AI","반도체","배터리","우주","디지털 자산"][Math.floor(worldTickRand("sector",2)*5)];
+    const up=worldTickRand("sector",3)<.5;
+    stocks.filter(s=>s.theme.includes(sector)).forEach((s,i)=>applyShock(s,(up?1:-1)*(.01+worldTickRand("sector",10+i)*.03)));
     publishBreakingNews("📈 산업 뉴스", `${sector} 업종에 ${up?"매수세":"차익 실현"}가 몰리고 있습니다.`);
   }
   const gi=gradeIndex(currentGrade());
@@ -2778,7 +2847,7 @@ function applyOfflineProgress(){
     if(p.amount<=0 || p.rate<=0) return;
     for(let i=0;i<periods;i++){
       const eff=Math.min(MAX_EFFECTIVE_DEPOSIT,p.amount>30000000?30000000+(p.amount-30000000)*0.5:p.amount);
-      const add=eff*(p.rate*depositBonus*0.015);
+      const add=eff*(p.rate*depositBonus*INTEREST_PERIOD);
       p.amount+=add; interest+=add;
     }
   });
@@ -3297,13 +3366,16 @@ function ensureStockFundamentals(s){
 function earningsSurprise(target){
   if(!stocks.length) return;
   const pool=stocks.filter(s=>!isIndexFund(s));
-  const s = (target&&target.id&&stock(target.id)) || (target&&target.stockId&&stock(target.stockId)) || pool[Math.floor(Math.random() * pool.length)];
+  // 실적도 같은 게임 시각이면 모두 같은 종목·같은 발표가 나오도록 공용 난수를 씁니다.
+  const key=`${Math.max(0,Math.floor(+state.marketSeconds||0))}|${(target&&(target.id||target.stockId))||"pool"}`;
+  const er=k=>worldRand("earn",key,k);
+  const s = (target&&target.id&&stock(target.id)) || (target&&target.stockId&&stock(target.stockId)) || pool[Math.floor(er(1) * pool.length)];
   if(!s) return;
   ensureStockFundamentals(s);
   // 매출 성장률과 영업이익률 변화가 함께 주가 방향을 결정합니다.
-  const revGrowth=(Math.random()-.45)*.18;
+  const revGrowth=(er(2)-.45)*.18;
   const marginBefore=s.opProfit/Math.max(1,s.revenue);
-  const marginAfter=Math.max(.005,Math.min(.45,marginBefore+(Math.random()-.5)*.06));
+  const marginAfter=Math.max(.005,Math.min(.45,marginBefore+(er(3)-.5)*.06));
   const revenue=Math.max(100000000,Math.round(s.revenue*(1+revGrowth)));
   const opProfit=Math.max(0,Math.round(revenue*marginAfter));
   const opGrowth=(opProfit-s.opProfit)/Math.max(1,s.opProfit);
@@ -4691,6 +4763,9 @@ function init(){
   update();
   recordAssetHistory();
   ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); cloudBoot(); firebaseBoot();
+  // 이전에 켜 둔 자동 매수가 남아 있으면 시작할 때 바로 알려 줍니다(몰래 매수되는 일 방지).
+  renderAutoBadge();
+  if(autoBuySources().length) notifyAlways("🤖 자동 매수가 켜져 있습니다", `${autoBuySources().join(" · ")}가 켜져 있습니다. 원치 않으면 눌러서 끄세요.`, {durationMs:9000, onClick:()=>{ const b=$("autoBadge"); if(b) b.click(); }});
 
   // 1초 드라이버: 배속(1~5x)·일시정지를 한곳에서 처리합니다. 중복 생성되지 않게 한 번만 시작합니다.
   startLoops();
@@ -5566,9 +5641,12 @@ function autoPanelHtml(){
       <label>세금 예산 (원, 0=무제한)<input id="auto-tax-budget" type="number" min="0" step="10000" value="${a.taxBudget||0}"></label>
       <label>목표 주식 비중 (%)<input id="auto-reb-pct" type="number" min="0" max="100" step="5" value="${a.rebStockPct??60}"></label>
       <label>허용 범위 (%p)<input id="auto-reb-band" type="number" min="2" max="20" step="1" value="${a.rebBand??5}"></label>
-      <label>&nbsp;<button class="buy" onclick="saveAutoSettings()">${a.enabled?"규칙 저장":"자동 투자 켜기"}</button></label>
+      <label>&nbsp;<button class="ghost" onclick="saveAutoSettings()">규칙만 저장</button></label>
+      ${a.enabled?`<label>&nbsp;<button class="sell" onclick="saveAutoSettings(false)">자동 투자 끄기</button></label>`:`<label>&nbsp;<button class="buy" onclick="saveAutoSettings(true)">자동 투자 켜기</button></label>`}
       <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
-      ${a.enabled?'<label>&nbsp;<button class="sell" onclick="disableAuto()">자동 투자 끄기</button></label>':""}
+      ${(autoBuySources().length>1)?`<label>&nbsp;<button class="sell" onclick="quickDisableAuto()">모든 자동 매수 끄기</button></label>`:""}
+    </div>
+    <div class="notice" style="margin-top:8px">지금 자동으로 사는 항목: <b>${autoBuySources().length?autoBuySources().join(" · "):"없음"}</b> · 규칙만 바꾸려면 <b>규칙만 저장</b>을 누르세요.
     </div>
     <p class="muted-sm">${a.enabled?`켜짐 · ${a.every||60}초마다 현금을 주식 ${a.stockPct}% / 금 ${a.goldPct||0}% / 부동산 ${a.estatePct||0}% / 예금으로 재투자합니다.${a.autoSell?` 익절 ${a.takeProfit}% 또는 손절 ${a.stopLoss}%에 닿으면 자동 매도합니다.`:""}${a.rebalance?` 주식 비중이 목표 ${a.rebStockPct??60}%에서 ${a.rebBand??5}%p 이상 벗어나면 자동으로 리밸런싱합니다.${a.taxAware?` 세금 고려 모드에서는 평가차익이 작은 종목부터 매도하고, 세금 예산 ${a.taxBudget>0?won(a.taxBudget):"무제한"}을 넘는 매도는 건너뜁니다.`:""}`:""}`:"꺼짐 · 켜면 설정한 주기마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
 }
@@ -5878,11 +5956,12 @@ function updateFX(){
   
   // 완만한 추세선(anchor)이 아주 느리게 움직이고, 실제 환율은 그 추세선을 따라갑니다.
   // 추세는 시작 환율 ±12% 안으로 제한하고 복원력도 두어, 폭주 없이 방향성만 남깁니다.
-  fx.anchor = fx.anchor + (Math.random() - 0.5) * 0.004 * fx.anchor + (START_FX - fx.anchor) * 0.0003;
+  const fxr=k=>worldTickRand("fx",k);
+  fx.anchor = fx.anchor + (fxr(1) - 0.5) * 0.004 * fx.anchor + (START_FX - fx.anchor) * 0.0003;
   fx.anchor = Math.max(START_FX * 0.88, Math.min(START_FX * 1.12, fx.anchor));
 
   let revert = ((fx.anchor - fx.usd) / fx.anchor) * 0.05;
-  let changeRate = (Math.random() - 0.5) * baseVol + revert;
+  let changeRate = (fxr(2) - 0.5) * baseVol + revert;
   fx.usd = Math.max(1000, Math.round(fx.usd * (1 + changeRate)));
   
   let e=document.getElementById("fxPrice");
@@ -6284,14 +6363,16 @@ function tickMarket(){
     } else {
       // 장중: 오늘 시가로 되돌아가려는 힘 + 작은 잡음 + 대형 이벤트 온도
       // 저가주에서도 가격이 튀지 않도록 되돌림과 한 틱 변동 폭을 제한합니다.
-      const noise=(Math.random()-.5)*s.vol*.35;
+      const noise=(worldTickRand("intra",s.id)-.5)*s.vol*.35;
       const gap=(s.dayOpen-s.price)/Math.max(1,s.dayOpen);
       const pull=Math.max(-.02,Math.min(.02,gap*.06));
       let bias=0;
+      // 이벤트 편향은 상승/하락을 같은 크기로 맞춥니다. 하락 쪽만 크면 장기적으로
+      // 시장 전체가 조용히 하락해(모두가 손해) 투자할 재미가 사라집니다.
       if(state.currentEvent==="AI_BOOM"){ bias+=.0012; if(s.theme.includes("AI")||s.theme.includes("반도체")) bias+=.0028; }
-      if(state.currentEvent==="SEMI_STRONG"){ bias+=.0008; if(s.theme.includes("반도체")) bias+=.0022; }
-      if(state.currentEvent==="MARKET_CRASH") bias-=.0022;
-      if(state.currentEvent==="BUBBLE_SHOCK") bias-=.0008;
+      if(state.currentEvent==="SEMI_STRONG"){ bias+=.0010; if(s.theme.includes("반도체")) bias+=.0024; }
+      if(state.currentEvent==="MARKET_CRASH") bias-=.0012;
+      if(state.currentEvent==="BUBBLE_SHOCK") bias-=.0006;
       // 일중 거래량과 외국인·기관 순매수. 순매수 강도는 다음 틱 가격에 완만하게 반영됩니다.
       // 시드 기반 노이즈를 써서 수급 계산이 시장 가격의 난수 흐름을 소비하지 않게 합니다.
       let hash=2166136261;
@@ -6349,11 +6430,13 @@ function ensureDailyBreadth(dayIndex){
 }
 
 function marketEventsAndNews() {
+  // 이벤트·속보도 같은 게임 시각이면 모두 같은 내용이 나오도록 공용 난수를 씁니다.
+  const wr=k=>worldTickRand("news",k);
   // 15% 확률로 시장 빅 트렌드 이벤트 발생
-  if(!state.currentEvent && Math.random() < 0.15) {
+  if(!state.currentEvent && wr(1) < 0.15) {
     const evs = ["AI_BOOM", "SEMI_STRONG", "FX_SURGE", "FX_CRASH", "MARKET_CRASH", "BUBBLE_SHOCK"];
-    state.currentEvent = evs[Math.floor(Math.random() * evs.length)];
-    state.eventTimer = 25 + Math.floor(Math.random() * 35); // 25~60초간 지속
+    state.currentEvent = evs[Math.floor(wr(2) * evs.length)];
+    state.eventTimer = 25 + Math.floor(wr(3) * 35); // 25~60초간 지속
     
     let evText = "";
     if(state.currentEvent === "AI_BOOM") evText = "🔥 초거대 글로벌 인공지능 호황기가 도래하며 관련 테마주가 유례없는 초강세를 보입니다!";
@@ -6366,19 +6449,20 @@ function marketEventsAndNews() {
     publishBreakingNews("🌟 대형 경제 기류 발생", evText);
 
     // 속보 내용이 실제 가격에 반영되도록 관련 종목에 즉시 충격을 줍니다.
+    if(!state.currentEvent) return;
     if(state.currentEvent === "SEMI_STRONG"){
-      stocks.filter(s=>s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.02+Math.random()*0.03));
+      stocks.filter(s=>s.theme.includes("반도체")).forEach((s,i)=>applyShock(s, 0.02+wr(10+i)*0.03));
     }
     if(state.currentEvent === "AI_BOOM"){
       // 호황은 시장 전체를 조금씩 올리고, AI·반도체 테마는 더 크게 올립니다.
-      stocks.forEach(s=>applyShock(s, 0.01+Math.random()*0.01));
-      stocks.filter(s=>s.theme.includes("AI")||s.theme.includes("반도체")).forEach(s=>applyShock(s, 0.02+Math.random()*0.03));
+      stocks.forEach((s,i)=>applyShock(s, 0.01+wr(20+i)*0.01));
+      stocks.filter(s=>s.theme.includes("AI")||s.theme.includes("반도체")).forEach((s,i)=>applyShock(s, 0.02+wr(40+i)*0.03));
     }
     if(state.currentEvent === "MARKET_CRASH"){
-      stocks.forEach(s=>applyShock(s, -(0.02+Math.random()*0.03)));
+      stocks.forEach((s,i)=>applyShock(s, -(0.02+wr(60+i)*0.03)));
     }
     if(state.currentEvent === "BUBBLE_SHOCK"){
-      stocks.forEach(s=>applyShock(s, -(0.015+Math.random()*0.025)));
+      stocks.forEach((s,i)=>applyShock(s, -(0.015+wr(80+i)*0.025)));
     }
     if(state.currentEvent === "FX_SURGE"){
       fx.usd = Math.round(fx.usd * 1.03);
@@ -6397,8 +6481,10 @@ function marketEventsAndNews() {
   let up=dayChangePct(s)>=0;
   let reasons=up?["공격적인 분기 실적 기대감이 커지며","해외 기관들의 대규모 순매수세가 포착되며","신규 특허 취득 및 상용화 파트너십 소식에","장기 공급 계약 모멘텀이 시장에서 조명받으며"]:["고점 돌파 실패에 따른 실망 매물이 가중되며","단기 변동성 오버슈팅에 의한 매도세 유출로","일부 루머성 악재 지적에 거래 심리가 냉각되며","해외 거시 리스크 부담이 반영되며"];
   // 속보 내용이 실제 가격에도 반영되도록 같은 방향으로 소폭 충격을 가합니다.
-  applyShock(s, (up?1:-1) * (0.004 + Math.random()*0.012));
-  let text=`${s.name} (${s.ticker}) 측은 ${reasons[Math.floor(Math.random()*reasons.length)]} 전일 대비 ${pct(dayChangePct(s))} ${up?"상승":"하락"} 흐름을 연출 중입니다.`;
+  // 매번(7초마다) 큰 충격을 주면 변동성 때문에 장기 수익률이 계속 깎이므로(변동성 손실),
+  // 가끔·작게만 반영합니다.
+  if(wr(102) < 0.35) applyShock(s, (up?1:-1) * (0.002 + wr(100)*0.006));
+  let text=`${s.name} (${s.ticker}) 측은 ${reasons[Math.floor(wr(101)*reasons.length)]} 전일 대비 ${pct(dayChangePct(s))} ${up?"상승":"하락"} 흐름을 연출 중입니다.`;
   publishBreakingNews("시황 속보", text);
 }
 
@@ -6456,7 +6542,7 @@ function interest(){
       effectiveAmount = Math.min(MAX_EFFECTIVE_DEPOSIT, effectiveAmount);
       
       // 15초 단위 반영 스케일: 연이율 × 0.015 (예금 4.2% → 15초당 0.063%, 시간당 약 +16%)
-      let calculatedInterest = effectiveAmount * (p.rate * depositBonus * 0.015);
+      let calculatedInterest = effectiveAmount * (p.rate * depositBonus * INTEREST_PERIOD);
       p.amount += calculatedInterest;
     }
   });
@@ -6564,6 +6650,7 @@ function update(){
   if(bn) bn.textContent=wonShort(totalAssetsKRW());
   const sg=$("sideGrade"); if(sg) sg.textContent=currentGrade();
   refreshLaborUI();
+  renderAutoBadge();
 
   const grade=currentGrade();
   if(state.lastGrade && state.lastGrade!==grade) notify("grade","등급 변동",`${state.lastGrade} → ${grade}`);
