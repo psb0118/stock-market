@@ -65,6 +65,7 @@ function createGame() {
     check('권한 전 게이팅', g.run('pushEnabled()') === false);
     check('설정 화면에 알림 권한 요청 버튼', g.run('pushControlHtml()').includes('알림 권한 요청'));
     check('권한 상태와 복구 절차 표시', g.run('pushHelpHtml()').includes('알림 권한 상태') && g.run('pushHelpHtml()').includes('자물쇠'));
+    check('미리보기 iframe 안내', g.run('pushHelpHtml()').includes('iframe') && g.run('pushHelpHtml()').includes('새 탭'));
 
     const enabled = await g.run('enablePushNotifications()');
     check('권한 허용 후 켜짐', enabled === true && g.run('state.notify.push') === true && g.run('pushEnabled()') === true);
@@ -124,6 +125,14 @@ function createGame() {
     check('차단 상태 감지', g.run('pushPermission()') === 'denied' && g.run('pushControlHtml()').includes('허용 방법'));
     const enabled = await g.run('enablePushNotifications()');
     check('차단 상태에서는 켜지지 않음', enabled === false && g.run('state.notify.push') === false);
+  }
+
+  {
+    const g = createGame();
+    g.run("navigator.userAgent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'; 1");
+    check('iOS 미설치 상태 감지', g.run('pushPlatform()') === 'ios' && g.run('pushBlockReason()').includes('홈 화면'));
+    check('iOS 설치 안내 표시', g.run('pushControlHtml()').includes('해결 방법') && g.run('pushHelpHtml()').includes('홈 화면에 추가'));
+    check('iOS 미설치 상태에서는 켜지지 않음', await g.run('enablePushNotifications()') === false);
   }
 
   {

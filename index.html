@@ -1419,6 +1419,7 @@ function pushHelpHtml(){
     <div class="muted-sm" style="margin:3px 0 0">${pushStatusText()}</div>
     ${pushStepsHtml()}
     <div class="muted-sm" style="margin-top:6px">권한을 한 번 차단하면 브라우저가 다시 묻지 않습니다. 위처럼 사이트 설정에서 허용으로 바꾼 뒤 새로고침해 주세요.</div>
+    <div class="muted-sm" style="margin-top:4px">앱 안의 미리보기(iframe)에서는 권한 창이 차단될 수 있습니다. 브라우저 새 탭에서 이 페이지를 직접 열어 주세요.</div>
   </div>`;
 }
 function openPushHelp(){
@@ -1435,7 +1436,7 @@ async function enablePushNotifications(){
       // 브라우저가 권한 창을 띄우지 못하는 환경에서도 화면이 멈추지 않게 시간 제한을 둡니다.
       perm=await Promise.race([
         window.Notification.requestPermission(),
-        new Promise(resolve=>setTimeout(()=>resolve("timeout"),60000))
+        new Promise(resolve=>setTimeout(()=>resolve("timeout"),20000))
       ]);
     }catch(e){ perm="denied"; }
     if(perm==="timeout"){
