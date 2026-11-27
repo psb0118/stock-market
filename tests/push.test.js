@@ -66,6 +66,7 @@ function createGame() {
     check('설정 화면에 알림 권한 요청 버튼', g.run('pushControlHtml()').includes('알림 권한 요청'));
     check('권한 상태와 복구 절차 표시', g.run('pushHelpHtml()').includes('알림 권한 상태') && g.run('pushHelpHtml()').includes('자물쇠'));
     check('미리보기 iframe 안내', g.run('pushHelpHtml()').includes('iframe') && g.run('pushHelpHtml()').includes('새 탭'));
+    check('도움말 모달에도 iframe 안내', g.run("openPushHelp(); document.getElementById('modalRoot').innerHTML.includes('iframe')") === true);
 
     const enabled = await g.run('enablePushNotifications()');
     check('권한 허용 후 켜짐', enabled === true && g.run('state.notify.push') === true && g.run('pushEnabled()') === true);
