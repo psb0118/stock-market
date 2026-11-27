@@ -4582,7 +4582,12 @@ try{
   const raw=(fm&&fm.getAttribute?fm.getAttribute("content"):"")||"";
   if(raw.trim()) FIREBASE_CONFIG=JSON.parse(raw);
 }catch(e){ FIREBASE_CONFIG=null; }
-let fbApp=null, fbAuth=null, fbDb=null, fbApi=null, fbUser=null, fbBusy=false;
+let fbApp=null, fbAuth=null, fbDb=null, fbApi=null, fbUser=null, fbBusy=false, fbLoadPromise=null;
+// 접속 상태 하트비트와 관리자 강제 초기화 상태
+let fbPresenceTimer=null, fbPresenceUid=null, fbResetUnsub=null;
+let fbAdminUsers=null, fbAdminLoading=false, fbAdminBusy=false, fbAdminMsg="";
+const FB_PRESENCE_MS=60000;       // 60초마다 접속 신호
+const FB_ONLINE_WINDOW_MS=150000; // 최근 2분 30초 안이면 접속 중으로 표시
 // 관리자 계정(설정 화면에 관리자 배지가 붙습니다).
 const ADMIN_EMAILS=["26007@changshin.ms.kr","soundpsb1@gmail.com"];
 function isAdminEmail(email){ const e=String(email||"").trim().toLowerCase(); return !!e && ADMIN_EMAILS.some(a=>a.toLowerCase()===e); }
@@ -4651,17 +4656,21 @@ function fbClearError(){ fbLastError=null; try{ settingsPage(); }catch(e){} }
 async function firebaseLoad(){
   if(!firebaseConfigured()) throw Object.assign(new Error("no_firebase"),{code:"no_firebase"});
   if(fbApi) return fbApi;
-  const base=`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
-  const [appMod,authMod,dbMod]=await Promise.all([
-    import(`${base}/firebase-app.js`),
-    import(`${base}/firebase-auth.js`),
-    import(`${base}/firebase-firestore.js`)
-  ]);
-  fbApp=appMod.initializeApp(FIREBASE_CONFIG);
-  fbAuth=authMod.getAuth(fbApp);
-  fbDb=dbMod.getFirestore(fbApp);
-  fbApi={app:appMod,auth:authMod,db:dbMod};
-  return fbApi;
+  if(fbLoadPromise) return fbLoadPromise;
+  fbLoadPromise=(async()=>{
+    const base=`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
+    const [appMod,authMod,dbMod]=await Promise.all([
+      import(`${base}/firebase-app.js`),
+      import(`${base}/firebase-auth.js`),
+      import(`${base}/firebase-firestore.js`)
+    ]);
+    fbApp=appMod.initializeApp(FIREBASE_CONFIG);
+    fbAuth=authMod.getAuth(fbApp);
+    fbDb=dbMod.getFirestore(fbApp);
+    fbApi={app:appMod,auth:authMod,db:dbMod};
+    return fbApi;
+  })();
+  try{ return await fbLoadPromise; } finally { fbLoadPromise=null; }
 }
 async function firebaseBoot(){
   if(!firebaseConfigured()) return;
@@ -4670,9 +4679,15 @@ async function firebaseBoot(){
     try{ await api.auth.getRedirectResult(fbAuth); }catch(e){}
     api.auth.onAuthStateChanged(fbAuth,u=>{
       const was=fbUser;
+      const wasUid=was&&was.uid;
       fbUser=u||null;
-      if(fbUser&&!was){ fbAutoPaused=false; trackEvent("sign_in"); firebaseAfterSignIn(); }
-      if(!fbUser){ fbAutoPaused=false; }
+      if(wasUid && (!fbUser || fbUser.uid!==wasUid)) fbPresenceStop(true);
+      if(fbUser && (!was || was.uid!==fbUser.uid)){
+        fbAutoPaused=false; trackEvent("sign_in");
+        fbPresenceStart();
+        firebaseAfterSignIn();
+      }
+      if(!fbUser){ fbAutoPaused=false; fbAdminUsers=null; fbAdminBusy=false; fbAdminMsg=""; }
       try{ if(activePage()==="settings") settingsPage(); }catch(e){}
     });
   }catch(e){ /* SDK 로드 실패는 조용히 무시하고 로컬 저장으로 계속합니다. */ }
@@ -4705,11 +4720,241 @@ async function firebaseSignIn(){
 async function firebaseSignOut(){
   try{
     const api=await firebaseLoad();
+    const uid=fbPresenceUid;
+    fbPresenceStop(false);
+    if(uid) await fbPresenceOffline(uid);
     await api.auth.signOut(fbAuth);
-    fbUser=null;
+    fbUser=null; fbAdminUsers=null; fbAdminBusy=false; fbAdminMsg="";
     settingsPage();
   }catch(e){ alert("로그아웃하지 못했습니다: "+((e&&(e.code||e.message))||"오류")); }
 }
+// ── 접속 상태 · 관리자 접속자 목록 · 강제 초기화 ──────────────
+function fbMillis(v){
+  if(!v) return 0;
+  if(typeof v==="number") return v;
+  if(typeof v.toMillis==="function") return v.toMillis();
+  const n=+v; return Number.isFinite(n)?n:0;
+}
+function fbPresenceOnline(data, now){
+  if(!data || data.online!==true) return false;
+  const at=fbMillis(data.lastSeen);
+  return !!at && (now-at)<=FB_ONLINE_WINDOW_MS;
+}
+// Firestore 문서 배열을 최근 접속 순으로 추리고, 오래된 하트비트는 제외합니다.
+function fbOnlineFromDocs(docs, now){
+  return (docs||[]).map(d=>Object.assign({id:(d&&d.id)||""}, d&&d.data?d.data():(d||{})))
+    .filter(u=>fbPresenceOnline(u, now))
+    .sort((a,b)=>fbMillis(b.lastSeen)-fbMillis(a.lastSeen));
+}
+function fbAgoText(ms){
+  const s=Math.max(0,Math.round((Date.now()-ms)/1000));
+  return s<60?`${s}초 전`:`${Math.floor(s/60)}분 전`;
+}
+async function fbPresenceBeat(uid){
+  if(!fbUser || fbUser.uid!==uid) return;
+  try{
+    const api=await firebaseLoad();
+    await api.db.setDoc(api.db.doc(fbDb,"presence",uid),{
+      uid,
+      nickname:fbUser.displayName||"익명",
+      email:fbUser.email||"",
+      online:true,
+      device:fbDevice(),
+      lastSeen:api.db.serverTimestamp()
+    },{merge:true});
+  }catch(e){ /* 규칙 게시 전이거나 오프라인이면 조용히 넘어갑니다. */ }
+}
+async function fbPresenceOffline(uid){
+  if(!uid) return;
+  try{
+    const api=await firebaseLoad();
+    await api.db.setDoc(api.db.doc(fbDb,"presence",uid),{
+      uid, online:false, lastSeen:api.db.serverTimestamp()
+    },{merge:true});
+  }catch(e){}
+}
+function fbPresenceStop(markOffline){
+  const uid=fbPresenceUid;
+  if(fbPresenceTimer){ clearInterval(fbPresenceTimer); fbPresenceTimer=null; }
+  fbPresenceUid=null;
+  if(fbResetUnsub){ try{ fbResetUnsub(); }catch(e){} fbResetUnsub=null; }
+  if(markOffline && uid) fbPresenceOffline(uid);
+}
+function fbPresenceStart(){
+  if(!fbUser) return;
+  const uid=fbUser.uid;
+  if(fbPresenceUid===uid && fbPresenceTimer) return;
+  fbPresenceStop(true);
+  fbPresenceUid=uid;
+  fbPresenceBeat(uid);
+  fbPresenceTimer=setInterval(()=>{ if(fbUser && fbUser.uid===uid) fbPresenceBeat(uid); }, FB_PRESENCE_MS);
+}
+function fbResetSeenKey(uid){ return "money_playground_admin_reset_"+uid; }
+function fbResetId(data){ return String((data&&data.requestId)||""); }
+function fbResetAlreadySeen(uid, data){
+  const id=fbResetId(data);
+  if(!id) return true;
+  try{ return localStorage.getItem(fbResetSeenKey(uid))===id; }catch(e){ return false; }
+}
+function fbResetMarkSeen(uid, data){
+  try{ localStorage.setItem(fbResetSeenKey(uid), fbResetId(data)); }catch(e){}
+}
+function fbResetAt(data){
+  return fbMillis(data&&data.at) || fbMillis(data&&data.requestedAt);
+}
+// 오래된 초기화 신호가 나중에 새 기기에서 현재 진행을 지우지 않도록,
+// 초기화 이후에 서버에 저장된 진행이 있으면 이미 처리된 것으로 봅니다.
+async function fbResetIsStale(api, uid, data){
+  const at=fbResetAt(data);
+  if(!at) return false;
+  try{
+    const snap=await api.db.getDoc(api.db.doc(fbDb,"saves",uid));
+    if(!snap.exists()) return false;
+    const d=snap.data()||{};
+    // updatedAt은 Firestore 서버 시각이라 기기 시계 차이에 덜 민감합니다.
+    const saved=fbMillis(d.updatedAt) || fbMillis(d.savedAt);
+    return saved>at;
+  }catch(e){ return false; }
+}
+// 로그인한 기기는 관리자의 초기화 신호를 실시간으로 받아 즉시 반영합니다.
+function fbWatchForcedReset(){
+  if(!fbUser) return;
+  if(fbResetUnsub){ try{ fbResetUnsub(); }catch(e){} fbResetUnsub=null; }
+  const uid=fbUser.uid;
+  firebaseLoad().then(api=>{
+    if(!fbUser || fbUser.uid!==uid || fbResetUnsub) return;
+    fbResetUnsub=api.db.onSnapshot(api.db.doc(fbDb,"admin_resets",uid),snap=>{
+      if(!fbUser || fbUser.uid!==uid || !snap.exists()) return;
+      const data=snap.data()||{};
+      if(fbResetAlreadySeen(uid,data)) return;
+      (async()=>{
+        if(await fbResetIsStale(api,uid,data)){ fbResetMarkSeen(uid,data); return; }
+        if(!fbUser || fbUser.uid!==uid) return;
+        fbResetMarkSeen(uid,data);
+        fbApplyForcedReset(data);
+      })();
+    },()=>{});
+  }).catch(()=>{});
+}
+async function fbCheckForcedReset(api){
+  if(!fbUser) return false;
+  try{
+    const uid=fbUser.uid;
+    const snap=await api.db.getDoc(api.db.doc(fbDb,"admin_resets",uid));
+    if(!fbUser || fbUser.uid!==uid || !snap.exists()) return false;
+    const data=snap.data()||{};
+    if(fbResetAlreadySeen(uid,data)) return false;
+    if(await fbResetIsStale(api,uid,data)){ fbResetMarkSeen(uid,data); return false; }
+    if(!fbUser || fbUser.uid!==uid) return false;
+    fbResetMarkSeen(uid,data);
+    fbApplyForcedReset(data);
+    return true;
+  }catch(e){ return false; }
+}
+function fbApplyForcedReset(data){
+  const mode=data && data.mode==="all" ? "all" : "run";
+  const by=String((data&&data.by)||"관리자");
+  fbAutoPaused=true; fbConflict=null; fbSyncRev=null;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  clearGame(true);
+  if(mode==="all"){
+    // 전체 초기화는 환생 기록과 영구 업그레이드까지 지웁니다.
+    state.rebirth={count:0,points:0,spent:0,upgrades:{},bestNet:0,history:[],notified:false};
+    state.onboard={done:false,dismissed:false,seen:{},unlocked:{},firstTrade:false};
+  }
+  saveGame();
+  try{ settingsPage(); }catch(e){}
+  openModal("관리자 초기화",`<p>관리자 <b>${escHtml(by)}</b>가 이 계정을 초기화했습니다.</p>
+    <p class="muted-sm" style="margin-top:6px">${mode==="all"?"현재 진행과 환생·영구 업그레이드가 모두 초기화되었습니다.":"현재 진행과 서버 저장·점수가 초기화되었습니다. 환생·영구 업그레이드는 유지됩니다."}</p>
+    <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="closeModal()">확인</button></div>`);
+  notify("system","관리자 초기화", mode==="all"?"환생 기록까지 전체 초기화되었습니다.":"현재 진행이 초기화되었습니다.");
+}
+function fbAdminPanelHtml(){
+  const list=fbAdminUsers;
+  const rows=Array.isArray(list)?list.map(u=>{
+    const uid=String(u.uid||u.id||"");
+    if(!uid) return "";
+    const self=!!(fbUser&&fbUser.uid===uid);
+    return `<div class="rank-row"><b>${escHtml(u.nickname||"익명")}${self?' <span class="pill">나</span>':""}</b><span>${escHtml(u.email||uid)}<br><span class="muted-sm">${escHtml(fbAgoText(fbMillis(u.lastSeen)))} 접속</span></span><button class="ghost small" onclick="adminResetPrompt('${escAttr(uid)}')">초기화</button></div>`;
+  }).join(""):"";
+  return `<div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.12)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <b style="font-size:13px">관리자 · 접속 중인 사용자</b>
+      <button class="ghost small" onclick="fbAdminRefresh()" ${fbAdminLoading?"disabled":""}>${fbAdminLoading?"불러오는 중…":"새로고침"}</button>
+    </div>
+    <p class="muted-sm" style="margin-top:6px">최근 ${Math.round(FB_ONLINE_WINDOW_MS/1000)}초 안에 접속 신호를 보낸 Google 로그인 사용자만 표시됩니다.</p>
+    ${fbAdminMsg?`<p class="muted-sm" style="margin-top:6px;color:#7a271a">${escHtml(fbAdminMsg)}</p>`:""}
+    ${list===null?`<p class="muted-sm" style="margin-top:8px">아직 목록을 불러오지 않았습니다. 새로고침을 눌러 주세요.</p>`:(rows||`<p class="muted-sm" style="margin-top:8px">지금 접속 중인 사용자가 없습니다.</p>`)}
+    <p class="muted-sm" style="margin-top:8px">초기화는 서버 저장·점수와 해당 기기의 현재 진행을 지웁니다. 전체 초기화는 환생·영구 업그레이드도 지웁니다.</p>
+  </div>`;
+}
+async function fbAdminRefresh(){
+  if(!isAdminUser() || fbAdminLoading) return;
+  fbAdminLoading=true; fbAdminMsg="";
+  try{
+    const api=await firebaseLoad();
+    const snap=await api.db.getDocs(api.db.query(api.db.collection(fbDb,"presence"), api.db.where("online","==",true), api.db.limit(200)));
+    fbAdminUsers=fbOnlineFromDocs(snap.docs, Date.now());
+  }catch(e){
+    const code=firebaseErrorCode(e);
+    fbAdminMsg=code.indexOf("permission-denied")>=0 ? "접속자 목록 권한이 없습니다. firestore.rules를 게시했는지 확인하세요." : `접속자 목록을 불러오지 못했습니다 (${code})`;
+  }finally{
+    fbAdminLoading=false;
+    try{ firebasePanelRefresh(""); }catch(e){}
+  }
+}
+function adminResetPrompt(uid){
+  if(!isAdminUser()) return;
+  const u=(fbAdminUsers||[]).find(x=>String(x.uid||x.id||"")===String(uid));
+  if(!u) return;
+  const name=escHtml(u.nickname||u.email||uid);
+  const ident=u.email?`<span class="muted-sm">${escHtml(u.email)}</span>`:"";
+  openModal("강제 초기화",`<p><b>${name}</b> ${ident} 계정을 강제로 초기화할까요?</p>
+    <p class="muted-sm" style="margin-top:6px">대상이 접속 중이면 즉시 적용되고, 오프라인이면 다음 로그인 때 적용됩니다.</p>
+    <div class="button-row" style="margin-top:10px">
+      <button class="ghost" onclick="adminResetTarget('${escAttr(uid)}','run')">현재 진행만 초기화</button>
+      <button class="sell" onclick="adminResetTarget('${escAttr(uid)}','all')">환생까지 전체 초기화</button>
+      <button class="ghost" onclick="closeModal()">취소</button>
+    </div>`);
+}
+async function adminResetTarget(uid, mode){
+  if(!isAdminUser()) return alert("관리자 계정으로 로그인해야 합니다.");
+  if(fbAdminBusy) return;
+  const u=(fbAdminUsers||[]).find(x=>String(x.uid||x.id||"")===String(uid));
+  const name=(u&&(u.nickname||u.email))||uid;
+  const all=mode==="all";
+  if(!confirm(`${name} 계정을 ${all?"환생 기록까지 전체":"현재 진행만"} 강제 초기화할까요?\n\n${all?"환생·영구 업그레이드도 삭제됩니다.":"환생·영구 업그레이드는 유지됩니다."}`)) return;
+  closeModal();
+  fbAdminBusy=true;
+  try{
+    const api=await firebaseLoad();
+    const requestId=Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
+    // 신호를 먼저 남겨 대상 기기가 옛 저장을 다시 올리지 않게 합니다.
+    await api.db.setDoc(api.db.doc(fbDb,"admin_resets",uid),{
+      requestId, mode:all?"all":"run", by:fbUser.email||"", at:api.db.serverTimestamp(), requestedAt:Date.now()
+    },{merge:true});
+    await api.db.deleteDoc(api.db.doc(fbDb,"saves",uid));
+    // 백업 스냅샷 삭제
+    const hist=await api.db.getDocs(api.db.collection(fbDb,"saves",uid,"history"));
+    await Promise.all(hist.docs.map(d=>api.db.deleteDoc(d.ref)));
+    // 모든 시즌의 점수 삭제
+    const scoreSnap=await api.db.getDocs(api.db.query(api.db.collection(fbDb,"scores"),api.db.where("uid","==",uid)));
+    await Promise.all(scoreSnap.docs.map(d=>api.db.deleteDoc(d.ref)));
+    await fbAdminRefresh();
+    fbAdminMsg=`${name} 계정을 초기화했습니다.`;
+    notify("system","강제 초기화 완료",`${name} 계정의 ${all?"전체":"현재"} 진행을 초기화했습니다.`);
+  }catch(e){
+    const code=firebaseErrorCode(e);
+    fbAdminMsg=code.indexOf("permission-denied")>=0 ? "초기화 권한이 없습니다. firestore.rules를 게시했는지 확인하세요." : `초기화하지 못했습니다 (${code})`;
+  }finally{
+    fbAdminBusy=false;
+    try{ firebasePanelRefresh(""); }catch(e){}
+  }
+}
+if(typeof window!=="undefined" && typeof window.addEventListener==="function"){
+  window.addEventListener("pagehide",()=>{ if(fbPresenceUid) fbPresenceOffline(fbPresenceUid); });
+}
+
 function firebaseSavePayload(){
   const data=buildSaveData();
   const raw=JSON.stringify(data);
@@ -4867,6 +5112,8 @@ async function firebaseAfterSignIn(){
   if(!fbUser) return;
   try{
     const api=await firebaseLoad();
+    // 관리자가 초기화한 계정이면 옛 저장을 올리기 전에 로컬 진행을 먼저 비웁니다.
+    if(await fbCheckForcedReset(api)) return;
     const {remote, conflict}=await fbPreflight(api);
     const remoteScore=remote?Math.round(+remote.score||0):0;
     const local=Math.round(totalAssetsKRW());
@@ -4885,6 +5132,9 @@ async function firebaseAfterSignIn(){
   }catch(e){
     firebaseNoteError(e,"로그인 확인");
   }finally{
+    // 초기화 확인이 끝난 뒤에 실시간 신호를 연결해 옛 저장을 다시 올리는 경쟁을 막습니다.
+    fbWatchForcedReset();
+    if(isAdminUser()) fbAdminRefresh();
     if(activePage()==="settings"){ try{ firebasePanelRefresh(""); }catch(_){} }
   }
 }
@@ -5020,7 +5270,7 @@ function firebasePanelHtml(){
       <button class="ghost" onclick="firebaseLeaderboard()">리더보드</button>
       <button class="sell" onclick="firebaseSignOut()">로그아웃</button>
     </div>
-    <p class="muted-sm" style="margin-top:8px;">저장은 Firestore의 <code>saves/{uid}</code>, 순위는 <code>scores</code>에 기록됩니다. 불러오기는 확인 후 이 기기의 진행을 덮어씁니다.</p>${fbDiagBtnHtml()}${help}`;
+    <p class="muted-sm" style="margin-top:8px;">저장은 Firestore의 <code>saves/{uid}</code>, 순위는 <code>scores</code>에 기록됩니다. 불러오기는 확인 후 이 기기의 진행을 덮어씁니다.</p>${isAdminUser()?fbAdminPanelHtml():""}${fbDiagBtnHtml()}${help}`;
 }
 function fbDiagBtnHtml(){
   const label=(fbDiag&&fbDiag.rows.length)?"연결 상태 다시 점검":"연결 상태 점검";

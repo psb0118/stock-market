@@ -8,13 +8,41 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // 관리자 계정은 Google 로그인 이메일이 검증된 경우에만 인정합니다.
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email == "26007@changshin.ms.kr"
+            || request.auth.token.email == "soundpsb1@gmail.com");
+    }
+
     // 클라우드 저장은 본인만 읽고 쓸 수 있습니다.
+    // 관리자는 강제 초기화를 위해 삭제만 할 수 있고, 내용은 읽지 않습니다.
     match /saves/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
-      // 저장 백업(최근 몇 개)도 본인만 읽고 쓸 수 있습니다.
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if isAdmin();
+      // 저장 백업도 본인만 읽고 쓸 수 있습니다.
       match /history/{snapId} {
-        allow read, write: if signedIn() && request.auth.uid == uid;
+        allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow delete: if isAdmin();
       }
+    }
+
+    // 접속 상태: 본인만 쓰고, 관리자는 목록을 읽을 수 있습니다.
+    match /presence/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.online is bool;
+      allow delete: if isAdmin();
+    }
+
+    // 관리자가 남기는 강제 초기화 신호: 대상 본인과 관리자만 읽을 수 있습니다.
+    match /admin_resets/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update, delete: if isAdmin();
     }
 
     // 리더보드는 공개 읽기, 쓰기는 본인 문서만 허용합니다.
@@ -27,7 +55,8 @@ service cloud.firestore {
         && request.resource.data.score is number
         && request.resource.data.score >= 0
         && request.resource.data.score <= 1000000000000000;
-      allow delete: if false;
+      // 관리자는 강제 초기화 때 대상의 모든 시즌 점수를 지울 수 있습니다.
+      allow delete: if isAdmin();
     }
   }
 }

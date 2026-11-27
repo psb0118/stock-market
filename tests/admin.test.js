@@ -1,0 +1,218 @@
+#!/usr/bin/env node
+/**
+ * 관리자 접속자 목록 · 강제 초기화 테스트.
+ * 실행: node tests/admin.test.js
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const rules = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
+const source = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
+
+let pass = 0, fail = 0;
+function check(name, ok, detail) {
+  if (ok) { pass++; console.log(`PASS ${name}${detail !== undefined ? `  [${detail}]` : ''}`); }
+  else { fail++; console.log(`FAIL ${name}${detail !== undefined ? `  [${detail}]` : ''}`); }
+}
+
+function makeElement(id) {
+  return {
+    id, value: '', textContent: '', innerHTML: '', disabled: false, className: '', style: {}, checked: false,
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    appendChild() {}, removeChild() {}, setAttribute() {}
+  };
+}
+
+function createGame() {
+  const els = new Map();
+  const el = id => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
+  const document = {
+    visibilityState: 'visible',
+    getElementById: el,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: id => makeElement(id),
+    body: makeElement('body'),
+    addEventListener() {}
+  };
+  const store = {};
+  const localStorage = {
+    getItem: k => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: k => { delete store[k]; }
+  };
+  const ctx = {
+    console, Math, Date, JSON, Number, isFinite, Intl, Promise,
+    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
+    alert: () => {}, confirm: () => true, document, localStorage,
+    window: { addEventListener() {} }, navigator: {}
+  };
+  vm.createContext(ctx);
+  vm.runInContext(source, ctx, { filename: 'index.html#script' });
+  const run = code => vm.runInContext(code, ctx);
+  run('clearGame(true); state.settings.confirmTrades=false; 1');
+  return { run, el, ctx, store, localStorage };
+}
+
+function fakeDb(calls) {
+  return {
+    doc: (db, col, id) => ({ col, id, path: `${col}/${id}` }),
+    collection: (db, ...parts) => ({ path: parts.join('/'), parts }),
+    query: (col, ...rest) => ({ col, rest }),
+    where: (field, op, value) => ({ where: [field, op, value] }),
+    limit: n => ({ limit: n }),
+    serverTimestamp: () => 'SERVER_TS',
+    setDoc: async (ref, data, opts) => { calls.push({ op: 'setDoc', ref, data, opts }); },
+    deleteDoc: async ref => { calls.push({ op: 'deleteDoc', ref }); },
+    getDocs: async q => {
+      calls.push({ op: 'getDocs', q });
+      return { docs: [] };
+    },
+    getDoc: async ref => {
+      calls.push({ op: 'getDoc', ref });
+      return { exists: () => false, data: () => null };
+    },
+    onSnapshot: () => () => {}
+  };
+}
+
+// ── 접속 중인 사용자만 추리기 ───────────────────────────────
+{
+  const g = createGame();
+  const result = g.run(`(()=>{
+    const now=Date.now();
+    fbUser={uid:'admin',email:'soundpsb1@gmail.com',displayName:'관리자'};
+    const list=fbOnlineFromDocs([
+      {id:'u1',data:()=>({uid:'u1',nickname:'활성',email:'a@x.com',online:true,lastSeen:now-1000})},
+      {id:'u2',data:()=>({uid:'u2',nickname:'오래됨',email:'b@x.com',online:true,lastSeen:now-200000})},
+      {id:'u3',data:()=>({uid:'u3',nickname:'오프라인',email:'c@x.com',online:false,lastSeen:now})},
+      {id:'u4',data:()=>({uid:'u4',nickname:'방금',email:'d@x.com',online:true,lastSeen:now-2000})}
+    ],now);
+    return {ids:list.map(x=>x.uid), online:fbPresenceOnline({online:true,lastSeen:now-1000},now), stale:fbPresenceOnline({online:true,lastSeen:now-200000},now)};
+  })()`);
+  check('최근 접속자만 목록에 포함', result.ids.join(',') === 'u1,u4', result.ids.join(','));
+  check('오프라인·오래된 하트비트 제외', result.online === true && result.stale === false);
+}
+
+// ── 관리자 화면 표시 ───────────────────────────────────────
+{
+  const g = createGame();
+  const panel = g.run(`(()=>{
+    const keep=FIREBASE_CONFIG; FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+    fbUser={uid:'admin',email:'26007@changshin.ms.kr',displayName:'관리자'};
+    fbAdminUsers=[
+      {uid:'u1',nickname:'활성',email:'a@x.com',online:true,lastSeen:Date.now()-1000},
+      {uid:'u2',nickname:'오래됨',email:'b@x.com',online:true,lastSeen:Date.now()-200000}
+    ];
+    const h=fbAdminPanelHtml();
+    const settings=firebasePanelHtml();
+    fbUser={uid:'user',email:'user@x.com'};
+    const normal=fbAdminPanelHtml();
+    fbAdminUsers=null; fbUser=null; FIREBASE_CONFIG=keep;
+    return {h,settings,normal};
+  })()`);
+  check('관리자에게 접속자 목록 패널 표시', panel.h.includes('관리자 · 접속 중인 사용자') && panel.h.includes('a@x.com'), panel.h.slice(0, 80));
+  check('설정 화면에도 관리자 패널 포함', panel.settings.includes('관리자 · 접속 중인 사용자'));
+  check('목록이 없으면 빈 상태 안내', panel.normal.includes('새로고침'));
+}
+
+// ── 강제 초기화 확인 모달 ─────────────────────────────────
+{
+  const g = createGame();
+  const modal = g.run(`(()=>{
+    fbUser={uid:'admin',email:'soundpsb1@gmail.com',displayName:'관리자'};
+    fbAdminUsers=[{uid:'u1',nickname:'대상',email:'u@x.com',online:true,lastSeen:Date.now()}];
+    adminResetPrompt('u1');
+    return document.getElementById('modalRoot').innerHTML;
+  })()`);
+  check('강제 초기화 모달에 대상 표시', modal.includes('대상') && modal.includes('u@x.com'));
+  check('진행만/전체 초기화 선택 제공', modal.includes("adminResetTarget('u1','run')") && modal.includes("adminResetTarget('u1','all')"));
+}
+
+// ── 대상 기기의 초기화 적용 ────────────────────────────────
+{
+  const g = createGame();
+  const runReset = g.run(`(()=>{
+    state.cash=123456; state.peakNet=123456;
+    state.rebirth={count:2,points:5,spent:0,upgrades:{start:1},bestNet:1,history:[],notified:true};
+    state.onboard={done:true,dismissed:true,seen:{rebirth:true},unlocked:{rebirth:true},firstTrade:true};
+    localStorage.setItem(SAVE_KEY,'old');
+    fbUser={uid:'u1',email:'u@x.com'};
+    fbAutoPaused=false;
+    fbApplyForcedReset({mode:'run',by:'admin@x.com'});
+    return {cash:state.cash,rebirth:state.rebirth.count,onboard:state.onboard.unlocked.rebirth,paused:fbAutoPaused,local:localStorage.getItem(SAVE_KEY)!==null,modal:document.getElementById('modalRoot').innerHTML};
+  })()`);
+  check('진행만 초기화는 자산을 시작값으로 되돌림', runReset.cash === g.run('START_CASH'));
+  check('진행만 초기화는 환생 기록 유지', runReset.rebirth === 2 && runReset.onboard === true);
+  check('초기화 후 자동 클라우드 저장 중지', runReset.paused === true);
+  check('초기화 후 로컬 저장은 새 진행으로 갱신', runReset.local === true);
+  check('초기화 안내 모달 표시', runReset.modal.includes('관리자 초기화'));
+}
+
+{
+  const g = createGame();
+  const all = g.run(`(()=>{
+    state.rebirth={count:2,points:5,spent:0,upgrades:{start:1},bestNet:1,history:[],notified:true};
+    state.onboard={done:true,dismissed:true,seen:{rebirth:true},unlocked:{rebirth:true},firstTrade:true};
+    fbUser={uid:'u1',email:'u@x.com'};
+    fbApplyForcedReset({mode:'all',by:'admin@x.com'});
+    return {rebirth:state.rebirth.count,points:state.rebirth.points,onboard:state.onboard.unlocked.rebirth};
+  })()`);
+  check('전체 초기화는 환생 기록·포인트 삭제', all.rebirth === 0 && all.points === 0);
+  check('전체 초기화는 환생 탭 해금도 삭제', all.onboard !== true);
+}
+
+// ── 접속 하트비트와 관리자 서버 초기화 ─────────────────────
+(async () => {
+  const g = createGame();
+  const calls = [];
+  g.ctx.__fakeDb = fakeDb(calls);
+  await g.run(`(async()=>{
+    FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+    fbDb={}; fbApi={db:__fakeDb};
+    fbUser={uid:'u1',email:'u@x.com',displayName:'대상'};
+    await fbPresenceBeat('u1');
+    await fbPresenceOffline('u1');
+  })()`);
+  const beat = calls.find(c => c.op === 'setDoc' && c.ref.path === 'presence/u1' && c.data.online === true);
+  const offline = calls.find(c => c.op === 'setDoc' && c.ref.path === 'presence/u1' && c.data.online === false);
+  check('로그인 중 접속 하트비트 기록', !!beat && beat.data.email === 'u@x.com' && beat.opts.merge === true);
+  check('로그아웃 시 오프라인 기록', !!offline);
+
+  calls.length = 0;
+  await g.run(`(async()=>{
+    FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+    fbDb={}; fbApi={db:__fakeDb};
+    fbUser={uid:'admin',email:'soundpsb1@gmail.com',displayName:'관리자'};
+    fbAdminUsers=[{uid:'u1',nickname:'대상',email:'u@x.com',online:true,lastSeen:Date.now()}];
+    await adminResetTarget('u1','run');
+    return true;
+  })()`);
+  const marker = calls.find(c => c.op === 'setDoc' && c.ref.path === 'admin_resets/u1');
+  const saveDelete = calls.find(c => c.op === 'deleteDoc' && c.ref.path === 'saves/u1');
+  const scoreQuery = calls.find(c => c.op === 'getDocs' && c.q.col && c.q.col.path === 'scores');
+  check('초기화 신호를 먼저 저장', !!marker && marker.data.mode === 'run' && !!marker.data.requestId);
+  check('서버 저장 삭제 요청', !!saveDelete);
+  check('대상의 점수 조회·삭제 경로 사용', !!scoreQuery);
+  check('초기화 완료 메시지 표시', g.run('fbAdminMsg').includes('초기화했습니다'));
+
+  // 오래된 초기화 신호가 새 기기에서 현재 진행을 지우지 않는지 확인합니다.
+  const staleG = createGame();
+  staleG.ctx.__resetApi = { db: { doc: () => ({}), getDoc: async () => ({ exists: () => true, data: () => ({ updatedAt: Date.now() + 10000 }) }) } };
+  const stale = await staleG.run('fbResetIsStale(__resetApi,"u1",{at:Date.now()})');
+  staleG.ctx.__resetApi.db.getDoc = async () => ({ exists: () => true, data: () => ({ updatedAt: Date.now() - 10000 }) });
+  const fresh = await staleG.run('fbResetIsStale(__resetApi,"u1",{at:Date.now()})');
+  check('초기화 뒤 저장된 진행이 있으면 옛 신호 무시', stale === true && fresh === false);
+
+  // ── 보안 규칙 ────────────────────────────────────────────
+  check('규칙에 관리자 판별 존재', rules.includes('function isAdmin()') && rules.includes('email_verified'));
+  check('규칙에 접속 상태·초기화 신호 경로 존재', rules.includes('match /presence/{uid}') && rules.includes('match /admin_resets/{uid}'));
+  check('규칙에서 저장·점수 삭제는 관리자만 허용', /match \/saves\/\{uid\}[\s\S]*?allow delete: if isAdmin\(\);/.test(rules) && /match \/scores\/\{docId\}[\s\S]*?allow delete: if isAdmin\(\);/.test(rules));
+
+  console.log(`\n== ${pass}/${pass + fail} passed ==`);
+  process.exit(fail ? 1 : 0);
+})();
