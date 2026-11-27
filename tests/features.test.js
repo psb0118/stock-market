@@ -447,6 +447,35 @@ function check(name, ok, detail) {
   c1.run('replayOfflineSteps(0,600); replayOfflineSteps(600,1200); replayOfflineSteps(1200,1800);');
   c2.run('replayOfflineMarket(1800)');
   check('나눠서 재생해도 결과 동일', c1.run('JSON.stringify(stocks.map(s=>s.price))') === c2.run('JSON.stringify(stocks.map(s=>s.price))') && c1.run('fx.usd') === c2.run('fx.usd'));
+
+  // 재생 중에는 화면 렌더·가격 알림을 건너뜁니다(가격은 동일하게 계산).
+  const q = createGame(65);
+  q.run(setup);
+  const skip = q.run(`(()=>{
+    const realUpdate=update, realSave=saveGame;
+    let renders=0, saves=0;
+    update=()=>{ renders++; }; saveGame=()=>{ saves++; };
+    state.priceAlerts=[{id:"t1", stockId:stocks[0].id, dir:"above", price:1, armed:true}];
+    replayOfflineMarket(600);
+    const armedAfter=!!state.priceAlerts[0].armed;
+    update=realUpdate; saveGame=realSave;
+    const hitLater=checkPriceAlerts();
+    return {renders, saves, armedAfter, hitLater};
+  })()`);
+  check('재생 중 화면 렌더·저장 생략', skip.renders === 0 && skip.saves === 0, JSON.stringify(skip));
+  check('재생 중 가격 알람은 소진되지 않고 복귀 후 발동', skip.armedAfter === true && skip.hitLater === 1, JSON.stringify(skip));
+
+  // 빠른 시세 난수(worldTickRand 캐시)가 기존 worldRand와 완전히 같은지 확인합니다.
+  const rng = q.run(`(()=>{
+    const bad=[];
+    for(const t of [0,1,7,123,600,7199]) for(const sc of ["stock","intra","news","fx","eco","alt"]) for(const k of [0,1,2,9,42]){
+      state.marketSeconds=t;
+      if(worldTickRand(sc,k)!==worldRand(sc,t,k)) bad.push(sc+":"+t+":"+k);
+      if(worldTickRand(sc,k,"x")!==worldRand(sc,t,k,"x")) bad.push("3p "+sc+":"+t+":"+k);
+    }
+    return bad;
+  })()`);
+  check('캐시 난수가 기존 값과 100% 동일', rng.length === 0, rng.slice(0,3).join(","));
 }
 
 // ── 관측성(오류·이벤트 기록) ─────────────────
