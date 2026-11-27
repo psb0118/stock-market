@@ -282,8 +282,12 @@ function check(name, ok, detail) {
 // ── Firebase 미설정 · 가격 알림 ─────────────────
 {
   const g = createGame(19);
-  check('Firebase 미설정 시 로컬 저장 유지', g.run('firebaseConfigured()') === false, g.run('firebaseConfigured()'));
-  check('Firebase 설정 안내 표시', g.run("firebasePanelHtml().includes('Firebase 설정')") === true);
+  // 설정이 있으면 로그인 화면이, 비어 있으면 안내가 나와야 합니다.
+  const on = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'}; const out={ configured:firebaseConfigured(), text:firebasePanelHtml() }; FIREBASE_CONFIG=keep; return out; })()`);
+  check('Firebase 웹 앱 설정 인식', on.configured === true, on.text.slice(0,30));
+  check('로그인 전에는 Google 로그인 버튼 표시', on.text.includes('Google로 로그인') === true);
+  const off = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG=null; const out={ configured:firebaseConfigured(), text:firebasePanelHtml() }; FIREBASE_CONFIG=keep; return out; })()`);
+  check('설정이 비면 로컬 저장 안내', off.configured === false && off.text.includes('Firebase 설정'), off.text.slice(0,40));
   const hit = g.run(`(()=>{
     state.priceAlerts=[{stockId:'future_ai',price:1,dir:'above',armed:true}];
     const n=checkPriceAlerts();
