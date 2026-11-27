@@ -63,7 +63,8 @@ function createGame() {
     check('앱 밖 알림 기본값은 꺼짐', g.run('state.notify.push') === false);
     check('알림 지원 감지', g.run('pushSupported()') === true);
     check('권한 전 게이팅', g.run('pushEnabled()') === false);
-    check('설정 화면에 알림 허용 버튼', g.run('pushControlHtml()').includes('알림 허용'));
+    check('설정 화면에 알림 권한 요청 버튼', g.run('pushControlHtml()').includes('알림 권한 요청'));
+    check('권한 상태와 복구 절차 표시', g.run('pushHelpHtml()').includes('알림 권한 상태') && g.run('pushHelpHtml()').includes('자물쇠'));
 
     const enabled = await g.run('enablePushNotifications()');
     check('권한 허용 후 켜짐', enabled === true && g.run('state.notify.push') === true && g.run('pushEnabled()') === true);
@@ -111,9 +112,18 @@ function createGame() {
     check('앱 밖 알림 설정 저장·복원', g.run('state.notify.push') === true);
 
     const settings = g.run("document.getElementById('settings').innerHTML=''; settingsPage(); document.getElementById('settings').innerHTML");
-    check('설정에 앱 밖 알림 항목', settings.includes('앱 밖 알림 (PWA)') && settings.includes('백그라운드') && (settings.includes('알림 허용') || settings.includes('켜짐')));
+    check('설정에 앱 밖 알림 항목', settings.includes('앱 밖 알림 (PWA)') && settings.includes('백그라운드') && settings.includes('자세한 방법') && (settings.includes('알림 권한 요청') || settings.includes('켜짐')));
+    check('설정에 권한 상태·복구 안내', settings.includes('알림 권한 상태') && settings.includes('차단하면 브라우저가 다시 묻지 않습니다'));
     const guide = g.run("document.getElementById('guide').innerHTML=''; guidePage(); document.getElementById('guide').innerHTML");
     check('도움말에 앱 밖 알림 안내', guide.includes('14. 알림 설정'));
+  }
+
+  {
+    const g = createGame();
+    g.notification.permission = 'denied';
+    check('차단 상태 감지', g.run('pushPermission()') === 'denied' && g.run('pushControlHtml()').includes('허용 방법'));
+    const enabled = await g.run('enablePushNotifications()');
+    check('차단 상태에서는 켜지지 않음', enabled === false && g.run('state.notify.push') === false);
   }
 
   {

@@ -1352,42 +1352,126 @@ function pushSupported(){
 }
 function pushPermission(){ try{ return pushSupported() ? (window.Notification.permission||"default") : "unsupported"; }catch(e){ return "unsupported"; } }
 function pushEnabled(){ return !!(state.notify&&state.notify.push) && pushPermission()==="granted"; }
-function pushStatusText(){
-  if(!pushSupported()) return "이 브라우저는 지원하지 않습니다";
+function pushPlatform(){
+  try{
+    const ua=String((navigator&&navigator.userAgent)||"");
+    const touchMac=navigator&&navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1;
+    if(/iPhone|iPad|iPod/i.test(ua)||touchMac) return "ios";
+    if(/Android/i.test(ua)) return "android";
+    if(/Edg\//i.test(ua)) return "edge";
+    if(/Firefox\//i.test(ua)) return "firefox";
+    if(/Chrome\//i.test(ua)) return "chrome";
+    if(/Safari\//i.test(ua)) return "safari";
+  }catch(e){}
+  return "other";
+}
+function pushStandalone(){
+  try{
+    if(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    if(navigator.standalone===true) return true;
+  }catch(e){}
+  return false;
+}
+// 알림을 켤 수 없는 이유를 사용자가 바로 알 수 있게 한 줄로 돌려줍니다.
+function pushBlockReason(){
+  if(typeof window!=="undefined" && window.isSecureContext===false) return "HTTPS 주소에서만 알림을 사용할 수 있습니다.";
+  if(!pushSupported()) return "이 브라우저는 앱 밖 알림을 지원하지 않습니다. Chrome·Edge·Safari 최신 버전을 사용해 주세요.";
+  if(pushPlatform()==="ios" && !pushStandalone()) return "아이폰·아이패드는 홈 화면에 추가한 앱에서만 알림을 켤 수 있습니다.";
+  return "";
+}
+function pushPermissionLabel(){
   const p=pushPermission();
-  if(p==="denied") return "브라우저에서 차단됨";
+  if(p==="granted") return "허용됨";
+  if(p==="denied") return "차단됨";
+  if(p==="default") return "아직 요청 안 함";
+  return "지원 안 함";
+}
+function pushStatusText(){
+  const blocked=pushBlockReason();
+  if(blocked) return blocked;
+  const p=pushPermission();
+  if(p==="denied") return "브라우저에서 차단됨 · 사이트 설정에서 허용으로 바꿔 주세요";
   if(state.notify&&state.notify.push&&p==="granted") return "켜짐 · 백그라운드 알림";
   if(state.notify&&state.notify.push) return "알림 권한을 다시 허용해 주세요";
-  return "꺼짐";
+  return "꺼짐 · 알림 권한 필요";
 }
 function pushControlHtml(){
-  if(!pushSupported()) return `<span class="pill">지원 안 함</span>`;
-  if(pushPermission()==="denied") return `<span class="pill">브라우저 설정에서 허용 필요</span>`;
-  if(state.notify&&state.notify.push&&pushPermission()==="granted") return `<span class="pill ok">켜짐</span> <button class="ghost" onclick="disablePushNotifications()">끄기</button>`;
+  const blocked=pushBlockReason();
+  if(blocked) return `<span class="pill">사용 불가</span> <button class="ghost" onclick="openPushHelp()">해결 방법</button>`;
+  const p=pushPermission();
+  if(p==="denied") return `<span class="pill">차단됨</span> <button class="ghost" onclick="openPushHelp()">허용 방법</button>`;
+  if(state.notify&&state.notify.push&&p==="granted") return `<span class="pill ok">켜짐</span> <button class="ghost" onclick="testPushNotification()">테스트</button> <button class="ghost" onclick="disablePushNotifications()">끄기</button>`;
   if(state.notify&&state.notify.push) return `<span class="pill">권한 필요</span> <button class="buy" onclick="enablePushNotifications()">알림 허용</button>`;
-  return `<button class="buy" onclick="enablePushNotifications()">알림 허용</button>`;
+  return `<button class="buy" onclick="enablePushNotifications()">알림 권한 요청</button>`;
+}
+function pushStepsHtml(){
+  const p=pushPlatform();
+  if(p==="ios") return `<ol style="margin:6px 0 0 18px;padding:0;line-height:1.7"><li>Safari에서 이 페이지를 연 뒤 <b>공유 → 홈 화면에 추가</b>를 누릅니다.</li><li>홈 화면의 <b>머니 플레이그라운드</b> 앱을 엽니다.</li><li>설정 → 알림 → <b>알림 권한 요청</b>을 누르고 <b>허용</b>합니다.</li><li>알림이 안 보이면 아이폰 <b>설정 → 알림 → 머니 플레이그라운드</b>에서 허용을 확인합니다. (iOS 16.4 이상)</li></ol>`;
+  if(p==="android") return `<ol style="margin:6px 0 0 18px;padding:0;line-height:1.7"><li>주소창 왼쪽의 <b>자물쇠</b> 아이콘을 누릅니다.</li><li><b>권한 → 알림 → 허용</b>을 선택합니다.</li><li>페이지를 새로고침한 뒤 다시 <b>알림 권한 요청</b>을 누릅니다.</li><li>자물쇠가 없으면 Chrome <b>⋮ → 설정 → 사이트 설정 → 알림</b>에서 이 사이트를 찾아 허용합니다.</li></ol>`;
+  if(p==="firefox") return `<ol style="margin:6px 0 0 18px;padding:0;line-height:1.7"><li>주소창 왼쪽의 <b>자물쇠</b> 아이콘을 누릅니다.</li><li><b>연결 보안 → 알림</b>에서 <b>허용</b>으로 바꿉니다.</li><li>페이지를 새로고침한 뒤 다시 <b>알림 권한 요청</b>을 누릅니다.</li></ol>`;
+  if(p==="safari") return `<ol style="margin:6px 0 0 18px;padding:0;line-height:1.7"><li>Mac 메뉴 <b>Safari → 설정 → 웹사이트 → 알림</b>을 엽니다.</li><li>이 사이트를 찾아 <b>허용</b>으로 바꿉니다.</li><li>페이지를 새로고침한 뒤 다시 <b>알림 권한 요청</b>을 누릅니다.</li></ol>`;
+  const settingsUrl=p==="edge"?"edge://settings/content/notifications":"chrome://settings/content/notifications";
+  return `<ol style="margin:6px 0 0 18px;padding:0;line-height:1.7"><li>주소창 왼쪽의 <b>자물쇠/설정</b> 아이콘을 누릅니다.</li><li><b>알림</b>을 <b>허용</b>으로 바꿉니다.</li><li>페이지를 새로고침한 뒤 다시 <b>알림 권한 요청</b>을 누릅니다.</li><li>차단 목록에 남아 있으면 주소창에 <b>${settingsUrl}</b>를 입력해 이 사이트를 삭제합니다.</li></ol>`;
+}
+function pushHelpHtml(){
+  return `<div class="notice" style="margin-top:8px;line-height:1.6">
+    <b>알림 권한 상태: ${pushPermissionLabel()}</b>
+    <div class="muted-sm" style="margin:3px 0 0">${pushStatusText()}</div>
+    ${pushStepsHtml()}
+    <div class="muted-sm" style="margin-top:6px">권한을 한 번 차단하면 브라우저가 다시 묻지 않습니다. 위처럼 사이트 설정에서 허용으로 바꾼 뒤 새로고침해 주세요.</div>
+  </div>`;
+}
+function openPushHelp(){
+  openModal("앱 밖 알림 켜는 방법", `<div style="line-height:1.7"><p><b>현재 상태:</b> ${pushPermissionLabel()} · ${pushStatusText()}</p>${pushStepsHtml()}<p class="muted-sm" style="margin-top:10px">알림은 탭이 뒤로 가 있거나 다른 창을 보고 있을 때 표시됩니다. 브라우저를 완전히 종료한 뒤 받는 알림은 아직 지원하지 않습니다.</p></div>`);
 }
 async function enablePushNotifications(){
-  if(!pushSupported()){ alert("이 브라우저는 앱 밖 알림을 지원하지 않습니다."); return false; }
+  const blocked=pushBlockReason();
+  if(blocked){ openPushHelp(); return false; }
   let perm=pushPermission();
+  if(perm==="denied"){ openPushHelp(); return false; }
   if(perm!=="granted"){
-    try{ perm=await window.Notification.requestPermission(); }
-    catch(e){ perm="denied"; }
+    showToast("브라우저 알림 권한을 확인해 주세요","주소창 근처에 권한 창이 뜨면 허용을 눌러 주세요. 창이 보이지 않으면 설정의 자세한 방법을 확인하세요.");
+    try{
+      // 브라우저가 권한 창을 띄우지 못하는 환경에서도 화면이 멈추지 않게 시간 제한을 둡니다.
+      perm=await Promise.race([
+        window.Notification.requestPermission(),
+        new Promise(resolve=>setTimeout(()=>resolve("timeout"),60000))
+      ]);
+    }catch(e){ perm="denied"; }
+    if(perm==="timeout"){
+      showToast("알림 권한 확인 필요","브라우저 알림 창이 보이지 않으면 주소창 왼쪽 사이트 설정에서 알림을 허용해 주세요.");
+      openPushHelp();
+      if(activePage()==="settings") settingsPage();
+      return false;
+    }
   }
   if(perm!=="granted"){
-    alert("브라우저에서 알림이 허용되지 않았습니다. 주소창 왼쪽의 사이트 설정에서 알림을 허용으로 바꾼 뒤 다시 시도해 주세요.");
+    openPushHelp();
     if(activePage()==="settings") settingsPage();
     return false;
   }
   state.notify=Object.assign({},NOTIFY_DEFAULT,state.notify||{},{push:true});
   saveGame();
   sendPushNotification("머니 플레이그라운드","앱 밖 알림이 켜졌습니다. 탭을 내려 두어도 중요한 소식을 보내 드립니다.",{force:true,tag:"test"});
+  showToast("앱 밖 알림 켜짐","탭을 다른 창 뒤로 보내면 중요 알림을 보내 드립니다.");
   if(activePage()==="settings") settingsPage();
   return true;
+}
+async function testPushNotification(){
+  if(pushPermission()!=="granted"){
+    const ok=await enablePushNotifications();
+    if(!ok) return false;
+  }
+  state.notify=Object.assign({},NOTIFY_DEFAULT,state.notify||{},{push:true});
+  const ok=await sendPushNotification("테스트 알림","이 알림이 보이면 앱 밖 알림이 정상적으로 동작합니다.",{force:true,tag:"manual-test"});
+  showToast(ok?"테스트 알림을 보냈습니다":"테스트 알림을 보내지 못했습니다", ok?"알림이 보이지 않으면 브라우저·운영체제의 방해 금지 모드를 확인해 주세요.":"브라우저 알림 권한을 확인해 주세요.");
+  if(activePage()==="settings") settingsPage();
+  return ok;
 }
 function disablePushNotifications(){
   state.notify=Object.assign({},NOTIFY_DEFAULT,state.notify||{},{push:false});
   saveGame();
+  showToast("앱 밖 알림 꺼짐","설정은 저장되었습니다. 언제든 다시 켤 수 있습니다.");
   if(activePage()==="settings") settingsPage();
 }
 function sendPushNotification(title,text,opts){
@@ -5302,8 +5386,9 @@ function settingsPage(){
       ${settingRow("토스트 표시 시간","알림 토스트가 화면에 머무는 시간입니다",`<select onchange="setNotifyNum('toastMs',this.value)">${[2,3,4,5,6,7,8].map(sec=>`<option value="${sec*1000}" ${Math.round(+state.notify.toastMs||4200)===sec*1000?"selected":""}>${sec}초</option>`).join("")}</select>`)}
       ${settingRow("토스트 최대 개수","동시에 보이는 토스트 수입니다. 넘치면 오래된 것부터 사라집니다",`<select onchange="setNotifyNum('toastMax',this.value)">${[1,2,3,4,5].map(n=>`<option value="${n}" ${Math.round(+state.notify.toastMax||3)===n?"selected":""}>${n}개</option>`).join("")}</select>`)}
       ${settingRow("토스트 미리보기","현재 표시 시간·최대 개수로 실제 토스트를 띄워 확인합니다",`<button class="ghost" onclick="previewToasts()">미리보기 (${toastPreviewLabel()})</button>`)}
-      ${settingRow("앱 밖 알림 (PWA)","탭이 백그라운드일 때 공모주·체결·가격 알림을 운영체제 알림으로 보냅니다. 앱을 완전히 닫은 상태의 알림은 푸시 서버가 필요합니다.",pushControlHtml())}
-      <p class="muted-sm" style="margin:-4px 0 10px">상태: <b>${pushStatusText()}</b> · 알림은 이 기기에서 한 번 허용하면 브라우저 설정에서 언제든 끌 수 있습니다.</p>
+      ${settingRow("앱 밖 알림 (PWA)","탭이 백그라운드일 때 체결·배당·목표·등급 등 중요한 소식을 운영체제 알림으로 보냅니다. 앱을 완전히 닫은 상태의 알림은 아직 지원하지 않습니다.",pushControlHtml())}
+      <p class="muted-sm" style="margin:-4px 0 10px">상태: <b>${pushStatusText()}</b> · 권한: <b>${pushPermissionLabel()}</b> · <button class="ghost small" onclick="openPushHelp()">자세한 방법</button></p>
+      ${pushHelpHtml()}
       ${settingRow("시황 속보 최소 간격","배너가 이 간격보다 자주 뜨지 않습니다. 뉴스 탭 기록은 항상 남습니다.",`<select onchange="setNotifyGap(this.value)">${[0,5,10,15,30,60].map(sec=>`<option value="${sec}" ${Math.round(+state.notify.newsGap||0)===sec?"selected":""}>${sec?sec+"초":"제한 없음"}</option>`).join("")}</select>`)}
       <h4 style="margin:14px 0 8px;font-size:13px">종류별 알림</h4>
       <div class="notify-grid">${notifies.map(([k,l])=>notifyToggle(k,l)).join("")}</div>
