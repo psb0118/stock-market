@@ -288,6 +288,42 @@ function check(name, ok, detail) {
   check('로그인 전에는 Google 로그인 버튼 표시', on.text.includes('Google로 로그인') === true);
   const off = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG=null; const out={ configured:firebaseConfigured(), text:firebasePanelHtml() }; FIREBASE_CONFIG=keep; return out; })()`);
   check('설정이 비면 로컬 저장 안내', off.configured === false && off.text.includes('Firebase 설정'), off.text.slice(0,40));
+
+  // 오류 코드별 안내: 콘솔에서 무엇을 고쳐야 하는지 화면에 바로 나와야 합니다.
+  const dom = g.run(`firebaseHelpFor('auth/unauthorized-domain')`);
+  check('승인된 도메인 오류 안내', dom.title.includes('도메인') && dom.steps.join(' ').includes('승인된 도메인'), dom.title);
+  const perm = g.run(`firebaseHelpFor('permission-denied')`);
+  check('permission-denied → 규칙 게시 안내', perm.steps.join(' ').includes('firestore.rules'));
+  const idx = g.run(`firebaseHelpFor('failed-precondition')`);
+  check('failed-precondition → 색인 안내', idx.steps.join(' ').includes('색인') && idx.steps.join(' ').includes('scores'));
+  const notAllowed = g.run(`firebaseHelpFor('auth/operation-not-allowed')`);
+  check('Google 로그인 꺼짐 안내', notAllowed.steps.join(' ').includes('Sign-in method'));
+  check('firestore/ 접두사도 같은 안내', g.run(`firebaseHelpFor('firestore/permission-denied').code`) === 'permission-denied');
+  const unknown = g.run(`firebaseHelpFor('some/unknown-error')`);
+  check('알 수 없는 코드도 안내를 반환', typeof unknown.title === 'string' && unknown.steps.length > 0 && unknown.code === 'some/unknown-error');
+  const helpHtml = g.run(`(()=>{ fbLastError={code:'<b>x</b>',title:'t',steps:['s'],where:'테스트'}; const h=firebaseHelpHtml(fbLastError); fbLastError=null; return h; })()`);
+  check('오류 안내 HTML은 코드를 이스케이프', helpHtml.includes('&lt;b&gt;') && !helpHtml.includes('<b>x</b>'));
+  const note = g.run(`(()=>{ const r=firebaseNoteError({code:'permission-denied'},'자동 저장'); return {paused:fbAutoPaused, code:fbLastError.code, same:r.code==='permission-denied'}; })()`);
+  check('자동 저장 실패 시 반복 실패를 막기 위해 일시중지', note.paused === true && note.same === true && note.code === 'permission-denied');
+
+  // 로그인 상태에서만 클라우드로 자동 업로드합니다.
+  const auto = g.run(`(()=>{
+    fbAutoPaused=false; fbLastError=null; fbUser=null; state.settings.cloudAuto=true;
+    const off = {wanted:fbAutoWanted(), text:fbSyncText()};
+    fbUser={uid:'u1',displayName:'테스터',email:'t@example.com'};
+    state.settings.cloudAuto=true;
+    const on = {wanted:fbAutoWanted(), text:fbSyncText(), path:'saves/u1'};
+    state.settings.cloudAuto=false;
+    const disabled = fbAutoWanted();
+    state.settings.cloudAuto=true; fbUser=null; fbAutoPaused=false; fbLastError=null;
+    return {off,on,disabled};
+  })()`);
+  check('로그인 전에는 자동 업로드 안 함', auto.off.wanted === false && auto.off.text === '');
+  check('로그인 후에는 자동 업로드 대상', auto.on.wanted === true && auto.on.text.includes('자동 저장'), auto.on.text);
+  check('자동 클라우드 저장을 끄면 업로드 안 함', auto.disabled === false);
+  const panel = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'}; fbAutoPaused=false; fbLastError=null; fbUser={uid:'u1',displayName:'T',email:'e'}; state.settings.cloudAuto=true; const h=firebasePanelHtml(); fbUser=null; FIREBASE_CONFIG=keep; return h; })()`);
+  check('설정 화면에 자동 저장 설명', panel.includes('자동 클라우드 저장') && panel.includes('saves/{uid}'), panel.slice(0, 60));
+  check('로그인 없이 자동 업로드를 불러도 조용히 넘어감', typeof g.run('firebaseAutoUpload()') === 'object');
   const hit = g.run(`(()=>{
     state.priceAlerts=[{stockId:'future_ai',price:1,dir:'above',armed:true}];
     const n=checkPriceAlerts();
