@@ -421,5 +421,42 @@ function createGame() {
   check('UID에 따옴표·공백이 섞이면 거부', injection === '', injection.slice(0, 40));
 }
 
+// ── 조작된 저장 파일 방어(HTML 삽입·형식 검사) ──────────────────
+{
+  const g = createGame();
+
+  const toast = g.run(`(()=>{ showToast('<img src=x onerror="alert(1)">','<b>본문</b>'); const w=document.getElementById('toastWrap'); return w.children[w.children.length-1].innerHTML; })()`);
+  check('토스트가 HTML을 실행하지 않고 글자로 표시', toast.includes('&lt;img') && !toast.includes('<img') && toast.includes('&lt;b&gt;'), toast);
+
+  const notif = g.run(`(()=>{
+    state.alerts=[{at:0,kind:'system',title:'<img src=x onerror=1>',text:'<script>bad()</script>',read:false}];
+    openNotifModal(); return document.getElementById('modalRoot').innerHTML;
+  })()`);
+  check('알림 센터가 알림 제목·본문을 이스케이프', notif.includes('&lt;img') && !notif.includes('<img') && !notif.includes('<script>bad'), notif.slice(0, 160));
+
+  const logHtml = g.run(`(()=>{ state.logs=['<img src=x onerror=1>']; state.ui=Object.assign({},state.ui,{assetTab:'journal'}); portfolio(); return document.getElementById('portfolio').innerHTML; })()`);
+  check('최근 거래 로그가 HTML을 실행하지 않음', logHtml.includes('&lt;img') && !logHtml.includes('<img'), logHtml.slice(0, 160));
+
+  const loaded = g.run(`(()=>{
+    clearGame(true);
+    const evil={version:SAVE_VERSION,state:{cash:'<img src=x>',journal:[{name:'<img src=x>',side:'weird',qty:'5',valueKRW:'1',profit:'-2',at:'3'},{},null],alerts:[{title:'<b>t</b>',text:'<script>x</script>',at:'1'}],logs:['<img src=x>',42]}};
+    localStorage.setItem(SAVE_KEY,JSON.stringify(evil)); loadGame();
+    return {cash:typeof state.cash,journal:state.journal,alerts:state.alerts,logs:state.logs};
+  })()`);
+  check('저장 파일의 숫자 자리를 숫자로 보정', loaded.cash === 'number', loaded.cash);
+  check('저장된 거래 기록의 형식·길이 보정', loaded.journal.length === 2 && loaded.journal[0].qty === 5 && loaded.journal[0].profit === -2 && loaded.journal[0].side === 'buy' && typeof loaded.journal[0].name === 'string', JSON.stringify(loaded.journal[0]));
+  check('저장된 알림 기록은 문자열로 제한', loaded.alerts.length === 1 && loaded.alerts[0].title === '<b>t</b>' && typeof loaded.alerts[0].at === 'number', JSON.stringify(loaded.alerts[0]));
+  check('저장된 로그는 문자열만 유지', loaded.logs.length === 1 && loaded.logs[0] === '<img src=x>', JSON.stringify(loaded.logs));
+
+  const evilRender = g.run(`(()=>{ state.ui=Object.assign({},state.ui,{assetTab:'journal'}); portfolio(); return document.getElementById('portfolio').innerHTML; })()`);
+  check('불러온 악성 거래명도 글자로 표시', evilRender.includes('&lt;img') && !evilRender.includes('<img'), evilRender.slice(0, 160));
+
+  const arraySave = g.run(`(()=>{ clearGame(true); const before=state.cash; localStorage.setItem(SAVE_KEY,'[1,2,3]'); let threw=false; try{ loadGame(); }catch(e){ threw=true; } return {threw,same:state.cash===before}; })()`);
+  check('객체가 아닌 저장 파일은 무시', arraySave.threw === false && arraySave.same === true, JSON.stringify(arraySave));
+
+  const weirdState = g.run(`(()=>{ localStorage.setItem(SAVE_KEY,JSON.stringify({version:SAVE_VERSION,state:'not-an-object'})); loadGame(); return typeof state.cash; })()`);
+  check('state가 객체가 아니면 기본 상태 유지', weirdState === 'number', weirdState);
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

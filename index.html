@@ -1700,7 +1700,8 @@ function showToast(title,text,opts){
   const wrap=$("toastWrap"); if(!wrap || typeof wrap.appendChild!=="function") return;
   const el=document.createElement("div");
   el.className="toast"+((opts&&opts.className)?" "+opts.className:"");
-  el.innerHTML=`<b>${title}</b>${text||""}`;
+  // 제목·본문에는 저장 파일이나 입력에서 온 값이 섞일 수 있으므로 항상 이스케이프합니다.
+  el.innerHTML=`<b>${escHtml(title)}</b>${escHtml(text||"")}`;
   if(opts&&typeof opts.onClick==="function"){
     el.onclick=opts.onClick;
     el.style.cursor="pointer";
@@ -1796,7 +1797,7 @@ function openNotifModal(){
   updateBell();
   const n=state.notify||{};
   const sw=(k,label)=>`<label class="notify-toggle"><input type="checkbox" ${n[k]!==false?"checked":""} onchange="setNotify('${k}',this.checked)"><span>${label}</span></label>`;
-  const rows=(state.alerts||[]).slice(0,30).map(a=>`<div class="journal" style="margin-bottom:8px"><div><b>${a.title}</b><span>${new Date(a.at).toLocaleTimeString("ko-KR")}</span></div><small class="muted-sm">${a.text||""}</small></div>`).join("")||`<p class="muted-sm">아직 알림이 없습니다.</p>`;
+  const rows=(state.alerts||[]).slice(0,30).map(a=>`<div class="journal" style="margin-bottom:8px"><div><b>${escHtml(a.title)}</b><span>${new Date(a.at).toLocaleTimeString("ko-KR")}</span></div><small class="muted-sm">${escHtml(a.text||"")}</small></div>`).join("")||`<p class="muted-sm">아직 알림이 없습니다.</p>`;
   const masterOff=n.master===true;
   openModal("알림 센터",`
     ${masterOff?`<p class="muted-sm" style="margin-bottom:8px;color:#b42318"><b>모든 알림이 꺼져 있습니다.</b> 아래에서 다시 켜거나 설정에서 한 번에 켤 수 있습니다.</p>`:""}
@@ -6772,10 +6773,43 @@ function migrateSaveData(data){
   return data;
 }
 
+// 저장 파일(localStorage·파일 불러오기·클라우드)에서 온 값은 화면에 넣기 전에 형식을 검사합니다.
+// 조작된 저장 파일이 문자열 대신 HTML을 밀어 넣거나 숫자 자리에 객체를 넣지 못하게 합니다.
+const SAVE_NUMBER_KEYS=["cash","usd","marketSeconds","peakNet","targetGoal","dividendTotal","feesTotal","loanTotal","realizedYTD","taxedProfit","taxPaid","wealthFeePaid","shortRealized"];
+function saveText(v,max){ return String(v==null?"":v).slice(0,max); }
+function saveNumber(v){ const n=+v; return Number.isFinite(n)?n:0; }
+function sanitizeSaveData(data){
+  if(!data || typeof data!=="object" || Array.isArray(data)) return null;
+  const st=(data.state && typeof data.state==="object" && !Array.isArray(data.state))?data.state:null;
+  if(!st) return data;
+  SAVE_NUMBER_KEYS.forEach(k=>{ if(k in st) st[k]=saveNumber(st[k]); });
+  // 거래 저널: 화면에 종목명·수량·금액을 그대로 그리므로 모양을 강제합니다.
+  st.journal=(Array.isArray(st.journal)?st.journal:[]).filter(x=>x && typeof x==="object").slice(0,200).map(x=>({
+    at:Math.max(0,saveNumber(x.at)),
+    name:saveText(x.name,40),
+    side:x.side==="sell"?"sell":"buy",
+    qty:Math.max(0,Math.floor(saveNumber(x.qty))),
+    valueKRW:Math.max(0,saveNumber(x.valueKRW)),
+    fee:Math.max(0,saveNumber(x.fee)),
+    profit:saveNumber(x.profit)
+  }));
+  // 알림 센터 기록: 제목·본문은 문자열·길이를 제한합니다.
+  st.alerts=(Array.isArray(st.alerts)?st.alerts:[]).filter(a=>a && typeof a==="object").slice(0,40).map(a=>({
+    at:Math.max(0,saveNumber(a.at)),
+    kind:saveText(a.kind,20),
+    title:saveText(a.title,80),
+    text:saveText(a.text,200),
+    read:!!a.read
+  }));
+  // 최근 거래 로그는 문자열만 남깁니다.
+  st.logs=(Array.isArray(st.logs)?st.logs:[]).filter(l=>typeof l==="string").slice(0,20).map(l=>saveText(l,200));
+  return data;
+}
+
 // localStorage와 파일 불러오기가 같은 경로를 쓰도록 저장 데이터 적용을 한 곳에 모읍니다.
 function applySaveData(data) {
-  if(!data || typeof data !== "object") throw new Error("잘못된 저장 데이터");
-  data=migrateSaveData(data);
+  data=sanitizeSaveData(migrateSaveData(data));
+  if(!data) throw new Error("잘못된 저장 데이터");
   if(data.state) Object.assign(state, data.state);
   if(data.fx) Object.assign(fx, data.fx);
   // 공모주로 상장된 종목을 먼저 복원해야 저장된 가격·보유량을 적용할 수 있습니다.
@@ -7907,7 +7941,7 @@ function portfolio(){
     estate:`<div class="section"><h3>부동산</h3><div class="panel stack">${estateSummaryHtml()}</div></div>`,
     metals:`<div class="section"><h3>실물자산</h3><div class="panel stack">${metalSummaryHtml()}</div></div>`,
     company:`<div class="section"><h3>기업 자산</h3><div class="panel stack">${companySummaryHtml()}</div></div>`,
-    journal:`<div class="section"><h3>성과 분석</h3><div class="panel">${perfPanelHtml()}</div></div><div class="section"><h3>투자 성향 분석</h3><div class="panel">${stylePanelHtml()}</div></div><div class="section"><h3>최근 거래 로그</h3><div class="panel"><div class="log-box">${state.logs.map(l=>`<div class="log-item">${l}</div>`).join("")||'<div class="muted-sm">로그가 없습니다.</div>'}</div></div></div>`,
+    journal:`<div class="section"><h3>성과 분석</h3><div class="panel">${perfPanelHtml()}</div></div><div class="section"><h3>투자 성향 분석</h3><div class="panel">${stylePanelHtml()}</div></div><div class="section"><h3>최근 거래 로그</h3><div class="panel"><div class="log-box">${state.logs.map(l=>`<div class="log-item">${escHtml(l)}</div>`).join("")||'<div class="muted-sm">로그가 없습니다.</div>'}</div></div></div>`,
     growth:`<div class="section"><h3>오늘의 미션</h3><div class="panel">${missionsPanelHtml()}</div></div><div class="section"><h3>주간 미션 · 연속 접속</h3><div class="panel">${weeklyPanelHtml()}</div></div><div class="section"><h3>업적</h3><div class="panel">${achPanelHtml()}</div></div><div class="section"><h3>자산·상품 도감</h3><div class="panel">${dexPanelHtml()}</div></div>`,
     risk:riskPanelHtml()
   };
