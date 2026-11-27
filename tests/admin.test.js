@@ -65,6 +65,7 @@ function fakeDb(calls) {
     query: (col, ...rest) => ({ col, rest }),
     where: (field, op, value) => ({ where: [field, op, value] }),
     limit: n => ({ limit: n }),
+    orderBy: (field, dir) => ({ orderBy: [field, dir] }),
     serverTimestamp: () => 'SERVER_TS',
     setDoc: async (ref, data, opts) => { calls.push({ op: 'setDoc', ref, data, opts }); },
     deleteDoc: async ref => { calls.push({ op: 'deleteDoc', ref }); },
@@ -148,7 +149,7 @@ function fakeDb(calls) {
   })()`);
   check('진행만 초기화는 자산을 시작값으로 되돌림', runReset.cash === g.run('START_CASH'));
   check('진행만 초기화는 환생 기록 유지', runReset.rebirth === 2 && runReset.onboard === true);
-  check('초기화 후 자동 클라우드 저장 중지', runReset.paused === true);
+  check('서버 정리 완료 전에는 자동 저장 대기', runReset.paused === true);
   check('초기화 후 로컬 저장은 새 진행으로 갱신', runReset.local === true);
   check('초기화 안내 모달 표시', runReset.modal.includes('관리자 초기화'));
 }
@@ -199,6 +200,65 @@ function fakeDb(calls) {
   check('서버 저장 삭제 요청', !!saveDelete);
   check('대상의 점수 조회·삭제 경로 사용', !!scoreQuery);
   check('초기화 완료 메시지 표시', g.run('fbAdminMsg').includes('초기화했습니다'));
+  const markerIdx = calls.findIndex(c => c.op === 'setDoc' && c.ref.path === 'admin_resets/u1');
+  const deleteIdx = calls.findIndex(c => c.op === 'deleteDoc' && c.ref.path === 'saves/u1');
+  const completeIdx = calls.findIndex(c => c.op === 'setDoc' && c.ref.path === 'admin_resets/u1' && c.data.completedAt === 'SERVER_TS');
+  check('서버 정리 완료 신호를 삭제 뒤에 기록', markerIdx >= 0 && deleteIdx > markerIdx && completeIdx > deleteIdx);
+
+  // 초기화된 새 진행은 다시 로그인하지 않아도 즉시 자동 저장되어야 합니다.
+  {
+    const g2 = createGame();
+    const autoCalls = [];
+    g2.ctx.__fakeDb = fakeDb(autoCalls);
+    const result = await g2.run(`(async()=>{
+      FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+      fbDb={}; fbApi={db:__fakeDb};
+      fbUser={uid:'u1',email:'u@x.com',displayName:'대상'};
+      state.cash=999999; fbAutoPaused=false; fbLastSync=0; fbLastScorePush=0;
+      await fbApplyForcedReset({requestId:'r-auto',mode:'run',completedAt:'done',by:'admin@x.com'});
+      if(fbCloudWrite) await fbCloudWrite;
+      return {paused:fbAutoPaused,pending:!!fbResetPending};
+    })()`);
+    const saves = autoCalls.filter(c => c.op === 'setDoc' && c.ref.path === 'saves/u1');
+    const scores = autoCalls.filter(c => c.op === 'setDoc' && c.ref.path === 'scores/' + g2.run('seasonKey()') + '_u1');
+    const oldSave = saves.find(c => c.data.save && c.data.save.state && c.data.save.state.cash === 999999);
+    const freshSave = saves.find(c => c.data.save && c.data.save.state && c.data.save.state.cash === g2.run('START_CASH'));
+    check('초기화 후 자동 저장이 다시 켜짐', result.paused === false && result.pending === false);
+    check('초기화된 새 진행이 즉시 저장됨', !!freshSave);
+    check('옛 진행은 저장되지 않음', !oldSave);
+    check('초기화 후 새 점수도 즉시 기록', scores.length > 0);
+  }
+
+  // 초기화 중이던 옛 자동 저장이 늦게 끝나도 옛 진행을 덮어쓰지 않아야 합니다.
+  {
+    const g3 = createGame();
+    const raceCalls = [];
+    const gate = {};
+    gate.promise = new Promise(resolve => { gate.release = resolve; });
+    const raceDb = fakeDb(raceCalls);
+    raceDb.getDoc = async ref => {
+      if(ref.path === 'saves/u3') await gate.promise;
+      return { exists: () => false, data: () => null };
+    };
+    g3.ctx.__raceDb = raceDb;
+    await g3.run(`(async()=>{
+      FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+      fbDb={}; fbApi={db:__raceDb};
+      fbUser={uid:'u3',email:'u3@x.com',displayName:'대상3'};
+      state.cash=777777; fbAutoPaused=false; fbLastSync=0; fbLastScorePush=0;
+      firebaseAutoUpload();
+    })()`);
+    await new Promise(r => setImmediate(r));
+    const resetPromise = g3.run(`fbApplyForcedReset({requestId:'r-race',mode:'run',completedAt:'done',by:'admin@x.com'})`);
+    await new Promise(r => setImmediate(r));
+    gate.release();
+    await resetPromise;
+    if(g3.run('fbCloudWrite')) await g3.run('fbCloudWrite');
+    const raceSaves = raceCalls.filter(c => c.op === 'setDoc' && c.ref.path === 'saves/u3');
+    const raceOld = raceSaves.find(c => c.data.save && c.data.save.state && c.data.save.state.cash === 777777);
+    check('진행 중이던 옛 저장은 초기화 후 무시됨', !raceOld);
+    check('경쟁 후 새 진행만 저장됨', raceSaves.some(c => c.data.save && c.data.save.state && c.data.save.state.cash === g3.run('START_CASH')));
+  }
 
   // 오래된 초기화 신호가 새 기기에서 현재 진행을 지우지 않는지 확인합니다.
   const staleG = createGame();

@@ -4586,6 +4586,8 @@ let fbApp=null, fbAuth=null, fbDb=null, fbApi=null, fbUser=null, fbBusy=false, f
 // 접속 상태 하트비트와 관리자 강제 초기화 상태
 let fbPresenceTimer=null, fbPresenceUid=null, fbResetUnsub=null;
 let fbAdminUsers=null, fbAdminLoading=false, fbAdminBusy=false, fbAdminMsg="";
+// 강제 초기화 중에는 옛 자동 저장이 끝날 때까지 기다렸다가 새 진행을 올립니다.
+let fbResetPending=null, fbCloudEpoch=0, fbCloudWrite=null;
 const FB_PRESENCE_MS=60000;       // 60초마다 접속 신호
 const FB_ONLINE_WINDOW_MS=150000; // 최근 2분 30초 안이면 접속 중으로 표시
 // 관리자 계정(설정 화면에 관리자 배지가 붙습니다).
@@ -4681,13 +4683,16 @@ async function firebaseBoot(){
       const was=fbUser;
       const wasUid=was&&was.uid;
       fbUser=u||null;
-      if(wasUid && (!fbUser || fbUser.uid!==wasUid)) fbPresenceStop(true);
+      if(wasUid && (!fbUser || fbUser.uid!==wasUid)){
+        fbPresenceStop(true);
+        fbResetPending=null; fbCloudEpoch++;
+      }
       if(fbUser && (!was || was.uid!==fbUser.uid)){
         fbAutoPaused=false; trackEvent("sign_in");
         fbPresenceStart();
         firebaseAfterSignIn();
       }
-      if(!fbUser){ fbAutoPaused=false; fbAdminUsers=null; fbAdminBusy=false; fbAdminMsg=""; }
+      if(!fbUser){ fbAutoPaused=false; fbResetPending=null; fbAdminUsers=null; fbAdminBusy=false; fbAdminMsg=""; }
       try{ if(activePage()==="settings") settingsPage(); }catch(e){}
     });
   }catch(e){ /* SDK 로드 실패는 조용히 무시하고 로컬 저장으로 계속합니다. */ }
@@ -4826,12 +4831,18 @@ function fbWatchForcedReset(){
     fbResetUnsub=api.db.onSnapshot(api.db.doc(fbDb,"admin_resets",uid),snap=>{
       if(!fbUser || fbUser.uid!==uid || !snap.exists()) return;
       const data=snap.data()||{};
+      const rid=fbResetId(data);
+      // 같은 초기화 요청의 완료 신호가 오면 새 진행을 바로 클라우드에 올립니다.
+      if(fbResetPending && rid && fbResetPending.requestId===rid){
+        if(data.completedAt){ fbResetPending.completed=true; fbFinishForcedReset(); }
+        return;
+      }
       if(fbResetAlreadySeen(uid,data)) return;
       (async()=>{
         if(await fbResetIsStale(api,uid,data)){ fbResetMarkSeen(uid,data); return; }
         if(!fbUser || fbUser.uid!==uid) return;
         fbResetMarkSeen(uid,data);
-        fbApplyForcedReset(data);
+        await fbApplyForcedReset(data);
       })();
     },()=>{});
   }).catch(()=>{});
@@ -4843,18 +4854,31 @@ async function fbCheckForcedReset(api){
     const snap=await api.db.getDoc(api.db.doc(fbDb,"admin_resets",uid));
     if(!fbUser || fbUser.uid!==uid || !snap.exists()) return false;
     const data=snap.data()||{};
+    const rid=fbResetId(data);
+    if(fbResetPending && rid && fbResetPending.requestId===rid){
+      if(data.completedAt){ fbResetPending.completed=true; await fbFinishForcedReset(); return true; }
+      return false;
+    }
     if(fbResetAlreadySeen(uid,data)) return false;
     if(await fbResetIsStale(api,uid,data)){ fbResetMarkSeen(uid,data); return false; }
     if(!fbUser || fbUser.uid!==uid) return false;
     fbResetMarkSeen(uid,data);
-    fbApplyForcedReset(data);
+    await fbApplyForcedReset(data);
     return true;
   }catch(e){ return false; }
 }
-function fbApplyForcedReset(data){
+async function fbApplyForcedReset(data){
+  const requestId=fbResetId(data)||("r"+Date.now());
   const mode=data && data.mode==="all" ? "all" : "run";
   const by=String((data&&data.by)||"관리자");
+  const pending={requestId,mode,by,completed:!!(data&&data.completedAt),applied:false};
+  fbResetPending=pending;
+  fbCloudEpoch++;
   fbAutoPaused=true; fbConflict=null; fbSyncRev=null;
+  if(fbAutoTimer){ clearTimeout(fbAutoTimer); fbAutoTimer=null; }
+  // 진행 중이던 옛 자동 저장이 끝난 뒤에 새 상태로 교체합니다.
+  if(fbCloudWrite) await fbWaitCloudWrite();
+  if(fbResetPending!==pending || !fbUser){ if(fbResetPending===pending) fbResetPending=null; return; }
   try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
   clearGame(true);
   if(mode==="all"){
@@ -4863,11 +4887,26 @@ function fbApplyForcedReset(data){
     state.onboard={done:false,dismissed:false,seen:{},unlocked:{},firstTrade:false};
   }
   saveGame();
+  pending.applied=true;
   try{ settingsPage(); }catch(e){}
   openModal("관리자 초기화",`<p>관리자 <b>${escHtml(by)}</b>가 이 계정을 초기화했습니다.</p>
     <p class="muted-sm" style="margin-top:6px">${mode==="all"?"현재 진행과 환생·영구 업그레이드가 모두 초기화되었습니다.":"현재 진행과 서버 저장·점수가 초기화되었습니다. 환생·영구 업그레이드는 유지됩니다."}</p>
+    <p class="muted-sm" style="margin-top:4px">초기화된 새 진행은 서버 정리가 끝나는 즉시 자동 저장됩니다.</p>
     <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="closeModal()">확인</button></div>`);
   notify("system","관리자 초기화", mode==="all"?"환생 기록까지 전체 초기화되었습니다.":"현재 진행이 초기화되었습니다.");
+  if(pending.completed) await fbFinishForcedReset(pending);
+}
+async function fbFinishForcedReset(pending){
+  pending=pending||fbResetPending;
+  if(!pending) return;
+  if(!pending.applied){ pending.completed=true; return; }
+  await fbWaitCloudWrite();
+  if(fbResetPending!==pending || !fbUser) return;
+  fbResetPending=null;
+  fbAutoPaused=false; fbConflict=null; fbLastSync=0; fbLastScorePush=0;
+  if(fbAutoTimer){ clearTimeout(fbAutoTimer); fbAutoTimer=null; }
+  // 60초 간격을 기다리지 않고 새 진행을 즉시 올립니다.
+  firebaseAutoUpload();
 }
 function fbAdminPanelHtml(){
   const list=fbAdminUsers;
@@ -4940,6 +4979,10 @@ async function adminResetTarget(uid, mode){
     // 모든 시즌의 점수 삭제
     const scoreSnap=await api.db.getDocs(api.db.query(api.db.collection(fbDb,"scores"),api.db.where("uid","==",uid)));
     await Promise.all(scoreSnap.docs.map(d=>api.db.deleteDoc(d.ref)));
+    // 서버 정리가 끝난 뒤 완료 신호를 남겨 대상 기기가 새 진행을 바로 올리게 합니다.
+    await api.db.setDoc(api.db.doc(fbDb,"admin_resets",uid),{
+      requestId, completedAt:api.db.serverTimestamp()
+    },{merge:true});
     await fbAdminRefresh();
     fbAdminMsg=`${name} 계정을 초기화했습니다.`;
     notify("system","강제 초기화 완료",`${name} 계정의 ${all?"전체":"현재"} 진행을 초기화했습니다.`);
@@ -5065,7 +5108,14 @@ async function firebaseUpload(force){
 }
 // ── 로그인 상태에서 저장하면 클라우드에도 자동으로 올립니다(쓰기 제한을 위해 간격을 둡니다) ──
 const FB_SYNC_MIN_MS=60000, FB_SYNC_DELAY_MS=8000, FB_SCORE_EVERY_MS=300000;
-function fbAutoWanted(){ return !!(fbUser && !fbAutoPaused && !multiTab && state.settings && state.settings.cloudAuto!==false); }
+function fbAutoWanted(){ return !!(fbUser && !fbAutoPaused && !fbResetPending && !multiTab && state.settings && state.settings.cloudAuto!==false); }
+async function fbWaitCloudWrite(){
+  while(fbCloudWrite){
+    const p=fbCloudWrite;
+    try{ await p; }catch(e){}
+    if(fbCloudWrite===p) break;
+  }
+}
 function scheduleCloudSync(){
   if(!fbAutoWanted()||fbAutoTimer) return;
   const wait=Math.max(FB_SYNC_DELAY_MS, FB_SYNC_MIN_MS-(Date.now()-fbLastSync));
@@ -5073,30 +5123,40 @@ function scheduleCloudSync(){
 }
 async function firebaseAutoUpload(){
   if(!fbAutoWanted()) return;
-  try{
-    const api=await firebaseLoad();
-    const {data,score}=firebaseSavePayload();
-    const {conflict}=await fbPreflight(api);
-    if(conflict){
-      fbConflict=conflict; fbAutoPaused=true;
-      notify("system","클라우드 저장 대기",`다른 기기에서 더 최근에 저장했습니다(${won(conflict.remoteScore)}). 설정에서 어느 쪽을 쓸지 골라 주세요.`);
-      return;
+  const epoch=fbCloudEpoch;
+  const job=(async()=>{
+    try{
+      const api=await firebaseLoad();
+      const {data,score}=firebaseSavePayload();
+      if(epoch!==fbCloudEpoch || !fbAutoWanted()) return;
+      const {conflict}=await fbPreflight(api);
+      if(epoch!==fbCloudEpoch || !fbAutoWanted()) return;
+      if(conflict){
+        fbConflict=conflict; fbAutoPaused=true;
+        notify("system","클라우드 저장 대기",`다른 기기에서 더 최근에 저장했습니다(${won(conflict.remoteScore)}). 설정에서 어느 쪽을 쓸지 골라 주세요.`);
+        return;
+      }
+      fbLastSync=Date.now();
+      await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",revision:saveRevision(),savedAt:Date.now(),device:fbDevice(),updatedAt:api.db.serverTimestamp()});
+      fbSyncRev=saveRevision();
+      // 초기화가 저장 중간에 시작됐다면 점수·백업도 옛 상태로 쓰지 않습니다.
+      if(epoch!==fbCloudEpoch) return;
+      // 순위는 5분에 한 번만 써서 Firestore 쓰기 한도를 아낍니다.
+      if(Date.now()-fbLastScorePush>FB_SCORE_EVERY_MS){
+        fbLastScorePush=Date.now();
+        await api.db.setDoc(api.db.doc(fbDb,"scores",`${seasonKey()}_${fbUser.uid}`),{season:seasonKey(),uid:fbUser.uid,nickname:fbUser.displayName||"익명",score,updatedAt:api.db.serverTimestamp()});
+      }
+      if(epoch!==fbCloudEpoch) return;
+      await fbMaybeSnapshot(api,{data,score});
+      if(fbLastError&&fbLastError.where==="자동 저장") fbLastError=null;
+    }catch(e){
+      firebaseNoteError(e,"자동 저장");
+    }finally{
+      if(activePage()==="settings"){ try{ firebasePanelRefresh(""); }catch(_){} }
     }
-    fbLastSync=Date.now();
-    await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",revision:saveRevision(),savedAt:Date.now(),device:fbDevice(),updatedAt:api.db.serverTimestamp()});
-    fbSyncRev=saveRevision();
-    // 순위는 5분에 한 번만 써서 Firestore 쓰기 한도를 아낍니다.
-    if(Date.now()-fbLastScorePush>FB_SCORE_EVERY_MS){
-      fbLastScorePush=Date.now();
-      await api.db.setDoc(api.db.doc(fbDb,"scores",`${seasonKey()}_${fbUser.uid}`),{season:seasonKey(),uid:fbUser.uid,nickname:fbUser.displayName||"익명",score,updatedAt:api.db.serverTimestamp()});
-    }
-    await fbMaybeSnapshot(api,{data,score});
-    if(fbLastError&&fbLastError.where==="자동 저장") fbLastError=null;
-  }catch(e){
-    firebaseNoteError(e,"자동 저장");
-  }finally{
-    if(activePage()==="settings"){ try{ firebasePanelRefresh(""); }catch(_){} }
-  }
+  })();
+  fbCloudWrite=job;
+  try{ await job; } finally { if(fbCloudWrite===job) fbCloudWrite=null; }
 }
 function setCloudAuto(on){ state.settings.cloudAuto=!!on; fbAutoPaused=false; fbLastError=null; saveGame(); if(on) scheduleCloudSync(); settingsPage(); }
 function fbSyncText(){
