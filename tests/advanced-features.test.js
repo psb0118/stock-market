@@ -443,7 +443,7 @@ function check(name, ok, detail) {
   })()`);
   check('계좌별 성과에 보유·실현손익이 집계됨', r.stats.qty===10 && r.stats.value===1000000 && r.panel===true, JSON.stringify(r.stats));
   check('자산 대시보드에 계좌별 주식 배분 표시', r.dash===true && r.nan===false);
-  check('저장 스키마 버전·마이그레이션', r.version===3 && r.migrated===3 && r.lotAccount==='isa', JSON.stringify(r));
+  check('저장 스키마 버전·마이그레이션', r.version===4 && r.migrated===4 && r.lotAccount==='isa', JSON.stringify(r));
 }
 {
   const g = createGame(16);

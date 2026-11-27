@@ -665,7 +665,7 @@ const TAX_GAINS_FREE = 2500000; // 양도세 기본공제(연간 실현손익)
 const TAX_ACCOUNTS=["general","isa","pension"];
 const TAX_ACCOUNT_LIMITS={general:Infinity, isa:20000000, pension:18000000}; // 계좌별 연간 납입한도
 const TAX_YEAR_SECONDS=18000; // 게임 30일 = 1세금연도
-const SAVE_VERSION=3;
+const SAVE_VERSION=4;
 const DIVIDEND_YIELD = 0.001;   // 배당수익률(보유 평가액 대비, 120초 주기)
 const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
 const MAX_DAILY_GAIN = 0.50; // 하루 상한 +50%
@@ -1071,6 +1071,7 @@ const state={
   labor: {shifts:0, earned:0, lastAt:{}, warned:false, xp:0, points:0, stamina:100, skills:{focus:0, stamina:0, service:0}}, // 단기 노동 경력·컨디션·스킬
   daily: {date:"", counts:{}, claimed:{}},
   speed: 1, paused: false, lastSeen: 0,
+  revision: 0, savedAt: 0, // 저장 리바이전(기기 간 충돌 판단용)
   seasonBase: START_CASH, seasonBaseIndex: 1000, reportMonth: "", lastGrade: "브론즈",
   cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""},
   // ── 확장 자산·성장 시스템 ──
@@ -1247,6 +1248,7 @@ function beep(kind){
 }
 const notifySeen={};
 function notify(kind,title,text){
+  if(OFFLINE_REPLAY) return;
   const n=state.notify||{};
   if(n.master===true) return;      // 모든 알림 끄기
   if(n[kind]===false) return;      // 종류별 끄기
@@ -1302,6 +1304,7 @@ function showToast(title,text,opts){
 // 알림 설정과 관계없이 반드시 보여 주는 알림입니다(공모주 청약처럼 놓치면 참여 기회가 사라지는 이벤트).
 // 토스트는 fixed 오버레이라 문서 흐름을 밀지 않고, 누르면 해당 화면으로 이동합니다.
 function notifyAlways(title,text,opts){
+  if(OFFLINE_REPLAY) return;
   const n=state.notify||{};
   if(n.center!==false){
     if(!Array.isArray(state.alerts)) state.alerts=[];
@@ -1983,6 +1986,7 @@ function markDex(kind,id){
   if(kind==="company"){ state.dex.company=true; return; }
   if(!state.dex[kind]||typeof state.dex[kind]!=="object") state.dex[kind]={};
   state.dex[kind][id]=true;
+  if(kind==="stocks" && !ensureOnboard().firstTrade){ ensureOnboard().firstTrade=true; trackEvent("first_trade"); }
 }
 function confirmTrade(label,detail){
   const s=state.settings||{};
@@ -2494,7 +2498,7 @@ function tickAlt(){
     const p=metalPrice(m.id);
     state.altPrices[m.id]=Math.max(Math.round(m.price*.35*100)/100,Math.round(p*(1+(ar(40+mi)-.5)*m.vol)*100)/100);
   });
-  if(state.marketSeconds%60===0){
+  if(state.marketSeconds%60===0 && !OFFLINE_REPLAY){
     let rent=0,upkeep=0;
     const rentBonus=rebirthBonus("estate",.04);
     ESTATES.forEach(e=>{ const q=(state.estate[e.id]&&state.estate[e.id].qty)||0; if(!q) return; rent+=q*estatePrice(e.id)*e.rent*rentBonus; upkeep+=q*estatePrice(e.id)*e.upkeep; });
@@ -2833,6 +2837,21 @@ function updateSpeedUI(){
 // ── 오프라인 정산(기본 2시간, 환생 업그레이드로 연장) ──────────────
 const OFFLINE_MAX_BASE=2*3600;
 function offlineMaxSeconds(){ return OFFLINE_MAX_BASE + 2*3600*rebirthLevel("offline"); }
+// 오프라인 동안에도 시장을 결정론적으로 재생합니다(같은 게임 시각 = 같은 시세).
+let OFFLINE_REPLAY=false;
+function replayOfflineMarket(seconds){
+  if(!(seconds>0)) return;
+  OFFLINE_REPLAY=true;
+  try{
+    for(let i=0;i<seconds;i++){
+      state.marketSeconds++;
+      if(state.marketSeconds%15===0) tickAlt();
+      if(state.marketSeconds%5===0){ tickMarket(); updateFX(); }
+      if(state.marketSeconds%7===0) marketEventsAndNews();
+    }
+  } finally { OFFLINE_REPLAY=false; }
+  state.marketOpen=(state.marketSeconds%240)<180;
+}
 function applyOfflineProgress(){
   const now=Date.now();
   const last=state.lastSeen||0;
@@ -2840,6 +2859,13 @@ function applyOfflineProgress(){
   if(!last || last>now) return null;
   const sec=Math.min(offlineMaxSeconds(), Math.floor((now-last)/1000));
   if(sec<120) return null;
+  // 재생 전 시세를 기억해 두고, 같은 시간만큼 시장을 돌려 놓습니다(돈 정산은 아래에서 따로).
+  const idxBefore=marketIndex(), fxBefore=fx.usd;
+  const heldBefore={};
+  stocks.forEach(s=>{ if(+s.own>0) heldBefore[s.id]=s.price; });
+  replayOfflineMarket(sec);
+  const idxAfter=marketIndex(), fxAfter=fx.usd;
+  const held=Object.keys(heldBefore).map(id=>{ const s=stock(id); const p0=heldBefore[id]||s.price; return {name:s.name, ret:p0>0?s.price/p0-1:0}; }).sort((a,b)=>Math.abs(b.ret)-Math.abs(a.ret)).slice(0,3);
   const periods=sec/15;
   let interest=0, loanInterest=0;
   const depositBonus=rebirthBonus("deposit",.03);
@@ -2870,7 +2896,9 @@ function applyOfflineProgress(){
   ESTATES.forEach(e=>{ const q=(state.estate[e.id]&&state.estate[e.id].qty)||0; if(!q) return; rent+=q*estatePrice(e.id)*e.rent*rentBonus*rentPeriods; upkeep+=q*estatePrice(e.id)*e.upkeep*rentPeriods; });
   const companyPay=state.company?Math.round(state.company.profit*((state.company.payout==null?.3:state.company.payout))*rebirthBonus("company",.04)*sec/30):0;
   state.cash+=rent-upkeep+companyPay;
-  const summary={sec,interest,dividends,loanInterest,rent,upkeep,companyPay};
+  const market={idxBefore,idxAfter,fxBefore,fxAfter,held};
+  try{ trackEvent("offline_settlement",{min:Math.floor(sec/60)}); }catch(e){}
+  const summary={sec,interest,dividends,loanInterest,rent,upkeep,companyPay,market};
   addLog(`오프라인 정산: ${Math.floor(sec/60)}분 · 이자 ${won(interest)} · 배당 ${won(dividends)}`);
   notify("system","오프라인 정산",`${Math.floor(sec/60)}분 동안 이자 ${won(interest)} · 배당 ${won(dividends)}`);
   openModal("오프라인 정산",`<div class="kpis">
@@ -2881,7 +2909,14 @@ function applyOfflineProgress(){
     <div class="kpi"><small>임대 수익</small><b>${won(rent||0)}</b></div>
     <div class="kpi"><small>유지비</small><b>${won(upkeep||0)}</b></div>
     <div class="kpi"><small>기업 배당</small><b>${won(companyPay||0)}</b></div>
-  </div><p style="margin-top:10px;font-size:12px;color:#667085">주가·부동산 가격 변동은 반영하지 않고 이자·배당·임대료만 정산합니다(최대 ${Math.floor(offlineMaxSeconds()/3600)}시간).</p>`);
+  </div>
+  <h4 style="margin:14px 0 8px;font-size:13px">재생된 시장 (최대 ${Math.floor(offlineMaxSeconds()/3600)}시간)</h4>
+  <div class="kpis">
+    <div class="kpi"><small>시장 지수</small><b class="${idxAfter>=idxBefore?"up":"down"}">${pct(idxBefore>0?idxAfter/idxBefore-1:0)}</b></div>
+    <div class="kpi"><small>환율</small><b class="${fxAfter>=fxBefore?"up":"down"}">${pct(fxBefore>0?fxAfter/fxBefore-1:0)}</b></div>
+    ${held.length?held.map(h=>`<div class="kpi"><small>${escHtml(h.name)}</small><b class="${h.ret>=0?"up":"down"}">${pct(h.ret)}</b></div>`).join(""):`<div class="kpi"><small>보유 종목</small><b>없음</b></div>`}
+  </div>
+  <p style="margin-top:10px;font-size:12px;color:#667085">끼져 있던 시간만큼 시장을 그대로 재생해 보여 줍니다(같은 시간이면 모든 플레이어가 같은 시세). 이자·배당·임대료는 위에서 함께 정산했습니다.</p>`);
   saveGame();
   return summary;
 }
@@ -4317,7 +4352,7 @@ async function firebaseBoot(){
     api.auth.onAuthStateChanged(fbAuth,u=>{
       const was=fbUser;
       fbUser=u||null;
-      if(fbUser&&!was){ fbAutoPaused=false; firebaseAfterSignIn(); }
+      if(fbUser&&!was){ fbAutoPaused=false; trackEvent("sign_in"); firebaseAfterSignIn(); }
       if(!fbUser){ fbAutoPaused=false; }
       try{ if(activePage()==="settings") settingsPage(); }catch(e){}
     });
@@ -4362,7 +4397,49 @@ function firebaseSavePayload(){
   if(raw.length>900000) throw new Error("저장 데이터가 너무 큽니다(Firestore 1MB 제한에 근접).");
   return {data,score:Math.round(totalAssetsKRW())};
 }
-async function firebaseUpload(){
+// ── 기기 간 저장 충돌 · 백업 스냅샷 ─────────────────────────────
+const DEVICE_KEY="money_playground_device";
+const FB_SNAPSHOTS_MAX=8;
+let fbSyncRev=null;   // 이 기기가 마지막으로 확인한 클라우드 리비전
+let fbConflict=null;  // 충돌 내용(사용자가 고를 때까지 자동 저장을 멈춥니다)
+function fbDevice(){
+  try{ let d=localStorage.getItem(DEVICE_KEY); if(!d){ d="d"+Math.random().toString(36).slice(2,10); localStorage.setItem(DEVICE_KEY,d); } return d; }
+  catch(e){ return "unknown"; }
+}
+// 클라우드 리비전이 이 기기가 마지막으로 본 값과 다르면 다른 곳에서 저장한 것입니다.
+function cloudConflictInfo(localRev, syncedRev, remote){
+  if(!remote || !remote.save) return null;
+  const r=Math.max(0,Math.floor(+remote.revision||0));
+  const known=(syncedRev==null)?null:Math.max(0,Math.floor(+syncedRev||0));
+  if(known!==null && r===known) return null;
+  return {remoteRev:r, localRev:Math.max(0,Math.floor(+localRev||0)), remoteScore:Math.round(+remote.score||0), remoteAt:+remote.savedAt||0, remoteDevice:String(remote.device||""), save:remote.save};
+}
+async function fbPreflight(api){
+  const snap=await api.db.getDoc(api.db.doc(fbDb,"saves",fbUser.uid));
+  const exists=(snap&&typeof snap.exists==="function")?snap.exists():!!snap;
+  const remote=exists?(snap.data()||null):null;
+  return {remote, conflict:cloudConflictInfo(saveRevision(), fbSyncRev, remote)};
+}
+// 업로드할 때마다 최근 몇 개를 백업으로 남기고 오래된 것은 지웁니다.
+async function fbPushSnapshot(api,payload){
+  if(!fbUser || !payload) return;
+  try{
+    const col=api.db.collection(fbDb,"saves",fbUser.uid,"history");
+    const at=Date.now();
+    await api.db.setDoc(api.db.doc(col,String(at)),{save:payload.data, score:payload.score, at, revision:saveRevision(), device:fbDevice()});
+    const snap=await api.db.getDocs(api.db.query(col,api.db.orderBy("at","desc")));
+    const extra=(snap&&snap.docs?snap.docs:[]).slice(FB_SNAPSHOTS_MAX);
+    await Promise.all(extra.map(d=>api.db.deleteDoc(d.ref).catch(()=>{})));
+  }catch(e){ /* 백업 실패는 저장 자체를 막지 않습니다(규칙에 history가 없을 수 있음) */ }
+}
+async function fbListSnapshots(){
+  if(!firebaseConfigured()||!fbUser) return [];
+  const api=await firebaseLoad();
+  const col=api.db.collection(fbDb,"saves",fbUser.uid,"history");
+  const snap=await api.db.getDocs(api.db.query(col,api.db.orderBy("at","desc"),api.db.limit(FB_SNAPSHOTS_MAX)));
+  return (snap&&snap.docs?snap.docs:[]).map(d=>{ const x=d.data()||{}; return {id:d.id, at:+x.at||0, score:Math.round(+x.score||0), revision:+x.revision||0}; });
+}
+async function firebaseUpload(force){
   if(!firebaseConfigured()) return alert("Firebase 설정이 필요합니다.");
   if(!fbUser) return alert("먼저 Google로 로그인해 주세요.");
   if(fbBusy) return;
@@ -4370,10 +4447,23 @@ async function firebaseUpload(){
   try{
     const api=await firebaseLoad();
     const {data,score}=firebaseSavePayload();
-    await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",updatedAt:api.db.serverTimestamp()});
+    // 다른 기기에서 더 최근에 저장했으면 자동으로 덮어쓰지 않고 선택을 받습니다.
+    if(!force){
+      const {conflict}=await fbPreflight(api);
+      if(conflict){
+        fbConflict=conflict; fbAutoPaused=true;
+        notify("system","저장 충돌",`다른 곳에서 더 최근에 저장했습니다(${won(conflict.remoteScore)}). 설정에서 어느 쪽을 쓸지 골라 주세요.`);
+        try{ settingsPage(); }catch(e){}
+        return;
+      }
+    }
+    await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",revision:saveRevision(),savedAt:Date.now(),device:fbDevice(),updatedAt:api.db.serverTimestamp()});
     // 같은 시즌에 한 줄만 유지되도록 문서 id를 시즌+uid로 고정합니다(중복 행 방지).
     await api.db.setDoc(api.db.doc(fbDb,"scores",`${seasonKey()}_${fbUser.uid}`),{season:seasonKey(),uid:fbUser.uid,nickname:fbUser.displayName||"익명",score,updatedAt:api.db.serverTimestamp()});
+    fbSyncRev=saveRevision(); fbConflict=null;
+    await fbPushSnapshot(api,{data,score});
     notify("system","클라우드 저장",`Google 계정에 저장했습니다. · ${won(score)}`);
+    trackEvent("cloud_save");
     fbLastSync=Date.now(); fbLastScorePush=Date.now(); fbAutoPaused=false; fbLastError=null;
   }catch(e){
     const info=firebaseNoteError(e,"클라우드 저장");
@@ -4396,13 +4486,21 @@ async function firebaseAutoUpload(){
   try{
     const api=await firebaseLoad();
     const {data,score}=firebaseSavePayload();
+    const {conflict}=await fbPreflight(api);
+    if(conflict){
+      fbConflict=conflict; fbAutoPaused=true;
+      notify("system","클라우드 저장 대기",`다른 기기에서 더 최근에 저장했습니다(${won(conflict.remoteScore)}). 설정에서 어느 쪽을 쓸지 골라 주세요.`);
+      return;
+    }
     fbLastSync=Date.now();
-    await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",updatedAt:api.db.serverTimestamp()});
+    await api.db.setDoc(api.db.doc(fbDb,"saves",fbUser.uid),{save:data,score,nickname:fbUser.displayName||"",revision:saveRevision(),savedAt:Date.now(),device:fbDevice(),updatedAt:api.db.serverTimestamp()});
+    fbSyncRev=saveRevision();
     // 순위는 5분에 한 번만 써서 Firestore 쓰기 한도를 아낍니다.
     if(Date.now()-fbLastScorePush>FB_SCORE_EVERY_MS){
       fbLastScorePush=Date.now();
       await api.db.setDoc(api.db.doc(fbDb,"scores",`${seasonKey()}_${fbUser.uid}`),{season:seasonKey(),uid:fbUser.uid,nickname:fbUser.displayName||"익명",score,updatedAt:api.db.serverTimestamp()});
     }
+    await fbPushSnapshot(api,{data,score});
     if(fbLastError&&fbLastError.where==="자동 저장") fbLastError=null;
   }catch(e){
     firebaseNoteError(e,"자동 저장");
@@ -4424,12 +4522,18 @@ async function firebaseAfterSignIn(){
   if(!fbUser) return;
   try{
     const api=await firebaseLoad();
-    const snap=await api.db.getDoc(api.db.doc(fbDb,"saves",fbUser.uid));
-    const remote=(snap.exists()&&snap.data()&&snap.data().save)?Math.round(+snap.data().score||0):0;
+    const {remote, conflict}=await fbPreflight(api);
+    const remoteScore=remote?Math.round(+remote.score||0):0;
     const local=Math.round(totalAssetsKRW());
-    if(remote>local*1.05){
-      fbAutoPaused=true;
-      notify("system","클라우드 기록 발견",`클라우드에 더 진행된 기록(${won(remote)})이 있습니다. 설정 → '불러오기'로 이어서 하세요.`);
+    if(remote){
+      fbSyncRev=Math.max(0,Math.floor(+remote.revision||0));
+      if(remoteScore>local*1.05 || conflict){
+        fbConflict=conflict||{remoteRev:fbSyncRev, localRev:saveRevision(), remoteScore, remoteAt:+remote.savedAt||0, remoteDevice:String(remote.device||""), save:remote.save};
+        fbAutoPaused=true;
+        notify("system","클라우드 기록 발견",`클라우드에 더 진행된 기록(${won(remoteScore)})이 있습니다. 설정에서 불러오거나 이 기기 기록을 유지하세요.`);
+      } else {
+        firebaseAutoUpload();
+      }
     } else {
       firebaseAutoUpload();
     }
@@ -4452,6 +4556,7 @@ async function firebaseDownload(){
     applySaveData(snap.data().save);
     saveGame(); banking(); fxPage(); news(); portfolio(); update(); updateBell(); updateSpeedUI();
     notify("system","클라우드 복원","Google 계정 저장을 불러왔습니다.");
+    trackEvent("cloud_restore");
     fbLastError=null; fbAutoPaused=false;
   }catch(e){
     if(e&&e.code==="no_save"){ alert("Google 계정에 저장된 진행이 아직 없습니다.\n먼저 '클라우드에 저장'을 눌러 주세요."); }
@@ -4463,6 +4568,7 @@ async function firebaseDownload(){
 }
 async function firebaseLeaderboard(){
   if(!firebaseConfigured()) return alert("Firebase 설정이 필요합니다.");
+  trackEvent("leaderboard_open");
   openModal("Google 리더보드",`<div id="fb-board"><p>불러오는 중…</p></div>`);
   try{
     const api=await firebaseLoad();
@@ -4482,6 +4588,69 @@ function firebasePanelRefresh(msg){
   const el=document.getElementById("firebase-panel");
   if(el) el.innerHTML=(msg?`<p class="muted-sm" style="margin-bottom:8px">${escHtml(msg)}</p>`:"")+firebasePanelHtml();
 }
+// ── 저장 충돌 해결 · 백업 목록/복원 ─────────────────────────────
+function fbConflictHtml(){
+  if(!fbConflict) return "";
+  const c=fbConflict;
+  return `<div data-fb-conflict="1" style="margin-top:10px;padding:10px 12px;border:1px solid #f0b4ae;border-radius:10px;background:#fff6f4;color:#7a271a">
+    <div style="font-size:12px;font-weight:700">⚠ 저장 충돌 — 어느 쪽을 쓸까요?</div>
+    <div style="font-size:11.5px;margin-top:4px">이 기기: <b>${won(Math.round(totalAssetsKRW()))}</b> · 리비전 ${c.localRev}</div>
+    <div style="font-size:11.5px">클라우드: <b>${won(c.remoteScore)}</b> · 리비전 ${c.remoteRev}${c.remoteAt?` · ${escHtml(new Date(c.remoteAt).toLocaleString("ko-KR"))}`:""}</div>
+    <div class="button-row" style="margin-top:8px">
+      <button class="buy" onclick="fbResolveUseCloud()">클라우드 불러오기</button>
+      <button class="ghost" onclick="fbResolveKeepLocal()">이 기기로 덮어쓰기</button>
+      <button class="ghost" onclick="fbDismissConflict()">나중에</button>
+    </div>
+    <div style="font-size:11px;margin-top:6px">덮어쓰기를 골라도 클라우드 기록은 백업에 남습니다.</div>
+  </div>`;
+}
+async function fbResolveUseCloud(){
+  if(!fbConflict) return;
+  const c=fbConflict;
+  if(!confirm("클라우드 기록으로 이 기기를 덮어쓸까요?\n이 기기의 현재 진행은 사라집니다.")) return;
+  try{
+    applySaveData(c.save);
+    state.revision=Math.max(c.remoteRev, c.localRev)+1;
+    fbConflict=null; fbSyncRev=c.remoteRev; fbAutoPaused=false;
+    saveGame(); banking(); fxPage(); news(); portfolio(); update(); updateBell(); updateSpeedUI();
+    notify("system","클라우드 복원",`클라우드 기록(${won(c.remoteScore)})을 불러왔습니다.`);
+  }catch(e){ alert("복원하지 못했습니다: "+firebaseErrorCode(e)); }
+  try{ settingsPage(); }catch(e){}
+}
+async function fbResolveKeepLocal(){
+  if(!fbConflict) return;
+  const c=fbConflict;
+  if(!confirm("이 기기의 진행으로 클라우드를 덮어쓸까요?\n클라우드 기록은 백업에 보관됩니다.")) return;
+  try{ if(c.save){ const api=await firebaseLoad(); await fbPushSnapshot(api,{data:c.save,score:c.remoteScore}); } }catch(e){}
+  fbConflict=null;
+  await firebaseUpload(true);
+}
+function fbDismissConflict(){ fbConflict=null; try{ settingsPage(); }catch(e){} }
+async function fbShowSnapshots(){
+  openModal("클라우드 백업",`<div id="fb-snaps"><p>불러오는 중…</p></div>`);
+  const box=document.getElementById("fb-snaps");
+  try{
+    const list=await fbListSnapshots();
+    if(!box) return;
+    box.innerHTML=list.length?list.map(s=>`<div class="rank-row"><b>${escHtml(new Date(s.at).toLocaleString("ko-KR"))}</b><span>${won(s.score)}</span><button class="ghost small" onclick="fbRestoreSnapshot('${escAttr(s.id)}')">이 백업으로 복원</button></div>`).join("")+`<p class="muted-sm" style="margin-top:8px">최근 ${FB_SNAPSHOTS_MAX}개까지 자동으로 보관합니다. 복원하면 이 기기의 진행이 덮어써집니다.</p>`:`<p>아직 백업이 없습니다. 클라우드에 저장하면 자동으로 쏒입니다.</p>`;
+  }catch(e){
+    const info=firebaseNoteError(e,"백업 보기");
+    if(box) box.innerHTML=`<p>백업을 불러오지 못했습니다 (${escHtml(info.code)})</p><ol style="margin:8px 0 0 18px;font-size:12px">${info.steps.map(s=>`<li>${s}</li>`).join("")}</ol>`;
+  }
+}
+async function fbRestoreSnapshot(id){
+  if(!confirm("이 백업으로 이 기기의 진행을 되돌릴까요?")) return;
+  try{
+    const api=await firebaseLoad();
+    const snap=await api.db.getDoc(api.db.doc(fbDb,"saves",fbUser.uid,"history",id));
+    if(!snap.exists()||!snap.data()||!snap.data().save) throw Object.assign(new Error("no_save"),{code:"no_save"});
+    const at=+snap.data().at||Date.now();
+    applySaveData(snap.data().save);
+    fbConflict=null; fbAutoPaused=false;
+    saveGame(); banking(); fxPage(); news(); portfolio(); update(); updateBell(); updateSpeedUI(); settingsPage();
+    notify("system","백업 복원",`${new Date(at).toLocaleString("ko-KR")} 백업을 불러왔습니다.`);
+  }catch(e){ alert("백업을 복원하지 못했습니다: "+firebaseErrorCode(e)); }
+}
 function firebasePanelHtml(){
   const help=firebaseHelpHtml(fbLastError);
   if(!firebaseConfigured()){
@@ -4497,11 +4666,12 @@ function firebasePanelHtml(){
   const autoOn=state.settings&&state.settings.cloudAuto!==false;
   const retry=fbAutoPaused?`<div class="button-row" style="margin-top:8px"><button class="ghost small" onclick="firebaseAutoRetry()">자동 저장 다시 시도</button></div>`:"";
   return `<div class="cloud-head"><div><b>${escHtml(fbUser.displayName||"Google 사용자")}</b> <span class="pill">로그인됨</span></div><div style="font-size:12px;">${escHtml(fbUser.email||"")}</div></div>
-    <p class="muted-sm" style="margin-top:8px">${escHtml(fbSyncText())}</p>${retry}
+    <p class="muted-sm" style="margin-top:8px">${escHtml(fbSyncText())}</p>${retry}${fbConflictHtml()}
     <div class="setting-row" style="margin-top:6px"><div class="setting-copy"><b>자동 클라우드 저장</b><small>로그인한 상태에서 진행이 저장될 때(자동 저장 포함) 1분에 한 번씩 Google 계정에도 자동으로 올립니다. 순위는 5분에 한 번 갱신됩니다.</small></div><div class="setting-control"><label class="toggle"><input type="checkbox" ${autoOn?"checked":""} onchange="setCloudAuto(this.checked)"><span></span></label></div></div>
     <div class="button-row" style="margin-top:10px">
       <button class="buy" onclick="firebaseUpload()">지금 클라우드에 저장</button>
       <button class="ghost" onclick="firebaseDownload()">불러오기</button>
+      <button class="ghost" onclick="fbShowSnapshots()">최근 백업</button>
       <button class="ghost" onclick="firebaseLeaderboard()">리더보드</button>
       <button class="sell" onclick="firebaseSignOut()">로그아웃</button>
     </div>
@@ -4552,6 +4722,7 @@ function fbDiagPush(key,label,state,detail,fix,link,linkLabel){
 }
 async function firebaseDiagnose(){
   if(fbDiag&&fbDiag.running) return;
+  trackEvent("connection_check");
   fbDiag={at:Date.now(),running:true,rows:[]};
   try{ firebasePanelRefresh(""); }catch(e){}
   fbDiagPush("config","웹 앱 설정",firebaseConfigured()?"pass":"fail",firebaseConfigured()?`프로젝트 ${fbProject()}`:"meta[name=firebase-config]가 비어 있습니다",firebaseConfigured()?"":"index.html의 meta[name=firebase-config]에 웹 앱 설정 JSON을 넣으세요");
@@ -4648,6 +4819,7 @@ function dashboardPage(){
       <div class="metric"><small>이번 달</small><b class="${(reportData().ret>=0)?"up":"down"}">${pct(reportData().ret)}</b><span class="muted-sm">시장 ${pct(reportData().indexRet)}</span></div>
     </section>
     ${dashPanelHtml()}
+    ${onboardPanelHtml()}
     ${challengePanelHtml()}
     <section class="section"><div class="section-head"><h3>자산 구성</h3><button class="ghost small" onclick="show('portfolio')">전체 보기</button></div>
       <div class="breakdown">
@@ -4875,6 +5047,7 @@ function settingsPage(){
     </div></section>
     <section class="settings-section"><h3>게임 플레이</h3><div class="panel">${autoPanelHtml()}</div></section>
     <section class="settings-section"><h3>데이터</h3><div class="panel">${savePanelHtml()}</div></section>
+    <section class="settings-section"><h3>진단 정보</h3><div class="panel">${diagPanelHtml()}</div></section>
     <section class="settings-section"><h3>Google 계정 · 실제 리더보드</h3><div class="panel"><div id="firebase-panel">${firebasePanelHtml()}</div></div></section>
     ${CLOUD_API?`<section class="settings-section"><h3>기기 연결 클라우드</h3><div class="panel"><div id="cloud-panel">${cloudPanelHTML()}</div></div></section>`:""}`;
 }
@@ -4997,7 +5170,158 @@ function resetRunForRebirth(){
   banking(); fxPage(); news(); portfolio(); dashboardPage(); updateSpeedUI(); updateBell();
 }
 
+// ── 관측성: 오류·퍼널 이벤트(이 기기에만 저장) ──────────────────
+const DIAG_KEY="money_playground_diag", DIAG_MAX=30;
+let diagCache=null;
+function gaId(){ try{ const m=document.querySelector('meta[name="ga4-id"]'); return (m&&m.getAttribute?String(m.getAttribute("content")||"").trim():"")||""; }catch(e){ return ""; } }
+function diagState(){
+  if(diagCache) return diagCache;
+  try{ diagCache=JSON.parse(localStorage.getItem(DIAG_KEY)||"null")||{}; }catch(e){ diagCache={}; }
+  if(!Array.isArray(diagCache.errors)) diagCache.errors=[];
+  if(!diagCache.events||typeof diagCache.events!=="object") diagCache.events={};
+  return diagCache;
+}
+function diagPersist(){ try{ localStorage.setItem(DIAG_KEY, JSON.stringify(diagState())); }catch(e){} }
+function gtagSafe(cmd){ try{ if(typeof window!=="undefined" && typeof window.gtag==="function") window.gtag.apply(window, arguments); }catch(e){} }
+// 주요 행동을 세어 두고, GA4가 설정되어 있으면 같이 보냅니다.
+function trackEvent(name,params){
+  try{
+    const d=diagState();
+    d.events[name]=(d.events[name]||0)+1;
+    d.lastEventAt=Date.now();
+    diagPersist();
+    gtagSafe("event", String(name), params&&typeof params==="object"?params:{});
+  }catch(e){}
+}
+function logError(where,err){
+  try{
+    const d=diagState();
+    const raw=(err&&(err.message||err.reason||err))||"unknown";
+    d.errors.unshift({at:Date.now(), where:String(where||""), code:String((err&&err.code)||""), msg:String(raw).slice(0,300)});
+    if(d.errors.length>DIAG_MAX) d.errors.length=DIAG_MAX;
+    diagPersist();
+    gtagSafe("event","js_error",{where:String(where||""), code:String((err&&err.code)||"")});
+  }catch(e){}
+}
+// GA4 측정 ID를 meta[name=ga4-id]에 넣으면 자동으로 켜집니다(없으면 아무 것도 보내지 않습니다).
+function analyticsBoot(){
+  const id=gaId();
+  if(!id) return;
+  try{
+    if(document.getElementById("ga4-script")) return;
+    if(!document.head||typeof document.head.appendChild!=="function") return;
+    const s=document.createElement("script");
+    s.id="ga4-script"; s.async=true; s.src=`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
+    document.head.appendChild(s);
+    if(typeof window!=="undefined"){
+      window.dataLayer=window.dataLayer||[];
+      window.gtag=function(){ window.dataLayer.push(arguments); };
+      window.gtag("js",new Date());
+      window.gtag("config",id,{send_page_view:true});
+    }
+  }catch(e){ logError("analytics",e); }
+}
+function diagText(){
+  const d=diagState();
+  const lines=[
+    `앱 버전 v${SAVE_VERSION} · 리바이전 ${saveRevision()}`,
+    `GA4 ${gaId()?"설정됨":"없음"} · Firebase ${firebaseConfigured()?"설정됨":"없음"}`,
+    `오류 ${d.errors.length}건 · 이벤트 ${Object.keys(d.events).length}종`,
+    ""
+  ];
+  Object.keys(d.events).forEach(k=>lines.push(`· event ${k}: ${d.events[k]}`));
+  d.errors.slice(0,10).forEach(e=>lines.push(`· error ${new Date(e.at).toISOString()} [${e.where}${e.code?" "+e.code:""}] ${String(e.msg||"").slice(0,160)}`));
+  return lines.join("\n");
+}
+async function diagCopy(){
+  const text=diagText();
+  try{ await navigator.clipboard.writeText(text); notify("system","진단 정보 복사","클립보드에 복사했습니다."); }
+  catch(e){ openModal("진단 정보",`<pre style="white-space:pre-wrap;font-size:11px;line-height:1.5">${escHtml(text)}</pre>`); }
+}
+function diagClear(){ diagCache={errors:[],events:{}}; diagPersist(); settingsPage(); notify("system","진단 정보","기록을 지우었습니다."); }
+function diagPanelHtml(){
+  const d=diagState();
+  const events=Object.keys(d.events).map(k=>[k,d.events[k]]).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const total=events.reduce((a,b)=>a+b[1],0);
+  return `<p class="muted-sm">오류와 주요 행동을 <b>이 기기에만</b> 기록합니다. 이메일·저장 내용 같은 개인정보는 남기지 않습니다.</p>
+    <div class="kpis" style="margin-top:8px">
+      <div class="kpi"><small>기록된 오류</small><b>${d.errors.length}건</b></div>
+      <div class="kpi"><small>측정 이벤트</small><b>${total}건</b></div>
+      <div class="kpi"><small>GA4</small><b>${gaId()?"연결됨":"꺼짐"}</b></div>
+    </div>
+    ${events.length?`<p class="muted-sm" style="margin-top:8px">${events.map(([k,v])=>`${escHtml(k)} ${v}회`).join(" · ")}</p>`:`<p class="muted-sm" style="margin-top:8px">아직 기록된 행동이 없습니다.</p>`}
+    ${d.errors.length?`<div style="margin-top:8px;font-size:11.5px">${d.errors.slice(0,5).map(e=>`<div class="muted-sm">· ${escHtml(new Date(e.at).toLocaleString("ko-KR"))} ${escHtml(e.where||"-")} ${escHtml(String(e.msg||"").slice(0,80))}</div>`).join("")}</div>`:""}
+    <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="diagCopy()">진단 정보 복사</button><button class="ghost" onclick="diagClear()">기록 지우기</button></div>
+    <p class="muted-sm" style="margin-top:6px">실시간 수집을 켜려면 index.html에 <code>&lt;meta name="ga4-id" content="G-XXXXXXX"&gt;</code>를 넣으세요. 넣는 즉시 시작합니다.</p>`;
+}
+
+// ── 온보딩 · 점진적 해금 ────────────────────────────────────
+const UNLOCK_RULES=[
+  {id:"tax", label:"세금 계좌", need:5000000, pages:["tax"], hint:"총자산 500만원"},
+  {id:"ipo", label:"공모주 청약", need:10000000, pages:["ipo"], hint:"총자산 1,000만원"},
+  {id:"company", label:"기업 경영", need:30000000, pages:["company"], hint:"총자산 3,000만원"},
+  {id:"rebirth", label:"환생", need:100000000, pages:["rebirth"], hint:"순자산 1억원"}
+];
+function ensureOnboard(){
+  if(!state.onboard||typeof state.onboard!=="object") state.onboard={done:false, dismissed:false, seen:{}, firstTrade:false};
+  if(!state.onboard.seen||typeof state.onboard.seen!=="object") state.onboard.seen={};
+  return state.onboard;
+}
+function unlockReach(){ return Math.max(totalAssetsKRW(), +state.peakNet||0); }
+function unlockRuleFor(page){ return UNLOCK_RULES.find(u=>u.pages.includes(page))||null; }
+function isPageLocked(page){
+  const rule=unlockRuleFor(page);
+  if(!rule) return false;
+  return unlockReach()<rule.need;
+}
+function openUnlockModal(rule){
+  const reach=unlockReach(), p=Math.max(0,Math.min(100,rule.need>0?reach/rule.need*100:100));
+  openModal("아직 잠겨 있어요",`<p style="font-size:13px"><b>${escHtml(rule.label)}</b>은(는) ${escHtml(rule.hint)}을 넘기면 열립니다.</p>
+    <div class="bar" style="margin:10px 0"><span style="width:${p.toFixed(1)}%"></span></div>
+    <p class="muted-sm">지금 ${won(reach)} / ${won(rule.need)}</p>
+    <p class="muted-sm" style="margin-top:8px">대시보드의 <b>첫 걸음</b>을 따라가면 가장 빨리 자랍니다.</p>`);
+}
+function onboardGoals(){
+  const ob=ensureOnboard();
+  const dex=(state.dex&&state.dex.stocks)||{};
+  return [
+    {id:"salary", label:"노동으로 첫 급여 받기", done:!!((state.labor&&state.labor.shifts)>0), go:"openLabor()"},
+    {id:"trade", label:"주식 처음 사보기", done:!!ob.firstTrade || Object.keys(dex).length>0, go:"show('domestic')"},
+    {id:"save", label:"예금·적금 가입하기", done:(products||[]).some(p=>+p.amount>0), go:"show('banking')"}
+  ];
+}
+function onboardPanelHtml(){
+  const ob=ensureOnboard();
+  if(ob.dismissed) return "";
+  const goals=onboardGoals(), done=goals.filter(g=>g.done).length;
+  if(done===goals.length) ob.done=true;
+  return `<section class="section" data-onboard="${done}/${goals.length}">
+    <div class="section-head"><h3>첫 걸음 ${done}/${goals.length}</h3><button class="ghost small" onclick="dismissOnboard()">숨기기</button></div>
+    <div class="panel stack">
+      <p class="muted-sm">이 세 단계를 먼저 해보면 게임이 어떻게 돌아가는지 바로 감이 생깁니다.</p>
+      ${goals.map(g=>`<div class="holding-row compact"><b>${g.done?"✅":"⬜"} ${escHtml(g.label)}</b>${g.done?`<span class="muted-sm">완료</span>`:`<button class="ghost small" onclick="${g.go}">하러 가기</button>`}</div>`).join("")}
+    </div></section>`;
+}
+function dismissOnboard(){
+  const ob=ensureOnboard(); ob.dismissed=true; saveGame();
+  try{ dashboardPage(); }catch(e){}
+}
+let unlockCheckAt=0;
+function checkUnlocks(){
+  const now=Date.now();
+  if(now-unlockCheckAt<5000) return;
+  unlockCheckAt=now;
+  const ob=ensureOnboard(), reach=unlockReach();
+  UNLOCK_RULES.forEach(u=>{
+    if(ob.seen[u.id] || reach<u.need) return;
+    ob.seen[u.id]=true;
+    notify("system","새 기능 해금",`${u.label}이(가) 열렸습니다.`);
+    trackEvent("unlock",{id:u.id});
+  });
+}
+
 function init(){
+  analyticsBoot();
   nav();
   stockPage("domestic","국내 주식","한국 시장 대표 종목입니다. 원화(KRW)로 거래됩니다.");
   stockPage("foreign","해외 주식","해외 유명 종목을 달러(USD) 기준으로 거래합니다.");
@@ -5007,10 +5331,12 @@ function init(){
   ipoPage(); shortPage(); guidePage();
   // 저장 데이터를 먼저 불러온 뒤 화면을 그려야 잠금 상태·보유 현황·등급이 올바르게 표시됩니다.
   loadGame();
+  nav(); // 저장된 진행에 맞춰 잠금 표시를 다시 그립니다.
   ensureAdvancedState();
   ensureCalendar();
   state.lastGrade=currentGrade();
   applyOfflineProgress();
+  trackEvent("app_open",{version:SAVE_VERSION,firstRun:!state.savedAt?1:0});
   banking();fxPage();news();portfolio();dashboardPage();holdingsPage();
   const initialStats=document.querySelector(".stats"); if(initialStats) initialStats.classList.add("hidden");
   update();
@@ -5025,7 +5351,8 @@ function init(){
   if(typeof window!=="undefined" && window.addEventListener){
     window.addEventListener("beforeunload",()=>{ try{ saveGame(); }catch(e){} });
     window.addEventListener("storage",e=>{ if(e.key===SAVE_KEY && e.newValue) handleExternalSave(); });
-    window.addEventListener("error",e=>{ try{ notify("system","오류가 발생했습니다",String((e&&e.message)||"알 수 없는 오류")); }catch(_){} });
+    window.addEventListener("error",e=>{ try{ logError("window",(e&&e.error)||{message:e&&e.message}); notify("system","오류가 발생했습니다",String((e&&e.message)||"알 수 없는 오류")); }catch(_){} });
+    window.addEventListener("unhandledrejection",e=>{ try{ logError("promise",e&&e.reason); }catch(_){} });
   }
   setTimeout(bootDone,350);
   if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
@@ -5098,9 +5425,11 @@ function gameLoop(){
     if(state.marketSeconds%15===0) interest();
   }
   update();
+  checkUnlocks();
 }
 
 function addLog(text) {
+  if(OFFLINE_REPLAY) return; // 오프라인 재생 중에는 로그·저장을 남기지 않습니다.
   const now = new Date();
   const timeStr = `[${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}]`;
   state.logs.unshift(`${timeStr} ${text}`);
@@ -5130,9 +5459,12 @@ function handleExternalSave(){
   updateSpeedUI();
   notify("system","다른 탭 감지","다른 탭에서 이미 플레이 중입니다. 이 탭은 자동 저장을 멈췄습니다. 계속하려면 새로고침해 주세요.");
 }
+function saveRevision(){ return Math.max(0, Math.floor(+state.revision||0)); }
 function saveGame() {
   if(multiTab) return;
   state.lastSeen=Date.now();
+  state.savedAt=Date.now();
+  state.revision=saveRevision()+1; // 저장할 때마다 리바이전을 올려 기기 간 충돌을 판단합니다.
   localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveData()));
   try{ scheduleCloudSync(); }catch(e){} // 로그인 상태면 클라우드에도 자동 업로드
 }
@@ -5152,6 +5484,13 @@ const SAVE_MIGRATIONS={
   2:data=>{
     // v2: 평단가에 매수 수수료가 포함되는 형식으로 통일합니다.
     if(data.costBasisIncludesFee===undefined) data.costBasisIncludesFee=false;
+    return data;
+  },
+  4:data=>{
+    // v4: 저장 리바이전·저장 시각을 추가합니다(기기 간 저장 충돌 판단용).
+    data.state=data.state||{}
+    if(!Number.isFinite(+data.state.revision)||+data.state.revision<0) data.state.revision=0;
+    if(!Number.isFinite(+data.state.savedAt)||+data.state.savedAt<0) data.state.savedAt=0;
     return data;
   },
   3:data=>{
@@ -5271,8 +5610,11 @@ function applySaveData(data) {
   if(!Number.isFinite(+state.rewardedGrade)) state.rewardedGrade=gradeIndex(currentGrade());
   if(!Number.isFinite(+state.targetGoal)||+state.targetGoal<=0) state.targetGoal=1000000000;
   if(!state.daily || typeof state.daily!=="object") state.daily={date:"",counts:{},claimed:{}};
+  state.revision=Math.max(0,Math.floor(+state.revision||0));
+  state.savedAt=Math.max(0,+state.savedAt||0);
   if(!Number.isFinite(state.speed) || state.speed<1) state.speed=1;
   state.speed=Math.max(1,Math.min(5,Math.round(state.speed)));
+  ensureOnboard();
   // 새 설정 항목 기본값·타입 보정(잘못된 값이 들어와도 게임이 멈추지 않게)
   state.settings=Object.assign({},SETTINGS_DEFAULT,(state.settings&&typeof state.settings==="object")?state.settings:{});
   state.settings.speed=state.speed;
@@ -5420,7 +5762,7 @@ function clearGame(skipConfirm) {
 }
 
 function nav(){
-  $("nav").innerHTML=NAV_ITEMS.map(n=>`<button data-page="${n.id}" onclick="show('${n.id}')"><i>${n.icon}</i><span>${n.label}</span></button>`).join("");
+  $("nav").innerHTML=NAV_ITEMS.map(n=>{ const locked=isPageLocked(n.id); return `<button data-page="${n.id}"${locked?' class="locked"':''} onclick="show('${n.id}')"><i>${n.icon}</i><span>${n.label}${locked?" 🔒":""}</span></button>`; }).join("");
   const active=parentPage(activePage()||"dashboard");
   document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("on",b.dataset.page===active));
 }
@@ -5459,7 +5801,11 @@ function goPage(id){
   refreshLaborUI();
   renderMobileTradeBar();
 }
-function show(id){ goPage(id); }
+function show(id){
+  const rule=unlockRuleFor(id);
+  if(rule && isPageLocked(id)){ openUnlockModal(rule); return; }
+  goPage(id);
+}
 function quickNav(id){ goPage(id); }
 
 const escAttr=v=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));

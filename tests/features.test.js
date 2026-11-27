@@ -385,6 +385,116 @@ function check(name, ok, detail) {
   check('자동 매수 한 번에 끄기', stopped.ok === true && stopped.auto === false && stopped.orders === 0 && stopped.label === 'none', JSON.stringify(stopped));
 }
 
+// ── 세이브 리바이전·충돌 판단 ─────────────────
+{
+  const g = createGame(41);
+  const rev = g.run(`(()=>{ const a=saveRevision(); saveGame(); const b=saveRevision(); saveGame(); return {a,b,c:saveRevision(), savedAt:state.savedAt>0}; })()`);
+  check('저장할 때마다 리바이전 증가', rev.b === rev.a + 1 && rev.c === rev.a + 2 && rev.savedAt === true, JSON.stringify(rev));
+
+  const cf = g.run(`(()=>{
+    const remote={save:{state:{}}, score:500, revision:7, savedAt:123};
+    return {same: cloudConflictInfo(3,7,remote), diff: cloudConflictInfo(3,6,remote), none: cloudConflictInfo(3,7,null), first: cloudConflictInfo(3,null,remote), noSave: cloudConflictInfo(3,6,{revision:9})};
+  })()`);
+  check('같은 리바이전이면 충돌 아님', cf.same === null);
+  check('다른 리바이전이면 충돌로 판단', !!cf.diff && cf.diff.remoteRev === 7 && cf.diff.remoteScore === 500, JSON.stringify(cf.diff));
+  check('클라우드 기록이 없으면 충돌 아님', cf.none === null && cf.noSave === null);
+  check('처음 보는 클라우드도 충돌 정보를 돌려줌', !!cf.first && cf.first.remoteRev === 7);
+
+  const old = g.run(`(()=>{
+    const legacy={state:{cash:1234567, logs:[]}}; // version 필드가 없던 예전 세이브
+    const migrated=migrateSaveData(JSON.parse(JSON.stringify(legacy)));
+    applySaveData(migrated);
+    return {version:migrated.version, rev:state.revision, savedAt:state.savedAt, cash:Math.round(state.cash), nan:!isFinite(state.cash)};
+  })()`);
+  check('예전 세이브(버전 없음)도 그대로 열림', old.version === 4 && old.cash === 1234567 && old.nan === false, JSON.stringify(old));
+  check('예전 세이브의 리바이전은 0으로 보정', old.rev === 0 && old.savedAt >= 0);
+  check('저장 데이터에 리바이전·저장 시각 포함', g.run('(()=>{ const d=buildSaveData(); saveGame(); return typeof d.state.revision==="number" && typeof d.state.savedAt==="number"; })()') === true);
+
+  const box = g.run(`(()=>{ const before=fbConflictHtml(); fbConflict={remoteRev:9, localRev:4, remoteScore:777000, remoteAt:Date.now(), save:{state:{}}}; const after=fbConflictHtml(); fbConflict=null; return {before, after}; })()`);
+  check('충돌이 없으면 안내 없음', box.before === '');
+  check('충돌 시 두 기록과 선택 버튼 표시', box.after.includes('클라우드 불러오기') && box.after.includes('이 기기로 덮어쓰기') && box.after.includes('777,000'), box.after.slice(0, 60));
+}
+
+// ── 오프라인 시세 재생 ─────────────────────
+{
+  const g = createGame(51);
+  const r = g.run(`(()=>{
+    stocks.forEach(s=>{s.price=s.start; s.own=0}); state.cash=10000000; products.forEach(p=>{p.amount=0;p.rate=0}); state.loan=0;
+    const before=stocks.map(s=>s.price), logsBefore=state.logs.length, secBefore=state.marketSeconds;
+    state.lastSeen=Date.now()-3600*1000;
+    const out=applyOfflineProgress();
+    const changed=stocks.filter((s,i)=>s.price!==before[i]).length;
+    return {changed, hasMarket:!!(out&&out.market), sec:out&&out.sec, advanced:state.marketSeconds-secBefore, flag:OFFLINE_REPLAY, logs:state.logs.length-logsBefore, open:state.marketOpen};
+  })()`);
+  check('오프라인 동안 시세가 실제로 변동', r.changed > 0, r.changed);
+  check('오프라인 정산이 시장 요약을 포함', r.hasMarket === true && r.sec > 0);
+  check('게임 시각이 오프라인 시간만큼 진행', r.advanced === r.sec, `${r.advanced}/${r.sec}`);
+  check('재생 중 로그가 쏟아지지 않음', r.logs <= 1, r.logs);
+  check('재생 후 플래그 해제·장 상태 복원', r.flag === false && typeof r.open === 'boolean');
+
+  // 같은 시간을 "온라인으로 진행"한 것과 "오프라인 재생"한 결과가 같아야 합니다.
+  const a = createGame(61), b = createGame(62);
+  const setup = `stocks.forEach(s=>{s.price=s.start; s.own=0}); products.forEach(p=>{p.amount=0;p.rate=0}); state.cash=10000000; state.marketSeconds=0; 1`;
+  a.run(setup); b.run(setup);
+  a.run(`(()=>{ for(let i=1;i<=3600;i++){ state.marketSeconds++; if(state.marketSeconds%15===0) tickAlt(); if(state.marketSeconds%5===0){ tickMarket(); updateFX(); } if(state.marketSeconds%7===0) marketEventsAndNews(); } return 1; })()`);
+  b.run('replayOfflineMarket(3600)');
+  check('오프라인 재생 결과 = 온라인 진행 결과', a.run('JSON.stringify(stocks.map(s=>s.price))') === b.run('JSON.stringify(stocks.map(s=>s.price))'));
+  check('오프라인 재생도 환율·부동산에 동일하게 반영', a.run('fx.usd') === b.run('fx.usd') && a.run('JSON.stringify(state.altPrices)') === b.run('JSON.stringify(state.altPrices)'));
+}
+
+// ── 관측성(오류·이벤트 기록) ─────────────────
+{
+  const g = createGame(71);
+  const t = g.run(`(()=>{
+    diagCache=null; localStorage.removeItem('money_playground_diag');
+    trackEvent('app_open'); trackEvent('app_open'); trackEvent('first_trade',{a:1});
+    logError('test',{message:'boom',code:'x/y'});
+    const d=diagState();
+    const stored=JSON.parse(localStorage.getItem('money_playground_diag')||'{}');
+    return {open:d.events.app_open, trade:d.events.first_trade, errs:d.errors.length, code:d.errors[0].code, stored:stored.events&&stored.events.app_open, ga:gaId()};
+  })()`);
+  check('퍼널 이벤트가 누적 집계됨', t.open === 2 && t.trade === 1, JSON.stringify(t));
+  check('이벤트가 localStorage에 저장됨', t.stored === 2);
+  check('오류가 코드와 함께 기록됨', t.errs === 1 && t.code === 'x/y');
+  check('GA4 설정이 없으면 전송하지 않음', t.ga === '');
+  const bounded = g.run(`(()=>{ for(let i=0;i<40;i++) logError('loop',{message:'e'+i}); return diagState().errors.length; })()`);
+  check('오류 기록은 최대 30건까지만 보관', bounded === 30, bounded);
+  const panel = g.run('(()=>{ const h=diagPanelHtml(); return {h, txt:diagText()}; })()');
+  check('설정 화면에 진단 패널 표시', panel.h.includes('기록된 오류') && panel.h.includes('GA4') && panel.h.includes('진단 정보 복사'));
+  check('진단 텍스트에 버전·이벤트 포함', panel.txt.includes('앱 버전') && panel.txt.includes('event app_open'), panel.txt.slice(0, 60));
+  const cleared = g.run(`(()=>{ diagClear(); const d=diagState(); return {e:d.errors.length, n:Object.keys(d.events).length}; })()`);
+  check('진단 기록 지우기', cleared.e === 0 && cleared.n === 0);
+}
+
+// ── 온보딩 · 점진적 해금 ─────────────────────────
+{
+  const g = createGame(81);
+  const d0 = g.run(`(()=>{ state.cash=0; state.peakNet=0; return {rebirth:isPageLocked('rebirth'), settings:isPageLocked('settings'), tax:isPageLocked('tax'), nav:document.getElementById('nav').innerHTML||''}; })()`);
+  check('처음에는 환생·세금 화면이 잠금', d0.rebirth === true && d0.tax === true && d0.settings === false);
+  const gated = g.run(`(()=>{ show('rebirth'); return {modal:document.getElementById('modalRoot').innerHTML||'', page:document.getElementById('rebirth').innerHTML||''}; })()`);
+  check('잠긴 화면은 안내 창을 열고 이동하지 않음', gated.modal.includes('아직 잠겨') && !gated.page.includes('영구 업그레이드'), gated.modal.slice(0, 40));
+  const unlocked = g.run(`(()=>{ state.cash=120000000; state.peakNet=120000000; show('rebirth'); return {locked:isPageLocked('rebirth'), page:(document.getElementById('rebirth').innerHTML||'').includes('영구 업그레이드')}; })()`);
+  check('기준을 넘으면 잠금 해제·화면 표시', unlocked.locked === false && unlocked.page === true);
+
+  const ob = g.run(`(()=>{
+    state.onboard={done:false,dismissed:false,seen:{},firstTrade:false};
+    const before=onboardPanelHtml();
+    state.labor.shifts=1;
+    const after=onboardPanelHtml();
+    return {before, after, done:state.onboard.done};
+  })()`);
+  check('대시보드에 첫 걸음 체크리스트 표시', ob.before.includes('첫 걸음 0/3') && ob.before.includes('노동으로 첫 급여'));
+  check('목표를 이루면 체크 표시', ob.after.includes('첫 걸음 1/3') && ob.after.includes('✅'), ob.after.slice(0, 60));
+  const all = g.run(`(()=>{ state.labor.shifts=1; state.onboard.firstTrade=true; products[0].amount=1000; const h=onboardPanelHtml(); return {done:state.onboard.done, h}; })()`);
+  check('세 단계 모두 끝나면 온보딩 완료 처리', all.done === true && all.h.includes('첫 걸음 3/3'));
+  const hidden = g.run(`(()=>{ dismissOnboard(); return onboardPanelHtml(); })()`);
+  check('온보딩 숨기기', hidden === '');
+  const un = g.run(`(()=>{ unlockCheckAt=0; state.cash=120000000; state.peakNet=120000000; state.onboard={done:false,dismissed:false,seen:{},firstTrade:false}; checkUnlocks(); return {seen:state.onboard.seen, alerts:(state.alerts||[]).filter(a=>a.title==='새 기능 해금').length}; })()`);
+  check('해금 시 한 번만 알림', un.seen.rebirth === true && un.alerts === 1, JSON.stringify(un));
+  const legacy = g.run(`(()=>{ const d=migrateSaveData({state:{cash:100}}); applySaveData(d); return {onboard:!!state.onboard, dismissed:state.onboard.dismissed}; })()`);
+  check('예전 세이브에도 온보딩 기본값 생성', legacy.onboard === true && legacy.dismissed === false);
+}
+
 console.log('');
 console.log(`== ${pass}/${pass + fail} passed ==`);
 process.exit(fail ? 1 : 0);

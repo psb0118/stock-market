@@ -11,6 +11,10 @@ service cloud.firestore {
     // 클라우드 저장은 본인만 읽고 쓸 수 있습니다.
     match /saves/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+      // 저장 백업(최근 몇 개)도 본인만 읽고 쓸 수 있습니다.
+      match /history/{snapId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
     }
 
     // 리더보드는 공개 읽기, 쓰기는 본인 문서만 허용합니다.
