@@ -54,7 +54,9 @@ p{margin:0;color:#667085;line-height:1.45}
 .quick-trade{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
 .holding-card .quick-trade{grid-template-columns:1fr 1fr 1fr}
 .quick-trade button{min-height:32px;font-size:12px;padding:0 6px}
-.bank-trade{grid-template-columns:1fr 1fr}
+.bank-trade{grid-template-columns:1fr 1fr 1fr}
+.bank-trade label{grid-column:1 / -1}
+.bank-trade label input{width:100%}
 .bank-trade input{grid-column:1 / -1}
 .buy{background:#0f766e}.sell{background:#b42318}.ghost{background:#e7ebef;color:#18212f}
 .spark{height:28px;margin-top:10px;position:relative;cursor:crosshair}
@@ -151,7 +153,7 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
   .bb-tools{display:flex;gap:6px;align-items:center;margin-left:auto}
   .bb-badge{display:none;margin-left:3px;font-size:11px;color:#f7c948;font-weight:800}
   .side .speed,.side .bell{display:none}
-  .bb-nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px}
+  .bb-nav{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-top:6px}
   .bb-nav button{background:transparent;color:#cbd5e1;font-size:12px;min-height:34px;white-space:nowrap;padding:0 4px}
   .bb-nav button.on{background:#f7c948;color:#17202b;font-weight:800}
   .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
@@ -170,8 +172,8 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 .rival-row{grid-template-columns:1fr auto auto auto;align-items:center}
 @media(max-width:540px){.rival-row{grid-template-columns:1fr auto}.rival-row b{grid-column:1/-1}.rival-row button{grid-column:2;grid-row:2/4}}
 @media(max-width:1200px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible;padding-bottom:0}.nav button{white-space:nowrap;min-height:34px;padding:0 8px;font-size:12px;background:#22303f}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
-@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stats .box:last-child{grid-column:1/-1}.head{display:block}.trade{grid-template-columns:1fr 1fr}.quick-trade{grid-template-columns:1fr 1fr 1fr}}
+@media(max-width:850px){.app{grid-template-columns:minmax(0,1fr)}.side{min-width:0;height:auto;position:sticky;top:0;z-index:5;padding:12px 14px}.logo{font-size:18px}.sub{margin-bottom:10px;font-size:12px}.nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible;padding-bottom:0}.nav button{white-space:nowrap;min-height:34px;padding:0 8px;font-size:12px;background:#22303f}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px;overflow:visible;padding-bottom:0}.stats .box{min-width:0;padding:9px 10px}.stats .box small{font-size:10px;line-height:1.25}.stats .box b{font-size:14px;margin-top:3px;line-height:1.2}.stats .box .muted-sm{font-size:10px;line-height:1.2}.wide{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.field{grid-template-columns:1fr}}
+@media(max-width:540px){main{padding:14px;padding-bottom:158px}.stats{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}.head{display:block}.trade{grid-template-columns:1fr 1fr}.quick-trade{grid-template-columns:1fr 1fr 1fr}}
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
@@ -343,6 +345,9 @@ input:focus,select:focus{outline:2px solid #f2c14e66;border-color:#c9a53d}
 .asset-head b{font-size:15px}.asset-head small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
 .asset-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted)}
 .asset-grid b{display:block;color:var(--ink);font-size:13px;margin-top:2px}
+.metal-trade-row{display:grid;grid-template-columns:minmax(76px,1fr) auto auto auto;gap:6px;align-items:end}
+.metal-trade-row label{font-size:10px;color:var(--muted);display:grid;gap:3px}
+.metal-trade-row .qty-input{width:100%;box-sizing:border-box}
 .button-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .qty-input{width:80px;min-height:38px}
 .empty-state{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:18px 4px;color:var(--muted)}
@@ -440,10 +445,11 @@ body.no-effects *{box-shadow:none!important}
   #laborFab{display:none}
   .page-head h1{font-size:22px}
   .page-head{align-items:flex-start;gap:8px}
-  .stats{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
-  .stats::-webkit-scrollbar{display:none}
-  .stats .box{flex:0 0 150px;padding:11px 12px}
-  .stats .box b{font-size:16px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px;overflow:visible;padding-bottom:0}
+  .stats .box{min-width:0;padding:9px 10px}
+  .stats .box small{font-size:10px;line-height:1.25}
+  .stats .box b{font-size:14px;margin-top:3px;line-height:1.2}
+  .stats .box .muted-sm{font-size:10px;line-height:1.2}
   .kpi-strip{grid-template-columns:1fr 1fr}
   .metric b{font-size:18px}
   .holding-row{grid-template-columns:1fr 1fr;gap:8px}
@@ -483,8 +489,8 @@ body.no-effects *{box-shadow:none!important}
   .bb-net button{padding:0 5px;min-height:26px}
 }
 @media(max-width:540px){
-  .stats{grid-template-columns:1fr 1fr}
-  .stats .box:last-child{grid-column:1/-1}
+  .stats{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}
+  .stats .box:last-child{grid-column:auto}
   .kpi-strip{grid-template-columns:1fr 1fr}
   .rebirth-hero{grid-template-columns:1fr 1fr}
   .notify-grid{grid-template-columns:1fr}
@@ -561,6 +567,21 @@ body.dark .flow-line b{color:#dbe4ef}
 .dash-toggle{min-height:34px;font-size:12px}
 /* 종목 비교 표(가로 스크롤) */
 .compare-wrap{overflow-x:auto}
+#tutorialRoot{position:fixed;inset:0;z-index:9998;pointer-events:none}
+.tutorial-card{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);width:min(430px,calc(100vw - 24px));box-sizing:border-box;background:var(--card,#fff);color:var(--ink,#101828);border:1px solid #d0d5dd;border-radius:16px;box-shadow:0 18px 50px rgba(15,23,42,.24);padding:16px;pointer-events:auto;font-size:13px;line-height:1.55}
+.tutorial-card h3{margin:8px 0 4px;font-size:17px}
+.tutorial-card p{margin:0;color:#475467;font-size:12.5px}
+.tutorial-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tutorial-dots{display:flex;gap:5px;margin-top:10px}.tutorial-dots span{width:7px;height:7px;border-radius:50%;background:#d0d5dd}.tutorial-dots span.on{background:#12b76a;width:20px;border-radius:9px}
+.tutorial-target{outline:3px solid #12b76a;outline-offset:4px;border-radius:10px;box-shadow:0 0 0 5px rgba(18,183,106,.18)}
+@media(max-width:600px){.tutorial-card{bottom:10px;padding:14px}.tutorial-card h3{font-size:15px}}
+.tax-ledger-wrap{overflow-x:auto;border:1px solid #eaecf0;border-radius:12px}
+.tax-ledger-wrap .ledger-table{width:100%;border-collapse:collapse}
+.ledger-table th,.ledger-table td{padding:7px 8px;border-bottom:1px solid #eaecf0;text-align:left;white-space:nowrap}
+.ledger-table th{font-size:10px;color:#667085;font-weight:700}
+.ledger-table td{font-size:12px}
+.ledger-table tr:last-child td{border-bottom:0}
+.ledger-note{max-width:260px;white-space:normal!important;line-height:1.4}
 .compare-table{width:100%;border-collapse:collapse;font-size:12px}
 .compare-table th,.compare-table td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:right;white-space:nowrap}
 .compare-table th:first-child,.compare-table td:first-child{text-align:left}
@@ -646,6 +667,7 @@ body.dark .pill.ok{background:#0d2b26;color:#7dd3c7;border-color:#1f5148}
     <section id="realestate" class="page"></section>
     <section id="company" class="page"></section>
     <section id="economy" class="page"></section>
+    <section id="leaderboard" class="page"></section>
     <section id="rebirth" class="page"></section>
     <section id="settings" class="page"></section>
     <section id="loan" class="page"></section>
@@ -672,6 +694,7 @@ body.dark .pill.ok{background:#0d2b26;color:#7dd3c7;border-color:#1f5148}
     <button data-page="domestic" onclick="quickNav('domestic')">주식</button>
     <button data-page="portfolio" onclick="quickNav('portfolio')">자산</button>
     <button data-page="realestate" onclick="quickNav('realestate')">부동산</button>
+    <button data-page="leaderboard" onclick="quickNav('leaderboard')">랭킹</button>
     <button data-page="settings" onclick="quickNav('settings')">설정</button>
   </div>
 </div>
@@ -731,7 +754,7 @@ const NOTIFY_DEFAULT={master:false,toast:true,center:true,news:true,newsGap:15,t
 const PUSH_KINDS=["order","dividend","stock","maturity","loan","goal","mission","achievement","grade","rebirth","tax","system"];
 // 종류별 알림 목록(설정 화면과 알림 센터가 함께 사용)
 const NOTIFY_KINDS=[["order","지정가 체결"],["dividend","배당금"],["stock","주가 급등·급락"],["maturity","예금 만기"],["loan","대출 이자"],["earnings","실적 발표"],["economy","경제 이벤트"],["news","시장 뉴스"],["goal","목표 달성"],["mission","미션 완료"],["achievement","업적 달성"],["grade","등급 상승"],["rebirth","환생 가능"],["tax","세금"],["system","시스템"]];
-const SETTINGS_DEFAULT={theme:"light",confirmTrades:true,animations:true,effects:true,numberFormat:"full",autoSave:true,colorblind:false,largeText:false};
+const SETTINGS_DEFAULT={theme:"light",confirmTrades:true,animations:true,effects:true,numberFormat:"full",autoSave:true,colorblind:false,largeText:false,fullscreenPrompt:true,beginnerMode:true};
 // 달성 목표(총자산 기준)와 일시금 보상
 const MILESTONES = [
   {id:"m30", target:30000000, reward:500000, label:"총자산 3,000만원 달성"},
@@ -766,6 +789,7 @@ const NAV_ITEMS=[
   {id:"realestate", label:"부동산", icon:"⌂"},
   {id:"company", label:"기업 경영", icon:"▣"},
   {id:"economy", label:"경제 현황", icon:"◎"},
+  {id:"leaderboard", label:"리더보드", icon:"🏆"},
   {id:"rebirth", label:"환생", icon:"♻"},
   {id:"guide", label:"도움말", icon:"?"},
   {id:"settings", label:"설정", icon:"⚙"}
@@ -1109,7 +1133,9 @@ const state={
   goals: {},        // 달성한 목표 id
   realizedYTD: 0,   // 일반 계좌 연간 실현손익 누계(양도세 계산)
   taxedProfit: 0,   // 이미 과세된 누적 실현손익
-  taxPaid: 0,       // 누적 납부 세금
+  taxPaid: 0,       // 누적 납부 세금(양도·ISA·연금 인출)
+  tradeTaxPaid: 0,  // 누적 증권거래세(매도 시 차감)
+  taxLedger: [],    // 세금 납부 상세 원장(최근 80건)
   // ── 확장 기능 상태(구버전 세이브는 applySaveData에서 기본값 보정) ──
   watch: [],        // 관심종목 id
   journal: [],      // 최근 거래 200건
@@ -1178,7 +1204,8 @@ function assetBreakdown(){
   const shorts=shortValueKRW();
   const gross=cash+usd+stock+product+estate+metal+company+bonds+shorts;
   const debt=Math.max(0,+state.loan||0);
-  return {cash,usd,stock,product,estate,metal,company,bonds,shorts,gross,debt,net:gross-debt,taxPaid:Math.max(0,+state.taxPaid||0)};
+  const taxPaid=Math.max(0,+state.taxPaid||0)+Math.max(0,+state.tradeTaxPaid||0);
+  return {cash,usd,stock,product,estate,metal,company,bonds,shorts,gross,debt,net:gross-debt,taxPaid};
 }
 // 총자산 = 현금 + 달러 환산액 + 주식 + 금융상품 + 부동산 + 실물자산 + 기업 + 채권 + 공매도 평가손익
 function grossAssetsKRW(){ return assetBreakdown().gross; }
@@ -1859,7 +1886,8 @@ function laborCondition(){
   // 컨디션 40% 이상은 정상 지급, 그 아래로 떨어지면 일당·속도에 불이익이 생깁니다.
   return ratio>=.4?1:Math.max(.55,.55+.45*(ratio/.4));
 }
-function laborZoneFor(job){ return Math.max(.05,Math.min(.45,(job&&job.zone||.2)*(1+.06*(ensureLabor().skills.focus||0)))); }
+function laborBeginnerHelp(){ return (!state.settings || state.settings.beginnerMode!==false) ? ensureLabor().shifts<10 : false; }
+function laborZoneFor(job){ return Math.max(.05,Math.min(.45,(job&&job.zone||.2)*(1+.06*(ensureLabor().skills.focus||0))*(laborBeginnerHelp()?1.2:1))); }
 function laborSkillCost(id){ const l=ensureLabor(), lv=l.skills[id]||0; return 1+lv; }
 function buyLaborSkill(id){
   if(!["focus","stamina","service"].includes(id)) return false;
@@ -2129,7 +2157,7 @@ function laborLoop(ts){
   const now=typeof ts==="number"?ts:0;
   if(!s.last) s.last=now;
   const dt=Math.max(0,Math.min(.05,(now-s.last)/1000)); s.last=now;
-  s.pos+=s.dir*(s.job.speed||.6)*laborSpeedMultiplier(s)*dt;
+  s.pos+=s.dir*(s.job.speed||.6)*laborSpeedMultiplier(s)*(laborBeginnerHelp()?.88:1)*dt;
   if(s.pos>=1){s.pos=1;s.dir=-1;}
   if(s.pos<=0){s.pos=0;s.dir=1;}
   const cur=$("labor-cursor"); if(cur&&cur.style) cur.style.left=(s.pos*100).toFixed(1)+"%";
@@ -2419,10 +2447,14 @@ function marketSellShares(s,qty,account){
   const acct=TAX_ACCOUNTS.includes(account)?account:state.tax.mode;
   if(!s||qty<=0||accountQty(s,acct)<qty) return false;
   const foreign=isForeignStock(s);
+  const grossNative=s.price*qty;
+  const tradeTaxNative=grossNative*tradeTaxRate();
   const revenue=s.price*(1-stockFeeRate()-tradeTaxRate())*qty;
   // FIFO 로트의 취득원가를 세금·실현손익 계산에 사용합니다.
   const profit=revenue-consumeTaxLots(s,qty,acct);
   const profitKRW=foreign?profit*fx.usd:profit;
+  state.tradeTaxPaid=(state.tradeTaxPaid||0)+(foreign?tradeTaxNative*fx.usd:tradeTaxNative);
+  recordTaxLedger({kind:"trade",label:"증권거래세",account:acct,base:foreign?grossNative*fx.usd:grossNative,rate:tradeTaxRate(),tax:foreign?tradeTaxNative*fx.usd:tradeTaxNative,loan:0,note:`${s.name} ${qty}주 매도 · 수수료 별도`});
   if(foreign){ state.usd+=revenue; s.realizedProfit+=profitKRW; } else { state.cash+=revenue; s.realizedProfit+=profit; }
   s.own-=qty; if(s.own===0) s.avgBuy=0;
   recordTrade(s,"sell",qty,s.price,profitKRW);
@@ -2866,7 +2898,7 @@ function setSetting(k,v){
   if(k==="speed"){ setSpeed(+v); return; }
   if(k==="theme") state.settings.theme=v==="dark"?"dark":"light";
   else if(k==="numberFormat") state.settings.numberFormat=v==="short"?"short":"full";
-  else if(["confirmTrades","animations","effects","autoSave"].includes(k)) state.settings[k]=!!v;
+  else if(["confirmTrades","animations","effects","autoSave","fullscreenPrompt","beginnerMode"].includes(k)) state.settings[k]=!!v;
   else state.settings[k]=v;
   applyTheme(); saveGame(); update();
   if(activePage()==="settings") settingsPage();
@@ -3070,6 +3102,35 @@ function setSpeed(n){
   if(activePage()==="settings" && typeof settingsPage==="function") settingsPage();
 }
 function togglePause(){ state.paused=!state.paused; saveGame(); updateSpeedUI(); }
+function isFullscreenActive(){ return !!(document.fullscreenElement||document.webkitFullscreenElement); }
+function requestGameFullscreen(){
+  const el=document.documentElement;
+  const fn=el.requestFullscreen||el.webkitRequestFullscreen;
+  if(!fn){ alert("이 브라우저는 전체화면 전환을 지원하지 않습니다. 브라우저 메뉴의 전체화면을 사용해 주세요."); return; }
+  try{
+    const result=fn.call(el);
+    if(result&&typeof result.then==="function") result.then(()=>{ if($("modalRoot")) closeModal(); }).catch(()=>alert("전체화면 전환을 시작하지 못했습니다. 브라우저 메뉴에서 직접 전체화면으로 바꿔 주세요."));
+    else closeModal();
+  }catch(e){ alert("전체화면 전환을 시작하지 못했습니다. 브라우저 메뉴에서 직접 전체화면으로 바꿔 주세요."); }
+}
+function disableFullscreenPrompt(){
+  setSetting("fullscreenPrompt",false);
+  closeModal();
+  notify("system","전체화면 안내 꺼짐","설정 → 전체화면 시작 안내에서 다시 켤 수 있습니다.");
+}
+function maybeAskFullscreen(){
+  if(typeof tutorialActive!=="undefined" && tutorialActive) return;
+  if(!state.settings || state.settings.fullscreenPrompt===false || isFullscreenActive()) return;
+  if(document.querySelector("#modalRoot.on")) return;
+  if(!document.documentElement.requestFullscreen && !document.documentElement.webkitRequestFullscreen) return;
+  setTimeout(()=>{
+    if((typeof tutorialActive!=="undefined" && tutorialActive) || isFullscreenActive() || !state.settings || state.settings.fullscreenPrompt===false || document.querySelector("#modalRoot.on")) return;
+    openModal("전체화면으로 플레이할까요?",`<p>작은 화면에서는 자산 카드와 노동 미니게임이 답답할 수 있습니다. 전체화면으로 바꾸면 게임 화면을 넓게 쓸 수 있습니다.</p>
+      <p class="muted-sm" style="margin-top:6px">전체화면은 언제든 Esc 또는 브라우저 메뉴로 나올 수 있습니다.</p>
+      <div class="button-row" style="margin-top:12px"><button class="buy" onclick="requestGameFullscreen()">전체화면으로 시작</button><button class="ghost" onclick="closeModal()">나중에</button></div>
+      <p class="muted-sm" style="margin-top:10px"><button class="ghost small" onclick="disableFullscreenPrompt()">앞으로 이 안내를 보지 않기</button></p>`);
+  },900);
+}
 function cycleSpeed(){
   const i=SPEEDS.indexOf(speedNow());
   setSpeed(SPEEDS[(i+1)%SPEEDS.length]);
@@ -3282,7 +3343,7 @@ function reportData(){
     ret:base>0?(total-base)/base:0,
     indexRet:idxBase>0?marketIndex()/idxBase-1:0,
     dividends:state.dividendTotal||0,
-    tax:state.taxPaid||0,
+    tax:totalTaxPaid(),
     debt:state.loan||0,
     grade:currentGrade()
   });
@@ -3610,6 +3671,24 @@ function ensureDebtRate(){
   if((state.loan||0)>0 && !((state.loanRate||0)>0)) state.loanRate=TAX_DEBT_RATE;
 }
 // 현금이 부족한 세금을 대출로 전환합니다. 전환한 부족분을 돌려주어 화면에서 안내할 수 있게 합니다.
+function ensureTaxLedger(){
+  if(!Array.isArray(state.taxLedger)) state.taxLedger=[];
+  if(!Number.isFinite(+state.tradeTaxPaid)||+state.tradeTaxPaid<0) state.tradeTaxPaid=0;
+  return state.taxLedger;
+}
+function totalTaxPaid(){ return Math.max(0,+state.taxPaid||0)+Math.max(0,+state.tradeTaxPaid||0); }
+function recordTaxLedger(entry){
+  ensureTaxLedger();
+  const tax=Math.max(0,+entry.tax||0);
+  if(!(tax>0) && !entry.deferred) return null;
+  const row=Object.assign({at:Date.now(),year:Math.max(1,+((state.tax&&state.tax.year)||1)),account:(state.tax&&state.tax.mode)||"general",kind:"tax",label:"세금",base:0,rate:0,tax,loan:0,note:""},entry);
+  state.taxLedger.unshift(row);
+  if(state.taxLedger.length>80) state.taxLedger.length=80;
+  return row;
+}
+function taxKindLabel(kind){
+  return ({trade:"증권거래세",general:"일반 양도세",isa:"ISA 양도세",pension:"연금 인출세",deferred:"연금 과세 이연"})[kind]||"세금";
+}
 function payTaxWithCashOrLoan(amount, label){
   const due=Math.max(0,+amount||0);
   if(!(due>0)) return 0;
@@ -3662,6 +3741,7 @@ function settleTax(profitKRW, account){
   const plan=taxProjection(profit,acct);
   if(acct==="pension"){
     t.pensionDeferred=(t.pensionDeferred||0)+profit;
+    recordTaxLedger({kind:"deferred",label:"연금저축 과세 이연",account:"pension",base:profit,rate:.055,tax:0,loan:0,deferred:true,note:`지금 납부 0원 · 인출 시 ${won(profit*.055)} (5.5%)`});
     addLog(`연금저축 세금 이연: ${won(profit*.055)} (인출 시 5.5%)`);
     return 0;
   }
@@ -3672,7 +3752,8 @@ function settleTax(profitKRW, account){
       t.isaTaxed=(t.isaTaxed||0)+plan.taxable;
       state.taxPaid=(state.taxPaid||0)+tax;
       t.taxPaidByAccount.isa+=tax;
-      payTaxWithCashOrLoan(tax,"ISA 양도세");
+      const loan=payTaxWithCashOrLoan(tax,"ISA 양도세");
+      recordTaxLedger({kind:"isa",label:"ISA 양도세",account:"isa",base:plan.taxable,rate:.099,tax,loan,note:`과세표준 ${won(plan.taxable)} · 기본공제 200만원`});
       addLog(`ISA 양도세 원천징수: ${won(tax)} (ISA 누적 실현손익 ${won(t.isaGains)})`);
       notify("tax","ISA 양도세",won(tax));
     }
@@ -3685,7 +3766,8 @@ function settleTax(profitKRW, account){
     state.taxedProfit=(state.taxedProfit||0)+plan.taxable;
     state.taxPaid=(state.taxPaid||0)+tax;
     t.taxPaidByAccount.general+=tax;
-    payTaxWithCashOrLoan(tax,"양도세");
+    const loan=payTaxWithCashOrLoan(tax,"양도세");
+    recordTaxLedger({kind:"general",label:"일반 양도세",account:"general",base:plan.taxable,rate:.22,tax,loan,note:`연 기본공제 250만원 · 이월 손실 ${won(plan.carryUsed)} 차감`});
     addLog(`양도세 원천징수: ${won(tax)} (연 누적 실현손익 ${won(state.realizedYTD)})`);
     notify("tax","양도세 원천징수",`${won(tax)}`);
     return tax;
@@ -3956,9 +4038,10 @@ function withdrawPensionTax(){
   const t=ensureAdvancedState().tax;
   if(t.pensionDeferred<=0) return alert("납부를 미룬 연금 세금이 없습니다.");
   const tax=t.pensionDeferred*0.055;
-  payTaxWithCashOrLoan(tax,"연금 인출세");
+  const loan=payTaxWithCashOrLoan(tax,"연금 인출세");
   state.taxPaid=(state.taxPaid||0)+tax;
   t.taxPaidByAccount.pension=(t.taxPaidByAccount.pension||0)+tax;
+  recordTaxLedger({kind:"pension",label:"연금 인출세",account:"pension",base:t.pensionDeferred,rate:.055,tax,loan,note:"연금저축 인출 · 5.5%"});
   t.pensionDeferred=0;
   addLog(`연금저축 세금 납부: ${won(tax)} (5.5%)`);
   saveGame(); taxPage(); update();
@@ -4959,7 +5042,7 @@ async function fbApplyForcedReset(data){
   openModal("관리자 초기화",`<p>관리자 <b>${escHtml(by)}</b>가 이 계정을 초기화했습니다.</p>
     <p class="muted-sm" style="margin-top:6px">${mode==="all"?"현재 진행과 환생·영구 업그레이드가 모두 초기화되었습니다.":"현재 진행과 서버 저장·점수가 초기화되었습니다. 환생·영구 업그레이드는 유지됩니다."}</p>
     <p class="muted-sm" style="margin-top:4px">초기화된 새 진행은 서버 정리가 끝나는 즉시 자동 저장됩니다.</p>
-    <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="closeModal()">확인</button></div>`);
+    <div class="button-row" style="margin-top:10px"><button class="buy" onclick="startTutorial(true)">튜토리얼 보기</button><button class="ghost" onclick="closeModal()">확인</button></div>`);
   notify("system","관리자 초기화", mode==="all"?"환생 기록까지 전체 초기화되었습니다.":"현재 진행이 초기화되었습니다.");
   if(pending.completed) await fbFinishForcedReset(pending);
 }
@@ -5533,7 +5616,7 @@ function dashboardPage(){
   const news=(state.news||[]).slice(0,3);
   const eco=state.economy||ECON_DEFAULT;
   const jobs=LABOR_JOBS.slice(0,2);
-  $("dashboard").innerHTML=`${pageHeader("OVERVIEW","대시보드",`${currentGrade()} · ${currentTitle()} · 총자산 ${won(gross)} · 순자산 ${won(net)}`, `${dashNarrow()?`<button class="ghost dash-toggle" onclick="toggleDashMore()">${dashMoreOpen()?"접기":"더 보기"}</button>`:""}<button class="ghost" onclick="show('portfolio')">자산 상세</button><button class="buy" onclick="show('domestic')">주식 시장</button>`)}
+  $("dashboard").innerHTML=`${pageHeader("OVERVIEW","대시보드",`${currentGrade()} · ${currentTitle()} · 총자산 ${won(gross)} · 순자산 ${won(net)}`, `${dashNarrow()?`<button class="ghost dash-toggle" onclick="toggleDashMore()">${dashMoreOpen()?"접기":"더 보기"}</button>`:""}<button class="ghost" onclick="show('portfolio')">자산 상세</button><button class="ghost" id="dash-labor-btn" onclick="openLabor()">노동</button><button class="ghost" onclick="show('leaderboard')">리더보드</button><button class="buy" onclick="show('domestic')">주식 시장</button>`)}
     <section class="kpi-strip">
       <div class="metric"><small>총자산</small><b data-live="grossShort">${wonShort(gross)}</b><span class="delta">${currentGrade()} · ${currentTitle()}</span></div>
       <div class="metric"><small>현금</small><b data-live="cashShort">${wonShort(state.cash)}</b><span class="muted-sm">보유 <span data-live="usd">${usdStr(state.usd||0)}</span></span></div>
@@ -5564,7 +5647,7 @@ function dashboardPage(){
       </section>
     </div>
     <section class="section"><div class="section-head"><h3>생활비 벌기</h3><button class="ghost small" onclick="openLabor()">노동 열기</button></div>
-      <div class="panel labor-quick">${jobs.map(j=>`<div class="holding-row compact"><b>${j.icon} ${j.name}</b><span>최대 ${won(j.pay)}</span><button class="buy small" onclick="workLabor('${j.id}')">일하기</button></div>`).join("")}</div>
+      <div class="panel labor-quick">${jobs.map(j=>`<div class="holding-row compact"><b>${j.icon} ${j.name}</b><span>최대 ${won(j.pay)}</span><button class="buy small" onclick="workLabor('${j.id}')">일하기</button></div>`).join("")}${laborBeginnerHelp()?`<p class="muted-sm" style="margin-top:8px;color:#067647">초보자 도움 중 · 첫 10회는 성공 구간이 20% 넓고 표시선이 12% 느립니다.</p>`:""}</div>
     </section>
     <section class="section"><div class="section-head"><h3>최신 속보</h3><button class="ghost small" onclick="show('news')">전체</button></div>
       <div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${n}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div>
@@ -5586,18 +5669,29 @@ function realestatePage(){
     </article>`;
   }).join("");
   const metals=METALS.map(m=>{
-    const h=state.metals[m.id]||{qty:0,avg:0}, price=metalPrice(m.id);
+    const h=state.metals[m.id]||{qty:0,avg:0}, price=metalPrice(m.id), pnl=h.qty*(price-h.avg);
     return `<article class="asset-card">
-      <div class="asset-head"><div><b>${m.name}</b><small>원자재 · ${m.unit} 단위</small></div><span class="pill" data-live="metal:${m.id}:qty">${h.qty}${m.unit}</span></div>
-      <div class="asset-grid"><span>현재가 <b data-live="metal:${m.id}:price">${won(price)}</b></span><span>평가액 <b data-live="metal:${m.id}:value">${won(h.qty*price)}</b></span><span>평단 <b data-live="metal:${m.id}:avg">${h.avg?won(h.avg):"-"}</b></span></div>
-      <div class="button-row"><input id="metal-qty-${m.id}" type="number" min="1" step="1" value="1" class="qty-input"><button class="buy" onclick="buyMetal('${m.id}')">매수</button><button class="ghost" onclick="sellMetal('${m.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('metal','${m.id}')">상세</button></div>
+      <div class="asset-head"><div><b>${m.name}</b><small>원자재 · 1${m.unit} 단위로 거래</small></div><span class="pill" data-live="metal:${m.id}:qty">보유 ${h.qty}${m.unit}</span></div>
+      <div class="asset-grid">
+        <span>보유 수량 <b data-live="metal:${m.id}:qtyValue">${h.qty}${m.unit}</b></span>
+        <span>현재가 <b data-live="metal:${m.id}:price">${won(price)}</b></span>
+        <span>총 매수 금액 <b>${won(h.qty*h.avg)}</b></span>
+        <span>평가액 <b data-live="metal:${m.id}:value">${won(h.qty*price)}</b></span>
+        <span>평균 매수 단가 <b data-live="metal:${m.id}:avg">${h.avg?won(h.avg):"-"}</b></span>
+        <span>평가손익 <b class="${pnl>=0?"up":"down"}" data-live="metal:${m.id}:pnl">${h.avg?won(pnl):"-"}</b></span>
+      </div>
+      <p class="muted-sm" style="margin:8px 0 6px">아래 수량은 <b>${m.unit} 단위</b>입니다. 예: 2를 입력하면 ${m.name} 2${m.unit}를 매수/매도합니다.</p>
+      <div class="metal-trade-row"><label>수량 (${m.unit})<input id="metal-qty-${m.id}" type="number" min="1" step="1" value="1" class="qty-input" aria-label="${m.name} 매수·매도 수량 (${m.unit})"></label><button class="buy" onclick="buyMetal('${m.id}')">매수</button><button class="ghost" onclick="sellMetal('${m.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('metal','${m.id}')">상세</button></div>
     </article>`;
   }).join("");
+  const gold=state.metals.gold||{qty:0}, silver=state.metals.silver||{qty:0};
   $("realestate").innerHTML=`${pageHeader("ASSETS","부동산 · 실물자산","임대 수익과 시세 차익을 함께 노리는 실물 자산입니다.",`<span class="pill">보유 평가 ${won(estateValue()+metalValue())}</span>`)}
     <section class="kpi-strip">
       <div class="metric"><small>부동산 평가</small><b data-live="estateShort">${wonShort(estateValue())}</b></div>
       <div class="metric"><small>월세 수입(60초)</small><b data-live="estateRent">${won(rent)}</b><span class="muted-sm">유지비 <span data-live="estateUpkeep">${won(upkeep)}</span></span></div>
       <div class="metric"><small>실물자산</small><b data-live="metalShort">${wonShort(metalValue())}</b></div>
+      <div class="metric"><small>금 보유</small><b>${gold.qty}g</b><span class="muted-sm">${won(gold.qty*metalPrice("gold"))}</span></div>
+      <div class="metric"><small>은 보유</small><b>${silver.qty}g</b><span class="muted-sm">${won(silver.qty*metalPrice("silver"))}</span></div>
     </section>
     <section class="section"><h3>부동산</h3><div class="asset-cards">${cards}</div></section>
     <section class="section"><h3>실물자산 (금·은)</h3><div class="asset-cards">${metals}</div></section>
@@ -5622,6 +5716,38 @@ function rivalsSection(c){
     <div class="notice">인수하면 기업 가치·매출·배당이 늘지만, <b>유지비</b>가 30초마다 현금에서 나가고 <b>기업 가치 변동성(위협)</b>도 커집니다. 유지비는 현금이 바닥나면 0원까지만 빠집니다.</div>
     ${rows}</section>`;
 }
+function companyInfoHtml(c){
+  const nextLevel=COMPANY_LEVELS[c?c.level:0]||null;
+  const roadmap=`<div class="tax-ledger-wrap" style="margin-top:8px"><table class="ledger-table"><thead><tr><th>단계</th><th>확장 비용</th><th>매출(30초)</th><th>순이익(30초)</th><th>기업 가치</th></tr></thead><tbody>${COMPANY_LEVELS.map((lv,i)=>`<tr style="${c&&c.level===i+1?"background:#f0fdf4":""}"><td>${c&&c.level===i+1?"▶ ":""}Lv.${i+1}</td><td>${won(lv.cost)}</td><td>${won(lv.revenue)}</td><td>${won(lv.profit)}</td><td>${won(lv.val)}</td></tr>`).join("")}</tbody></table></div>`;
+  if(!c) return `<section class="section"><div class="section-head"><h3>기업 정보</h3><span class="pill">설립 전 안내</span></div><div class="panel"><p class="muted-sm">기업은 Lv.1 설립 후 확장할수록 매출·순이익·가치가 함께 늘어납니다. 확장 비용은 아래 표의 다음 단계 금액이며, 상장하면 보유 지분만큼 배당이 줄어드는 대신 공모 현금을 받습니다.</p>${roadmap}</div></section>`;
+  const cg=companyGradeInfo(c), acq=Object.keys(c.acquired||{}).length;
+  const margin=c.revenue>0?c.profit/c.revenue:0;
+  const owned=c.listed?c.listed.ownPct:100;
+  const nextText=nextLevel?`Lv.${c.level+1} 확장 비용 <b>${won(nextLevel.cost)}</b> · 매출 +${won(nextLevel.revenue)} · 순이익 +${won(nextLevel.profit)} · 가치 +${won(nextLevel.val)}`:"최고 레벨입니다.";
+  const nextGrade=cg.next?`${cg.next.name}까지 ${won(Math.max(0,cg.next.min-c.valuation))} 남음`:"최고 등급";
+  return `<section class="section"><div class="section-head"><h3>기업 정보</h3><span class="pill">${cg.name} · Lv.${c.level}</span></div>
+    <div class="two-col"><div class="panel">
+      <div class="snap-row"><span>기업 가치</span><b>${won(c.valuation)}</b></div>
+      <div class="snap-row"><span>장부가(투입 원가)</span><b>${won(c.book||c.valuation)}</b></div>
+      <div class="snap-row"><span>매출(30초)</span><b>${won(c.revenue)}</b></div>
+      <div class="snap-row"><span>순이익(30초)</span><b>${won(c.profit)}</b></div>
+      <div class="snap-row"><span>순이익률</span><b>${(margin*100).toFixed(1)}%</b></div>
+      <div class="snap-row"><span>배당 성향</span><b>${Math.round((c.payout||0)*100)}%</b></div>
+      <div class="snap-row"><span>30초 예상 배당</span><b>${won(c.profit*(c.payout==null?.3:c.payout)*rebirthBonus("company",.04)*(owned/100))}</b></div>
+      <div class="snap-row"><span>인수 기업 유지비</span><b>${won(c.upkeep||0)} / 30초</b></div>
+      <div class="snap-row"><span>가치 변동성</span><b>${((c.risk||0)*100).toFixed(1)}%p</b></div>
+    </div><div class="panel">
+      <div class="snap-row"><span>다음 등급</span><b>${nextGrade}</b></div>
+      <div class="snap-row"><span>등급 진행</span><b>${Math.round(cg.progress*100)}%</b></div>
+      <div class="snap-row"><span>인수한 경쟁사</span><b>${acq}개</b></div>
+      <div class="snap-row"><span>상장 여부</span><b>${c.listed?`상장 · 내 지분 ${owned}%`:"비상장"}</b></div>
+      <div class="snap-row"><span>현재 레벨 효과</span><b>${nextText}</b></div>
+      <p class="muted-sm" style="margin-top:10px">사업 확장은 <b>현금을 투입해 매출·순이익·기업 가치를 영구히 늘리는</b> 성장입니다. 인수는 가치를 크게 올리지만 30초마다 유지비가 나가고 가치 변동성이 커집니다. 상장하면 30%를 공모해 현금을 받고, 남은 지분만큼만 배당을 받습니다.</p>
+    </div></div>
+    <div class="section-head" style="margin-top:14px"><h3>레벨 로드맵</h3><span class="pill">다음 단계까지 필요한 비용과 효과</span></div>
+    ${roadmap}
+  </section>`;
+}
 function companyPage(){
   const c=state.company;
   let body;
@@ -5634,6 +5760,7 @@ function companyPage(){
         <label>&nbsp;<button class="buy" onclick="foundCompany()">기업 설립 (${won(COMPANY_LEVELS[0].cost)})</button></label>
       </div>
     </div>
+    ${companyInfoHtml(null)}
     ${rivalsSection(null)}`;
   } else {
     const cg=companyGradeInfo(c);
@@ -5666,6 +5793,7 @@ function companyPage(){
       <div class="button-row" style="margin-top:12px"><button class="sell" onclick="deleteCompany()">기업 삭제</button></div>
       <p class="muted-sm" style="margin-top:6px">기업 삭제는 <b>아무 보상 없이</b> 기업·매출·배당·인수 기록을 모두 없앱니다. 다시 설립하면 Lv.1부터 시작합니다.</p>
     </div>
+    ${companyInfoHtml(c)}
     ${rivalsSection(c)}`;
   }
   $("company").innerHTML=`${pageHeader("BUSINESS","기업 경영","기업을 설립·확장·상장하고 경쟁사를 인수해 가치를 키웁니다.")}${body}`;
@@ -5714,6 +5842,38 @@ function economyPage(){
     </div>`;
 }
 
+// ── 리더보드 ─────────────────────────────────────────────────
+function leaderboardPage(){
+  const fbOn=typeof firebaseConfigured==="function" && firebaseConfigured();
+  const cloudOn=typeof cloudConfigured==="function" && cloudConfigured();
+  const net=netAssetsKRW(), peak=Math.max(state.peakNet||0,net);
+  const nickname=(state.cloud&&state.cloud.nickname)||(typeof fbUser!=="undefined"&&fbUser&&fbUser.displayName)||"게스트";
+  const season=seasonKey();
+  const cloudRank=state.cloud&&state.cloud.rank?`${state.cloud.rank}위`:"기록 없음";
+  const buttons=[
+    fbOn?`<button class="buy" onclick="firebaseLeaderboard()">Google 리더보드 보기</button>`:`<button class="ghost" onclick="show('settings')">Google 로그인 설정</button>`,
+    cloudOn?`<button class="ghost" onclick="openGlobalRanking()">기기 클라우드 랭킹</button>`:"",
+    `<button class="ghost" onclick="leaderboardPage()">새로고침</button>`
+  ].filter(Boolean).join("");
+  $("leaderboard").innerHTML=`${pageHeader("RANKING","리더보드","월간 순자산 순위와 내 기록을 한곳에서 확인합니다.",buttons)}
+    <section class="kpi-strip">
+      <div class="metric"><small>내 닉네임</small><b>${escHtml(nickname)}</b><span class="muted-sm">시즌 ${season}</span></div>
+      <div class="metric"><small>현재 순자산</small><b>${won(net)}</b><span class="muted-sm">${currentGrade()} · ${currentTitle()}</span></div>
+      <div class="metric"><small>최고 순자산</small><b>${won(peak)}</b><span class="muted-sm">이번 시즌 기준</span></div>
+      <div class="metric"><small>기기 클라우드 순위</small><b>${cloudRank}</b><span class="muted-sm">${cloudOn?"연결됨":"클라우드 미연결"}</span></div>
+    </section>
+    <section class="section"><div class="section-head"><h3>월간 순위</h3><span class="pill">${season}</span></div>
+      <div class="panel">
+        <p class="muted-sm">순위는 저장 파일의 순자산을 서버가 대조해 검증한 기록입니다. Google 로그인 또는 기기 클라우드 연결이 필요합니다.</p>
+        <div class="button-row" style="margin-top:10px">${buttons}</div>
+        ${!fbOn&&!cloudOn?`<div class="notice" style="margin-top:10px">아직 리더보드가 연결되지 않았습니다. 설정 → Google 계정에서 로그인하거나 기기 클라우드를 연결하면 순위에 참여할 수 있습니다.</div>`:""}
+      </div>
+    </section>
+    <section class="section"><div class="section-head"><h3>내 기록</h3><span class="pill">로컬 저장 기준</span></div>
+      <div class="panel"><div class="snap-row"><span>현재 순자산</span><b>${won(net)}</b></div><div class="snap-row"><span>최고 순자산</span><b>${won(peak)}</b></div><div class="snap-row"><span>이번 시즌 수익률</span><b class="${reportData().ret>=0?"up":"down"}">${pct(reportData().ret)}</b></div><div class="snap-row"><span>환생 횟수</span><b>${ensureRebirth().count}회</b></div></div>
+    </section>`;
+}
+
 // ── 금융 하위 페이지 ─────────────────────────────────────────
 function loanPage(){ $("loan").innerHTML=`${pageHeader("FINANCE","신용 대출","등급에 따라 한도와 금리가 달라집니다.")}${financeTabs("loan")}${loanPanelHtml()}`; }
 function taxPage(){ $("tax").innerHTML=`${pageHeader("FINANCE","세금","실현손익과 원천징수 내역입니다.")}${financeTabs("tax")}${taxPanelHtml()}`; }
@@ -5744,6 +5904,10 @@ function settingsPage(){
       ${settingRow("테마","라이트/다크 테마",`<select onchange="setSetting('theme',this.value)"><option value="light" ${s.theme!=="dark"?"selected":""}>라이트</option><option value="dark" ${s.theme==="dark"?"selected":""}>다크</option></select>`)}
       ${settingToggle("largeText","큰 글씨 모드","핵심 수치와 버튼을 크게 표시합니다")}
       ${settingToggle("colorblind","색약 대응 팔레트","상승·하락을 주황·파랑과 화살표로 구분합니다")}
+      ${settingToggle("beginnerMode","초보자 도움","노동 첫 10회의 성공 구간을 넓히고 표시선을 조금 느리게 합니다. 익숙해지면 끌 수 있습니다.")}
+      ${settingToggle("fullscreenPrompt","전체화면 시작 안내","게임을 열 때 전체화면으로 전환할지 물어봅니다.")}
+      ${settingRow("전체화면","지금 게임 화면을 전체화면으로 전환합니다",`<button class="ghost" onclick="requestGameFullscreen()">전체화면으로 전환</button>`)}
+      ${settingRow("튜토리얼","노동·주식·은행·리더보드·설정을 화면으로 직접 안내합니다",`<button class="ghost" onclick="startTutorial(true)">튜토리얼 다시 보기</button>`)}
       ${settingToggle("animations","화면 애니메이션","페이지 전환·카드 효과를 끕니다")}
       ${settingToggle("effects","화면 효과","그림자·토스트 효과를 줄입니다")}
       ${settingToggle("autoSave","자동 저장","10초마다 현재 진행을 저장합니다")}
@@ -5871,8 +6035,8 @@ function resetRunForRebirth(){
   state.cash=start; state.usd=0; state.tick=0; state.news=[]; state.logs=[];
   state.marketSeconds=0; state.marketOpen=true; state.currentEvent=null; state.eventTimer=0;
   state.loan=0; state.loanRate=0; state.orders=[]; state.shorts=[]; state.bonds={qty:0,avg:0}; state.ipo={offer:null,nextAt:0,history:[]}; state.shortRealized=0; resetListedStocks(); state.goals={};
-  state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
-  state.tax={mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1};
+  state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0; state.tradeTaxPaid=0; state.taxLedger=[];
+  state.tax={mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
   state.calendar=[]; state.disclosures=[]; state.challenge={active:null,history:[],best:0,last:null}; state.riskScenario="base";
   state.watch=[]; state.journal=[]; state.alerts=[]; state.priceAlerts=[];
   state.loanTotal=0; state.dividendTotal=0; state.feesTotal=0;
@@ -5992,9 +6156,10 @@ const UNLOCK_RULES=[
   {id:"rebirth", label:"환생", need:100000000, pages:["rebirth"], hint:"순자산 1억원"}
 ];
 function ensureOnboard(){
-  if(!state.onboard||typeof state.onboard!=="object") state.onboard={done:false, dismissed:false, seen:{}, unlocked:{}, firstTrade:false};
+  if(!state.onboard||typeof state.onboard!=="object") state.onboard={done:false, dismissed:false, seen:{}, unlocked:{}, firstTrade:false,tutorialDone:false};
   if(!state.onboard.seen||typeof state.onboard.seen!=="object") state.onboard.seen={};
   if(!state.onboard.unlocked||typeof state.onboard.unlocked!=="object") state.onboard.unlocked={};
+  if(typeof state.onboard.tutorialDone!=="boolean") state.onboard.tutorialDone=false;
   return state.onboard;
 }
 function unlockReach(){ return Math.max(totalAssetsKRW(), +state.peakNet||0); }
@@ -6044,7 +6209,7 @@ function onboardPanelHtml(){
   const goals=onboardGoals(), done=goals.filter(g=>g.done).length;
   if(done===goals.length) ob.done=true;
   return `<section class="section" data-onboard="${done}/${goals.length}">
-    <div class="section-head"><h3>첫 걸음 ${done}/${goals.length}</h3><button class="ghost small" onclick="dismissOnboard()">숨기기</button></div>
+    <div class="section-head"><h3>첫 걸음 ${done}/${goals.length}</h3><span><button class="ghost small" onclick="startTutorial(true)">튜토리얼 다시 보기</button> <button class="ghost small" onclick="dismissOnboard()">숨기기</button></span></div>
     <div class="panel stack">
       <p class="muted-sm">이 세 단계를 먼저 해보면 게임이 어떻게 돌아가는지 바로 감이 생깁니다.</p>
       ${goals.map(g=>`<div class="holding-row compact"><b>${g.done?"✅":"⬜"} ${escHtml(g.label)}</b>${g.done?`<span class="muted-sm">완료</span>`:`<button class="ghost small" onclick="${g.go}">하러 가기</button>`}</div>`).join("")}
@@ -6053,6 +6218,83 @@ function onboardPanelHtml(){
 function dismissOnboard(){
   const ob=ensureOnboard(); ob.dismissed=true; saveGame();
   try{ dashboardPage(); }catch(e){}
+}
+// 직접 화면을 이동하며 보여 주는 짧은 튜토리얼입니다. 처음 시작·관리자 초기화 뒤에만 자동으로 뜨고,
+// 설정의 '튜토리얼 다시 보기'로 언제든 재시작할 수 있습니다.
+let tutorialActive=false, tutorialStep=0, tutorialTargetEl=null;
+const TUTORIAL_STEPS=[
+  {page:"dashboard",target:"#dash-labor-btn",title:"1. 노동으로 첫 돈 벌기",body:"0원에서 시작합니다. '노동'을 눌러 기본 일자리를 고르고, 표시선이 초록 성공 구간에 들어올 때 정지하세요. 첫 10회는 초보자 도움으로 구간이 넓고 느립니다."},
+  {page:"domestic",target:"#grid-domestic",title:"2. 주식은 한 주부터",body:"국내 주식은 카드에서 수량을 입력해 매수합니다. 처음에는 1주만 사고, 수수료와 매도 거래세가 붙는다는 점을 기억하세요. 하루는 게임 10분입니다."},
+  {page:"banking",target:"#banking .products",title:"3. 은행은 실제 이율로 고르기",body:"은행마다 같은 상품의 이율이 다릅니다. 카드의 은행 목록에 표시된 '연 %'를 비교하고 가입하세요. '+16%'는 기본 이율에 곱해지는 보너스입니다."},
+  {page:"leaderboard",target:"#leaderboard .panel",title:"4. 리더보드에서 기록 확인",body:"월간 순자산 순위와 내 최고 기록을 확인할 수 있습니다. Google 로그인 또는 기기 클라우드를 연결하면 순위에 참여합니다."},
+  {page:"settings",target:"#settings",title:"5. 전체화면과 초보자 도움",body:"설정에서 전체화면 시작 안내를 끄거나 다시 켤 수 있고, 초보자 도움도 조절할 수 있습니다. 준비되면 아래 '시작하기'를 누르세요."}
+];
+function clearTutorialHighlight(){
+  if(tutorialTargetEl){ tutorialTargetEl.classList.remove("tutorial-target"); tutorialTargetEl=null; }
+}
+function tutorialRoot(){
+  let el=document.getElementById("tutorialRoot");
+  if(!el){ el=document.createElement("div"); el.id="tutorialRoot"; document.body.appendChild(el); }
+  return el;
+}
+function renderTutorialStep(){
+  if(!tutorialActive) return;
+  const step=TUTORIAL_STEPS[tutorialStep]||TUTORIAL_STEPS[0];
+  clearTutorialHighlight();
+  try{ show(step.page); }catch(e){}
+  setTimeout(()=>{
+    if(!tutorialActive) return;
+    const target=document.querySelector(step.target);
+    if(target){ tutorialTargetEl=target; target.classList.add("tutorial-target"); try{ target.scrollIntoView({block:"center",behavior:"smooth"}); }catch(e){} }
+  },120);
+  const root=tutorialRoot();
+  root.innerHTML=`<div class="tutorial-card" role="dialog" aria-modal="false" aria-label="게임 튜토리얼">
+    <div class="tutorial-top"><span class="pill">튜토리얼 ${tutorialStep+1}/${TUTORIAL_STEPS.length}</span><button class="ghost small" onclick="skipTutorial()">건너뛰기</button></div>
+    <h3>${escHtml(step.title)}</h3>
+    <p>${escHtml(step.body)}</p>
+    <div class="tutorial-dots">${TUTORIAL_STEPS.map((_,i)=>`<span class="${i===tutorialStep?"on":""}"></span>`).join("")}</div>
+    <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="tutorialPrev()" ${tutorialStep===0?"disabled":""}>이전</button><button class="buy" onclick="tutorialNext()">${tutorialStep===TUTORIAL_STEPS.length-1?"시작하기":"다음"}</button></div>
+  </div>`;
+}
+function startTutorial(force){
+  ensureOnboard();
+  tutorialActive=true; tutorialStep=0;
+  if(typeof closeModal==="function"){ try{ closeModal(); }catch(e){} }
+  renderTutorialStep();
+  if(force) trackEvent("tutorial_restart");
+}
+function tutorialNext(){
+  if(!tutorialActive) return;
+  if(tutorialStep>=TUTORIAL_STEPS.length-1) return finishTutorial();
+  tutorialStep++; renderTutorialStep();
+}
+function tutorialPrev(){
+  if(!tutorialActive||tutorialStep<=0) return;
+  tutorialStep--; renderTutorialStep();
+}
+function finishTutorial(){
+  tutorialActive=false;
+  clearTutorialHighlight();
+  const root=document.getElementById("tutorialRoot"); if(root&&root.parentNode) root.parentNode.removeChild(root);
+  const ob=ensureOnboard(); ob.tutorialDone=true;
+  saveGame();
+  try{ show("dashboard"); }catch(e){}
+  notify("system","튜토리얼 완료","이제 노동으로 첫 자금을 만들고 한 주부터 투자해 보세요.");
+  maybeAskFullscreen();
+}
+function skipTutorial(){
+  tutorialActive=false;
+  clearTutorialHighlight();
+  const root=document.getElementById("tutorialRoot"); if(root&&root.parentNode) root.parentNode.removeChild(root);
+  ensureOnboard().tutorialDone=true; saveGame();
+  maybeAskFullscreen();
+}
+function startTutorialIfNeeded(){
+  const ob=ensureOnboard();
+  if(tutorialActive || ob.tutorialDone || state.savedAt) return false;
+  if(((state.labor&&state.labor.shifts)||0)>0) return false;
+  setTimeout(()=>startTutorial(true),450);
+  return true;
 }
 let unlockCheckAt=0;
 function checkUnlocks(){
@@ -6105,6 +6347,7 @@ function init(){
     window.addEventListener("unhandledrejection",e=>{ try{ logError("promise",e&&e.reason); }catch(_){} });
   }
   setTimeout(bootDone,350);
+  setTimeout(()=>{ if(!startTutorialIfNeeded()) maybeAskFullscreen(); },800);
   if(typeof navigator!=="undefined" && "serviceWorker" in navigator && typeof location!=="undefined" && location.protocol.startsWith("http")){
     // 새 배포가 첫 로드에 보이도록 서비스워커 스크립트도 HTTP 캐시를 건너뛰고 확인합니다.
     const hadController=!!navigator.serviceWorker.controller;
@@ -6376,7 +6619,7 @@ function applySaveData(data) {
   state.settings.speed=state.speed;
   state.settings.theme=state.settings.theme==="dark"?"dark":"light";
   state.settings.numberFormat=state.settings.numberFormat==="short"?"short":"full";
-  ["confirmTrades","animations","effects","autoSave"].forEach(k=>{ state.settings[k]=state.settings[k]!==false; });
+  ["confirmTrades","animations","effects","autoSave","fullscreenPrompt","beginnerMode"].forEach(k=>{ state.settings[k]=state.settings[k]!==false; });
   ["colorblind","largeText"].forEach(k=>{ state.settings[k]=state.settings[k]===true; });
   ensureRebirth();
   // 구버전 세이브 마이그레이션: 환생 기록이 있으면 환생 화면을 즉시 영구 해금합니다.
@@ -6463,9 +6706,11 @@ function clearGame(skipConfirm) {
   state.realizedYTD = 0;
   state.taxedProfit = 0;
   state.taxPaid = 0;
+  state.tradeTaxPaid = 0;
+  state.taxLedger = [];
   state.wealthFeePaid = 0;
   state.wealthFeeAt = 0;
-  state.tax = {mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1};
+  state.tax = {mode:"general",carryLoss:0,pensionDeferred:0,isaGains:0,isaTaxed:0,splitVersion:1,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
   state.calendar = [];
   state.disclosures = [];
   state.challenge = {active:null,history:[],best:0,last:null};
@@ -6536,6 +6781,7 @@ function renderPage(id){
   if(id==="realestate")realestatePage();
   if(id==="company")companyPage();
   if(id==="economy")economyPage();
+  if(id==="leaderboard")leaderboardPage();
   if(id==="rebirth")rebirthPage();
   if(id==="settings")settingsPage();
   if(id==="loan")loanPage();
@@ -6682,6 +6928,7 @@ function banking(){
   $("banking").innerHTML=`${pageHeader("FINANCE","금융상품","현금을 안정적으로 굴리는 예금·적금입니다. 15초마다 이자가 반영됩니다.")}
   ${financeTabs("banking")}
   <div class="notice" id="gradeBanner">${gradeBannerHTML()}</div>
+  <div class="notice"><b>은행 선택 방법</b> · 같은 상품도 은행마다 이율이 다릅니다. 카드의 은행 목록에서 <b>실제 예상 연이율</b>을 비교한 뒤 은행을 고르고 <b>가입</b>을 누르세요. 표시된 <b>기본 +16%</b>는 기본 이율에 곱해지는 보너스이며, 예금 수익률 자체가 16%라는 뜻은 아닙니다. 카드 부제의 <b>현재 등급 연 %</b>는 은행 보너스 전 기본 이율이고, 실제 가입 이율은 은행 목록의 숫자를 보세요. 가입하면 그 시점의 이율이 확정됩니다.</div>
   <div class="notice">각 상품별 원금이 3,000만 원을 초과하면 초과분 이율이 50%로 감소하고, 이자 계산 기준 원금은 최대 3억 원입니다.</div>
   <div class="products">${products.map(productCard).join("")}</div>
   ${bondPanelHtml()}`;
@@ -6709,6 +6956,15 @@ function refreshBankingState(){
     if(maturity) maturity.value=productMaturityText(p);
     const joinBtn=card.querySelector(`[data-join="${p.id}"]`);
     if(joinBtn) joinBtn.disabled=!unlocked;
+    const bankSel=document.getElementById(`bank-${p.id}`);
+    if(bankSel){
+      const selected=bankSel.value||p.bank||"hanbit";
+      bankSel.disabled=!unlocked;
+      bankSel.innerHTML=bankOptionsHtml(p);
+      bankSel.value=selected;
+    }
+    const bankPreview=card.querySelector(`[data-bank-preview="${p.id}"]`);
+    if(bankPreview) bankPreview.textContent=bankPreviewText(p,BANKS.find(b=>b.id===(bankSel&&bankSel.value))||BANKS[0]);
   });
   const gb=document.getElementById("gradeBanner");
   if(gb) gb.innerHTML=gradeBannerHTML();
@@ -6732,6 +6988,33 @@ function productMaturityText(p){
   return `실제 ${realSeconds(gameLeft)}초 남음`;
 }
 
+// 은행별 실제 가입 예상 이율을 보여 줍니다. +16%는 기본 이율에 곱해지는 보너스이지,
+// 예금 전체가 16% 수익이 된다는 뜻이 아닙니다.
+function bankRateForProduct(p,bank){
+  const base=gradeRateFor(p.id,currentGrade());
+  return base*(bank&&bank.mult||1)*(1+((state.economy&&state.economy.rateAdj)||0));
+}
+function bankOptionLabel(p,b){
+  const r=bankRateForProduct(p,b);
+  if(r<=0) return `${b.name} · 등급 잠금`;
+  const bonus=b.mult>1?` · 기본 +${Math.round((b.mult-1)*100)}%`:" · 기본";
+  return `${b.name} · 연 ${(r*100).toFixed(2)}%${bonus}`;
+}
+function bankOptionsHtml(p){
+  return BANKS.map(b=>`<option value="${b.id}" ${(p.bank||"hanbit")===b.id?"selected":""}>${bankOptionLabel(p,b)}</option>`).join("");
+}
+function bankPreviewText(p,bank){
+  const b=bank||BANKS.find(x=>x.id===p.bank)||BANKS[0];
+  if(p.amount>0 && p.rate>0) return `보유 중 · 가입 당시 확정 연 ${(p.rate*100).toFixed(2)}% 유지 · 추가 가입도 같은 이율`;
+  const r=bankRateForProduct(p,b);
+  return `${b.name} 선택 시 예상 연 ${(r*100).toFixed(2)}% · 기본 이율 대비 +${Math.round((b.mult-1)*100)}% 보너스 · 가입 시 확정`;
+}
+function refreshBankPreview(id){
+  const p=product(id), sel=$("bank-"+id); if(!p||!sel) return;
+  const el=document.querySelector(`[data-bank-preview="${id}"]`);
+  const bank=BANKS.find(b=>b.id===sel.value)||BANKS[0];
+  if(el) el.textContent=bankPreviewText(p,bank);
+}
 // 상품 카드: 현재 등급 이율과 가입 당시 확정 이율을 함께 보여줍니다.
 function productCard(p){
   const unlocked=canJoin(p.id);
@@ -6748,14 +7031,15 @@ function productCard(p){
       <div><small>위험도</small><b>${p.risk}</b></div>
     </div>
     <div class="trade bank-trade">
-      <input id="prod-${p.id}" type="number" value="${p.min}" step="10000" ${unlocked?"":"disabled"}>
+      <label>가입 금액<input id="prod-${p.id}" type="number" value="${p.min}" step="10000" placeholder="가입 금액" aria-label="${escAttr(p.name)} 가입 금액" ${unlocked?"":"disabled"}></label>
       <button class="buy" data-join="${p.id}" onclick="join('${p.id}')" ${unlocked?"":"disabled"}>가입</button>
       <button class="sell" onclick="leave('${p.id}')">해지</button>
     </div>
     <div class="inline-form" style="margin-top:8px">
-      <label>은행<select id="bank-${p.id}" ${unlocked?"":"disabled"}>${BANKS.map(b=>`<option value="${b.id}" ${(p.bank||"hanbit")===b.id?"selected":""}>${b.name} (${b.mult>1?"+":""}${((b.mult-1)*100).toFixed(0)}%)</option>`).join("")}</select></label>
+      <label>은행 (가입 이율)<select id="bank-${p.id}" onchange="refreshBankPreview('${p.id}')" ${unlocked?"":"disabled"}>${bankOptionsHtml(p)}</select></label>
       <label>만기 상태<input id="maturity-${p.id}" data-maturity="${p.id}" value="${productMaturityText(p)}" readonly></label>
     </div>
+    <p class="muted-sm" data-bank-preview="${p.id}" style="margin-top:6px">${bankPreviewText(p,BANKS.find(b=>b.id===(p.bank||"hanbit")))}</p>
   </article>`;
 }
 
@@ -6833,6 +7117,7 @@ function laborPanelHtml(){
       <button class="ghost" onclick="restLabor()">🛌 휴식 (+30 컨디션)</button>
       ${[["focus","집중력","성공 구간 확대"],["stamina","체력","최대 컨디션 +20"],["service","서비스","일당 +2%"]].map(([id,name,desc])=>`<button class="${labor.points>=laborSkillCost(id)&&labor.skills[id]<5?"buy":"ghost"}" ${labor.points>=laborSkillCost(id)&&labor.skills[id]<5?"":"disabled"} onclick="buyLaborSkill('${id}')">${name} Lv.${labor.skills[id]}/5 · ${labor.skills[id]>=5?"MAX":laborSkillCost(id)+"P"}</button>`).join("")}
     </div>
+    ${laborBeginnerHelp()?`<div class="notice" style="margin-top:8px;background:#ecfdf3;border-color:#abefc6;color:#067647"><b>초보자 도움 중</b> · 노동 첫 10회는 성공 구간이 20% 넓고 표시선이 12% 느립니다. 설정에서 끌 수 있습니다.</div>`:""}
     <p class="labor-note">컨디션이 낮을수록 일당이 줄고 작업이 흔들립니다. 15게임초마다 컨디션이 조금 회복되며, 휴식 버튼으로 즉시 30을 회복할 수 있습니다. 경력 XP 120마다 스킬 포인트 1P를 얻습니다. 집중력은 성공 구간을 넓히고, 체력은 최대 컨디션을, 서비스는 일당을 높입니다.</p>
     <div class="labor-grid">${LABOR_JOBS.map(laborJobCard).join("")}</div>
     <p class="labor-note">일자리마다 <b>타이밍·연타·기억·계산</b> 4종 미니게임이 있습니다. 기본 일자리는 타이밍 작업 3회로 일당이 지급되고, 완벽 100% · 성공 65% · 실패 0%로 반영됩니다. 회차 사이 연타는 다음 작업으로 인정되지 않으며, 높은 일당일수록 구간이 좁거나 목표가 높고 계산·기억 문제도 길고 어려워집니다. 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주, 12회부터 데이터 입력, 14회부터 리서치 보조, 16회부터 전략 컨설팅이 열립니다.</p>`;
@@ -6915,7 +7200,7 @@ function metalSummaryHtml(){
   return held.map(m=>{
     const h=state.metals[m.id], price=metalPrice(m.id);
     return `<div class="holding-row">
-      <div class="holding-main"><b>${m.name}</b><small><span data-live="metal:${m.id}:qty">${h.qty}${m.unit}</span> · 평단 <span data-live="metal:${m.id}:avg">${won(h.avg)}</span></small></div>
+      <div class="holding-main"><b>${m.name}</b><small>보유 <span data-live="metal:${m.id}:qty">${h.qty}${m.unit}</span> · 평단 <span data-live="metal:${m.id}:avg">${won(h.avg)}</span></small></div>
       <div><small>현재가</small><b data-live="metal:${m.id}:price">${won(price)}</b></div>
       <div><small>평가금액</small><b data-live="metal:${m.id}:value">${won(h.qty*price)}</b></div>
       <div><small>평가손익</small><b class="${h.qty*price-h.qty*h.avg>=0?"up":"down"}" data-live="metal:${m.id}:pnl">${won(h.qty*price-h.qty*h.avg)}</b></div>
@@ -7240,6 +7525,18 @@ function loanPanelHtml(){
   </div>`;
 }
 
+function taxLedgerHtml(){
+  ensureAdvancedState();
+  const rows=ensureTaxLedger();
+  const actual=rows.filter(r=>r.tax>0).reduce((a,r)=>a+r.tax,0);
+  if(!rows.length) return `<div class="notice" style="margin-top:10px"><b>아직 납부 원장이 비어 있습니다.</b> 거래세·양도세·연금 인출세가 발생하면 이곳에 납부일, 계좌, 과세표준, 세율, 세액, 대출 전환 여부가 자동으로 기록됩니다.${(state.taxPaid||0)>0?` 이전 버전에서 납부한 ${won(state.taxPaid)}은 합계에만 반영되어 있습니다.`:""}</div>`;
+  const labelOf={general:"일반",isa:"ISA",pension:"연금"};
+  const summary=["trade","general","isa","pension"].map(k=>({k,label:taxKindLabel(k),v:rows.filter(r=>r.kind===k).reduce((a,r)=>a+(+r.tax||0),0)})).filter(x=>x.v>0);
+  return `<div class="button-row" style="margin-top:10px">${summary.map(x=>`<span class="pill">${x.label} ${won(x.v)}</span>`).join("")}<span class="pill">원장 합계 ${won(actual)}</span>${(state.taxPaid||0)>0&&actual<(state.taxPaid||0)?`<span class="pill">이전 납부 ${won((state.taxPaid||0)-actual)}</span>`:""}</div>
+    <div class="tax-ledger-wrap" style="margin-top:8px"><table class="ledger-table"><thead><tr><th>납부 시각</th><th>종류</th><th>계좌</th><th>과세표준</th><th>세율</th><th>세액</th><th>현금/대출</th><th>내용</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${new Date(r.at).toLocaleString("ko-KR")}</td><td><b>${taxKindLabel(r.kind)}</b></td><td>${labelOf[r.account]||"-"}</td><td>${won(r.base||0)}</td><td>${((+r.rate||0)*100).toFixed(2)}%</td><td><b>${r.deferred?"이연":won(r.tax||0)}</b></td><td>${r.deferred?"-":(r.loan>0?`현금 + 대출 ${won(r.loan)}`:"현금")}</td><td class="ledger-note">${escHtml(r.note||"")}</td></tr>`).join("")}</tbody></table></div>
+    <p class="muted-sm" style="margin-top:6px">최근 80건까지 보관합니다. 거래세는 매도 대금에서 이미 차감된 금액이고, 양도세는 현금이 부족하면 대출로 전환된 금액까지 표시합니다.</p>`;
+}
+
 function taxPanelHtml(){
   ensureAdvancedState();
   const t=state.tax;
@@ -7258,7 +7555,9 @@ function taxPanelHtml(){
     <p class="muted-sm" style="margin-top:8px">${modeDesc} · 매도 거래세 ${(tradeTaxRate()*100).toFixed(2)}%는 모든 계좌에 공통 적용됩니다.</p>
     <p class="muted-sm">세금 연도 ${t.year||1}년차 · 다음 결산까지 ${clockText(taxYearRemaining())} · 연간 손익·기본공제·ISA 한도·납입한도가 리셋되고 이월 손실은 유지됩니다. <b>일반</b> ${won(state.realizedYTD||0)} · <b>ISA</b> ${won(t.isaGains||0)} · <b>연금</b> ${won(t.pensionDeferred||0)}</p>
     ${taxAccountSummaryHtml()}
-    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>이번 연도 납부</small><b>${won(yearPaid)}</b></div><div class="kpi"><small>누적 납부</small><b>${won(state.taxPaid||0)}</b></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b><span class="delta">차감 가능 ${won(t.carryLossBase||0)}</span></div></div>
+    <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>이번 연도 납부</small><b>${won(yearPaid)}</b><span class="delta">소득세 기준</span></div><div class="kpi"><small>누적 납부</small><b>${won(totalTaxPaid())}</b><span class="delta">거래세 ${won(state.tradeTaxPaid||0)} 포함</span></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b><span class="delta">차감 가능 ${won(t.carryLossBase||0)}</span></div></div>
+    <div class="section-head tax-sec-head" style="margin-top:14px"><h3>세금 납부 원장</h3><span class="pill">어디서 얼마가 빠졌는지 전부 기록</span></div>
+    ${taxLedgerHtml()}
     ${debt>0?`<div class="notice" style="margin-top:10px;background:#fff1f2;border-color:#fecdd3;color:#9f1239"><b>대출 부채 ${won(debt)}</b> · 연 ${(debtRate*100).toFixed(1)}% · 다음 15초 이자 약 ${won(debt*debtRate*.015)}<br>세금을 현금으로 낼 수 없으면 부족분이 자동으로 대출 잔액에 더해집니다. 순자산은 총자산에서 이 부채를 뺀 값입니다.</div>`:""}
     <div class="notice" style="margin-top:10px"><b>고액 자산 관리 수수료</b> · 순자산 10억원 초과분에 60초마다 <b>${wealthFeeRateText(netAssetsKRW())}</b>가 현금에서 차감됩니다(100억원 초과분은 0.02%). 초반 진행에는 영향이 없고, 후반 복리만 완만하게 눌러 줍니다. 다음 60초 예상 <b>${won(wealthFeeDue())}</b> · 누적 <b>${won(state.wealthFeePaid||0)}</b></div>
     ${t.mode==="pension"?`<div class="notice" style="margin-top:10px">인출 시 5.5% 세금이 적용됩니다. <button class="ghost small" onclick="withdrawPensionTax()">연금 세금 납부 (${won((t.pensionDeferred||0)*.055)})</button></div>`:""}
