@@ -285,7 +285,7 @@ main{padding:26px 30px 44px;min-width:0}
 .section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
 .section-head h3{margin:0}
 .sub-title{font-size:14px;margin:16px 0 8px}
-.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:14px}
 .stats.hidden{display:none}
 .box{padding:14px 16px}
 .box small{font-size:11px;letter-spacing:.02em;color:var(--muted)}
@@ -612,12 +612,20 @@ body.dark .pill.ok{background:#0d2b26;color:#7dd3c7;border-color:#1f5148}
   <main>
     <div id="breaking" class="breaking" role="status" aria-live="polite"></div>
 
-    <section class="stats">
+    <section class="stats" aria-label="자산 요약">
       <div class="box"><small>현금 (원화)</small><b id="cash"></b></div>
-      <div class="box"><small>보유 달러 (USD)</small><b id="usdCash"></b></div>
-      <div class="box"><small>주식 평가액</small><b id="stockValue"></b></div>
-      <div class="box"><small>금융상품 평가액</small><b id="productValue"></b></div>
-      <div class="box"><small>순자산 (대출 차감)</small><b id="totalValue"></b></div>
+      <div class="box"><small>달러 평가액</small><b id="usdValue"></b><span class="muted-sm" id="usdCash"></span></div>
+      <div class="box"><small>주식 평가액</small><b id="stockValueTop"></b></div>
+      <div class="box"><small>금융상품 평가액</small><b id="productValueTop"></b></div>
+      <div class="box"><small>부동산 평가액</small><b id="estateValueTop"></b></div>
+      <div class="box"><small>실물자산 (금·은)</small><b id="metalValueTop"></b></div>
+      <div class="box"><small>기업 가치</small><b id="companyValueTop"></b></div>
+      <div class="box"><small>채권 평가액</small><b id="bondValueTop"></b></div>
+      <div class="box"><small>공매도 평가손익</small><b id="shortValueTop"></b></div>
+      <div class="box"><small>총자산</small><b id="grossValueTop"></b></div>
+      <div class="box"><small>대출 부채</small><b id="debtValueTop"></b></div>
+      <div class="box"><small>순자산 (총자산 − 부채)</small><b id="totalValue"></b></div>
+      <div class="box"><small>누적 납부 세금</small><b id="taxValueTop"></b></div>
     </section>
 
     <div class="notice" id="marketTimeBar" style="background:#e0f2fe; border-color:#7dd3fc; color:#0369a1; font-weight:bold;">
@@ -989,15 +997,15 @@ const LABOR_JOBS=[
 // 일당은 미니게임 성과에 비례합니다. mode로 작업 방식을 고르고, 각 방식의 난이도는
 // zone(성공 구간)·speed(표시선 속도)·tapTarget(목표 연타 수)으로 조절합니다.
 // 기본 일자리는 타이밍, 상위 일자리는 연타·기억·계산으로 바뀌어 반복감을 줄입니다.
-{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,mode:"timing",desc:"야간 계산·매장 정리",zone:.20,speed:.80,diff:2},
-{id:"cafe",name:"카페 서빙",icon:"☕",pay:50000,cooldown:25,req:0,mode:"timing",desc:"주문 접수·음료 서빙",zone:.22,speed:.72,diff:2},
-{id:"delivery",name:"퀵배달",icon:"🛵",pay:100000,cooldown:35,req:2,mode:"timing",desc:"도심 단거리 배달",zone:.145,speed:1.15,diff:3},
-{id:"logistics",name:"물류센터",icon:"📦",pay:170000,cooldown:50,req:4,mode:"timing",desc:"상하차·택배 분류",zone:.115,speed:1.35,diff:4},
-{id:"tutoring",name:"과외",icon:"📚",pay:260000,cooldown:70,req:7,mode:"timing",desc:"중학생 수학 과외",zone:.095,speed:1.50,diff:4},
-{id:"freelance",name:"긴급 외주",icon:"💻",pay:400000,cooldown:100,req:10,mode:"timing",desc:"간단한 웹·디자인 수정",zone:.080,speed:1.70,diff:5},
-{id:"data",name:"데이터 입력",icon:"⌨️",pay:450000,cooldown:110,req:12,mode:"tap",tapTarget:20,desc:"주문서 입력·검수",zone:.075,speed:1.80,diff:5},
-{id:"research",name:"리서치 보조",icon:"🔬",pay:550000,cooldown:130,req:14,mode:"memory",desc:"자료 정리·출처 대조",zone:.070,speed:1.90,diff:5},
-{id:"consulting",name:"전략 컨설팅",icon:"📈",pay:700000,cooldown:150,req:16,mode:"math",desc:"시장 분석·제안서",zone:.065,speed:2.00,diff:5}
+{id:"convenience",name:"편의점 야간",icon:"🏪",pay:60000,cooldown:20,req:0,mode:"timing",desc:"야간 계산·매장 정리",zone:.16,speed:.90,diff:2},
+{id:"cafe",name:"카페 서빙",icon:"☕",pay:50000,cooldown:25,req:0,mode:"timing",desc:"주문 접수·음료 서빙",zone:.17,speed:.86,diff:2},
+{id:"delivery",name:"퀵배달",icon:"🛵",pay:100000,cooldown:35,req:2,mode:"timing",desc:"도심 단거리 배달",zone:.125,speed:1.20,diff:3},
+{id:"logistics",name:"물류센터",icon:"📦",pay:170000,cooldown:50,req:4,mode:"timing",desc:"상하차·택배 분류",zone:.10,speed:1.40,diff:4},
+{id:"tutoring",name:"과외",icon:"📚",pay:260000,cooldown:70,req:7,mode:"timing",desc:"중학생 수학 과외",zone:.082,speed:1.55,diff:4},
+{id:"freelance",name:"긴급 외주",icon:"💻",pay:400000,cooldown:100,req:10,mode:"timing",desc:"간단한 웹·디자인 수정",zone:.067,speed:1.70,diff:5},
+{id:"data",name:"데이터 입력",icon:"⌨️",pay:450000,cooldown:110,req:12,mode:"tap",tapTarget:26,desc:"주문서 입력·검수",zone:.062,speed:1.80,diff:5},
+{id:"research",name:"리서치 보조",icon:"🔬",pay:550000,cooldown:130,req:14,mode:"memory",desc:"자료 정리·출처 대조",zone:.057,speed:1.90,diff:5},
+{id:"consulting",name:"전략 컨설팅",icon:"📈",pay:700000,cooldown:150,req:16,mode:"math",desc:"시장 분석·제안서",zone:.052,speed:2.00,diff:5}
 ];
 // 가상 기업: 설립 → 확장 → 인수합병
 const COMPANY_LEVELS=[
@@ -1156,8 +1164,24 @@ function stockValueKRW(){
   return stocks.reduce((sum,s)=>sum + (isForeignStock(s) ? s.price*s.own*fx.usd : s.price*s.own), 0);
 }
 function productValueKRW(){ return products.reduce((a,p)=>a+p.amount, 0); }
-// 총자산 = 현금 + 달러 환산액 + 주식 평가액 + 금융상품 평가액 + 부동산 + 실물자산 + 기업 가치
-function grossAssetsKRW(){ return (state.cash||0) + (state.usd||0)*fx.usd + stockValueKRW() + productValueKRW() + estateValue() + metalValue() + companyValue() + bondValueKRW() + shortValueKRW(); }
+// 자산 화면과 상단 요약이 같은 숫자를 쓰도록 모든 자산 항목을 한 곳에서 계산합니다.
+// 공매도 평가손익처럼 음수가 될 수 있는 항목도 총자산에 그대로 반영합니다.
+function assetBreakdown(){
+  const cash=+state.cash||0;
+  const usd=(+state.usd||0)*fx.usd;
+  const stock=stockValueKRW();
+  const product=productValueKRW();
+  const estate=estateValue();
+  const metal=metalValue();
+  const company=companyValue();
+  const bonds=bondValueKRW();
+  const shorts=shortValueKRW();
+  const gross=cash+usd+stock+product+estate+metal+company+bonds+shorts;
+  const debt=Math.max(0,+state.loan||0);
+  return {cash,usd,stock,product,estate,metal,company,bonds,shorts,gross,debt,net:gross-debt,taxPaid:Math.max(0,+state.taxPaid||0)};
+}
+// 총자산 = 현금 + 달러 환산액 + 주식 + 금융상품 + 부동산 + 실물자산 + 기업 + 채권 + 공매도 평가손익
+function grossAssetsKRW(){ return assetBreakdown().gross; }
 // 순자산 = 총자산 - 부채(대출)
 function netAssetsKRW(){ return grossAssetsKRW() - (state.loan||0); }
 // 기존 함수 이름은 순자산 기준으로 유지합니다(등급·목표·랭킹 공통).
@@ -1904,7 +1928,7 @@ function laborShiftPay(job,results,condition){
   const perfect=list.filter(g=>g==="perfect").length;
   const good=list.filter(g=>g==="good").length;
   const miss=Math.max(0,list.length-perfect-good);
-  const rate=(perfect+good*.8)/LABOR_ROUNDS;
+  const rate=(perfect+good*.65)/LABOR_ROUNDS;
   const bonus=rebirthBonus("labor",.05);
   const l=ensureLabor();
   // 컨디션은 지급액에, 서비스 스킬은 추가 보너스에 반영합니다. 기존 호출(2개 인자)은 100% 컨디션입니다.
@@ -1921,10 +1945,10 @@ function laborGameHtml(job){
   const zone=laborZoneFor(job)*100, perfect=zone*.35;
   const band=(left,width,cls)=>`<span class="labor-target${cls?" "+cls:""}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></span>`;
   const intro={
-    timing:"표시선이 초록 구간을 지나갈 때 <b>멈추기</b>를 누르세요. 3번의 작업을 마치면 일당이 지급되고, 놓친 만큼 깎입니다.",
+    timing:"표시선이 초록 구간을 지나갈 때 <b>멈추기</b>를 누르세요. 3번의 작업을 마치면 일당이 지급되고, 놓친 만큼 크게 깎입니다.",
     tap:"3초 동안 목표 횟수만큼 <b>빠르게 누르세요</b>. 목표에 가까울수록 일당이 커집니다.",
-    memory:"먼저 보여 주는 순서를 기억한 뒤 <b>같은 순서로</b> 누르세요. 두 번 틀리면 실패입니다.",
-    math:"6초 안에 정답을 고르세요. 빨리 맞힐수록 높은 판정을 받습니다."
+    memory:"보여 주는 순서를 기억한 뒤 <b>같은 순서로</b> 누르세요. 순서가 길고 표시 시간이 짧으며, 두 번 틀리면 실패입니다.",
+    math:"6초 안에 여러 단계 계산의 정답을 고르세요. 빨리 맞힐수록 높은 판정을 받습니다."
   }[mode];
   const commonMeta=`<div class="labor-game-meta"><span>${laborModeLabel(mode)} · 작업 <b id="labor-round">1 / ${LABOR_ROUNDS}</b></span><span id="labor-grades">⭐ 완벽 · ✅ 성공 · ❌ 실패</span></div>`;
   let body="", action="";
@@ -1959,6 +1983,9 @@ function laborClearTimer(){
 function laborBeginRound(){
   const s=laborSession; if(!s||s.paid) return false;
   laborClearTimer();
+  // 이전 판정 직후의 연타가 다음 회차로 중복 반영되지 않도록 회차가 열릴 때만 입력을 받습니다.
+  s.accepting=true;
+  const stopBtn=$("labor-stop-btn"); if(stopBtn) stopBtn.disabled=false;
   s.roundStart=Date.now();
   if(s.mode==="timing"){
     s.pos=0; s.dir=1; s.last=0;
@@ -1976,10 +2003,10 @@ function laborBeginRound(){
   } else if(s.mode==="memory"){
     s.phase="show"; s.input=[]; s.mistakes=0;
     const icons=["🍎","🍋","🍇","🍓","🥝","🍒"];
-    s.seq=Array.from({length:3+s.round},()=>icons[Math.floor(Math.random()*icons.length)]);
+    s.seq=Array.from({length:4+s.round},()=>icons[Math.floor(Math.random()*icons.length)]);
     s.icons=icons;
     laborRenderMemory();
-    s.timeout=setTimeout(()=>{ if(!laborSession||laborSession!==s) return; s.phase="input"; laborRenderMemory(); },1200);
+    s.timeout=setTimeout(()=>{ if(!laborSession||laborSession!==s) return; s.phase="input"; laborRenderMemory(); },1000);
   } else {
     s.q=laborMakeMath(); s.qStart=Date.now(); laborRenderMath();
   }
@@ -1992,11 +2019,11 @@ function laborRenderTap(){
   if(left) left.textContent=`${Math.max(0,s.tapLeft).toFixed(1)}초`;
 }
 function laborTap(){
-  const s=laborSession; if(!s||s.mode!=="tap") return false;
+  const s=laborSession; if(!s||s.mode!=="tap"||s.accepting===false) return false;
   s.taps=(s.taps||0)+1; laborRenderTap(); return true;
 }
 function laborTapEnd(){
-  const s=laborSession; if(!s||s.mode!=="tap") return false;
+  const s=laborSession; if(!s||s.mode!=="tap"||s.accepting===false) return false;
   laborClearTimer();
   const target=s.job.tapTarget||12;
   const grade=s.taps>=target?"perfect":s.taps>=Math.ceil(target*.6)?"good":"miss";
@@ -2015,7 +2042,7 @@ function laborRenderMemory(){
   if(msg) msg.textContent=s.phase==="show"?"순서를 기억하세요…":`입력 ${s.input.length} / ${s.seq.length}${s.mistakes?` · 실수 ${s.mistakes}`:""}`;
 }
 function laborMemoryClick(index){
-  const s=laborSession; if(!s||s.mode!=="memory"||s.phase!=="input") return false;
+  const s=laborSession; if(!s||s.mode!=="memory"||s.phase!=="input"||s.accepting===false) return false;
   const icons=s.icons||[];
   const expected=s.seq[s.input.length];
   if(icons[index]===expected){
@@ -2031,13 +2058,26 @@ function laborMemoryClick(index){
   return true;
 }
 function laborMakeMath(){
-  const a=2+Math.floor(Math.random()*9), b=2+Math.floor(Math.random()*9);
-  const op=Math.random()<.5?"+":"×";
-  const ans=op==="+"?a+b:a*b;
+  // 단순 한 자리 사칙연산은 노동 미니게임의 긴장감이 없어, 두세 단계 계산과 큰 수를 섞습니다.
+  const rnd=(min,max)=>min+Math.floor(Math.random()*(max-min+1));
+  const a=rnd(7,19), b=rnd(3,13), c=rnd(2,11), d=rnd(2,9);
+  const patterns=[
+    {text:`${a} × ${b} + ${c} × ${d} = ?`,answer:a*b+c*d},
+    {text:`${a} × ${b} − ${c} = ?`,answer:a*b-c},
+    {text:`(${a} + ${b}) × ${c} = ?`,answer:(a+b)*c},
+    {text:`${a} × (${b} + ${c}) − ${d} = ?`,answer:a*(b+c)-d},
+    {text:`${a*b} ÷ ${a} + ${c} × ${d} = ?`,answer:b+c*d}
+  ];
+  const q=patterns[Math.floor(Math.random()*patterns.length)];
+  const ans=q.answer;
   const set=new Set([ans]);
-  while(set.size<4){ const d=ans+(Math.floor(Math.random()*9)-4); if(d>0&&d!==ans) set.add(d); }
+  while(set.size<4){
+    const delta=Math.floor(Math.random()*23)-11;
+    const value=ans+delta;
+    if(delta!==0 && value>0) set.add(value);
+  }
   const options=[...set].sort(()=>Math.random()-.5);
-  return {text:`${a} ${op} ${b} = ?`,answer:ans,options};
+  return {text:q.text,answer:ans,options,hard:true};
 }
 function laborRenderMath(){
   const s=laborSession; if(!s||!s.q) return;
@@ -2054,17 +2094,22 @@ function laborRenderMath(){
   },200);
 }
 function laborMathAnswer(index){
-  const s=laborSession; if(!s||s.mode!=="math"||!s.q) return false;
+  const s=laborSession; if(!s||s.mode!=="math"||!s.q||s.accepting===false) return false;
   const picked=s.q.options[index];
   const elapsed=Date.now()-s.qStart;
   laborClearTimer();
   return laborPushResult(picked===s.q.answer?(elapsed<=3000?"perfect":"good"):"miss");
 }
 function laborPushResult(grade){
-  const s=laborSession; if(!s||s.paid) return false;
+  const s=laborSession; if(!s||s.paid||s.accepting===false) return false;
+  // 한 회차의 판정은 한 번만 받습니다. 일시정지 중 멈추기 버튼을 연타해도
+  // 같은 위치의 완벽 판정이 3회로 복제되지 않습니다.
+  s.accepting=false;
   laborClearTimer();
   s.results.push({grade});
   s.round++;
+  s.pos=0;
+  const stopBtn=$("labor-stop-btn"); if(stopBtn) stopBtn.disabled=true;
   const badge=$("labor-grades"); if(badge) badge.textContent=s.results.map(x=>x.grade==="perfect"?"⭐":x.grade==="good"?"✅":"❌").join(" ");
   const roundEl=$("labor-round"); if(roundEl) roundEl.textContent=`${Math.min(s.round+1,LABOR_ROUNDS)} / ${LABOR_ROUNDS}`;
   const resEl=$("labor-result"); if(resEl) resEl.textContent=grade==="perfect"?"⭐ 완벽한 작업!":grade==="good"?"✅ 작업 성공":"❌ 작업 실패";
@@ -2103,7 +2148,7 @@ function laborStartShift(jobOrId){
   // 이미 진행 중인 작업이 있으면 새 세션을 열지 않습니다(중복 시작·보상 중복 방지).
   if(laborSession) return false;
   // 표시선은 왼쪽 끝에서 출발합니다. 중앙에서 시작하면 열자마자 누르는 것으로 완벽 판정이 납니다.
-  laborSession={job,mode:laborModeOf(job),round:0,results:[],pos:0,dir:1,last:0,raf:0,timer:0,timeout:0,mathTimer:0,paid:false};
+  laborSession={job,mode:laborModeOf(job),round:0,results:[],pos:0,dir:1,last:0,raf:0,timer:0,timeout:0,mathTimer:0,paid:false,accepting:false};
   openModal(`${job.icon} ${job.name}`,laborGameHtml(job));
   laborBeginRound();
   return true;
@@ -3558,6 +3603,26 @@ function processOrders(){
 // ── 세금 ────────────────────────────────────────
 // 양도소득세: 일반 계좌는 연 2,500만원 공제 후 22%, ISA는 200만원 공제 후 9.9%,
 // 연금저축은 매도 시점에 과세하지 않고 인출할 때 5.5%를 납부합니다.
+// 세금·수수료를 현금으로 낼 수 없을 때 생기는 부채의 기본 금리입니다.
+// 예전에는 이 경로에서 loanRate를 비워 두어 0% 무이자 대출이 되는 버그가 있었습니다.
+const TAX_DEBT_RATE=0.08;
+function ensureDebtRate(){
+  if((state.loan||0)>0 && !((state.loanRate||0)>0)) state.loanRate=TAX_DEBT_RATE;
+}
+// 현금이 부족한 세금을 대출로 전환합니다. 전환한 부족분을 돌려주어 화면에서 안내할 수 있게 합니다.
+function payTaxWithCashOrLoan(amount, label){
+  const due=Math.max(0,+amount||0);
+  if(!(due>0)) return 0;
+  const cash=Math.max(0,+state.cash||0);
+  if(cash>=due){ state.cash=cash-due; return 0; }
+  const short=due-cash;
+  state.cash=0;
+  state.loan=(state.loan||0)+short;
+  if(!((state.loanRate||0)>0)) state.loanRate=TAX_DEBT_RATE;
+  addLog(`⚠️ ${label} 부족분 ${won(short)}이 대출로 전환되었습니다. (연 ${((state.loanRate||TAX_DEBT_RATE)*100).toFixed(1)}%)`);
+  if(!OFFLINE_REPLAY) notify("tax","세금 대출 전환",`${label} ${won(short)} · 연 ${((state.loanRate||TAX_DEBT_RATE)*100).toFixed(1)}%`);
+  return short;
+}
 function taxProjection(profitKRW, account){
   ensureAdvancedState();
   const t=state.tax, acct=TAX_ACCOUNTS.includes(account)?account:t.mode, profit=+profitKRW||0;
@@ -3607,7 +3672,7 @@ function settleTax(profitKRW, account){
       t.isaTaxed=(t.isaTaxed||0)+plan.taxable;
       state.taxPaid=(state.taxPaid||0)+tax;
       t.taxPaidByAccount.isa+=tax;
-      if(state.cash>=tax) state.cash-=tax; else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
+      payTaxWithCashOrLoan(tax,"ISA 양도세");
       addLog(`ISA 양도세 원천징수: ${won(tax)} (ISA 누적 실현손익 ${won(t.isaGains)})`);
       notify("tax","ISA 양도세",won(tax));
     }
@@ -3620,8 +3685,7 @@ function settleTax(profitKRW, account){
     state.taxedProfit=(state.taxedProfit||0)+plan.taxable;
     state.taxPaid=(state.taxPaid||0)+tax;
     t.taxPaidByAccount.general+=tax;
-    if(state.cash>=tax){ state.cash-=tax; }
-    else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
+    payTaxWithCashOrLoan(tax,"양도세");
     addLog(`양도세 원천징수: ${won(tax)} (연 누적 실현손익 ${won(state.realizedYTD)})`);
     notify("tax","양도세 원천징수",`${won(tax)}`);
     return tax;
@@ -3639,8 +3703,10 @@ function borrowLoan(){
   const amt = Math.floor((+($("loan-amt") ? $("loan-amt").value : 0) || 0) / 10000) * 10000;
   if(amt <= 0) return alert("대출 금액을 입력해 주세요.");
   if(amt > avail) return alert(`대출 한도를 초과했습니다. (가능 ${won(avail)})`);
-  state.loan = (state.loan || 0) + amt;
-  state.loanRate = pol.rate;
+  const oldLoan=state.loan||0, oldRate=(state.loanRate||0)>0?state.loanRate:(oldLoan>0?TAX_DEBT_RATE:pol.rate);
+  // 기존 대출이 있으면 새 대출 금리로 전체 잔액을 덮어쓰지 않고 금액 가중 평균을 씁니다.
+  state.loan = oldLoan + amt;
+  state.loanRate = oldLoan>0 ? ((oldLoan*oldRate)+(amt*pol.rate))/state.loan : pol.rate;
   state.loanTotal = (state.loanTotal || 0) + amt;
   state.cash += amt;
   addLog(`신용 대출 실행: ${won(amt)} (연 ${(pol.rate * 100).toFixed(1)}%)`);
@@ -3651,7 +3717,8 @@ function repayLoan(){
   const loan = state.loan || 0;
   if(loan <= 0) return alert("상환할 대출이 없습니다.");
   let amt = Math.floor((+($("loan-amt") ? $("loan-amt").value : 0) || 0) / 10000) * 10000;
-  amt = Math.min(amt || loan, loan, Math.floor(state.cash));
+  if(amt <= 0) return alert("상환할 금액을 입력해 주세요. 전액 상환은 '전액 상환' 버튼을 이용하세요.");
+  amt = Math.min(amt, loan, Math.floor(state.cash));
   if(amt <= 0) return alert("상환할 현금이 부족합니다.");
   state.loan = loan - amt;
   state.cash -= amt;
@@ -3889,7 +3956,7 @@ function withdrawPensionTax(){
   const t=ensureAdvancedState().tax;
   if(t.pensionDeferred<=0) return alert("납부를 미룬 연금 세금이 없습니다.");
   const tax=t.pensionDeferred*0.055;
-  if(state.cash>=tax) state.cash-=tax; else { state.loan=(state.loan||0)+(tax-state.cash); state.cash=0; }
+  payTaxWithCashOrLoan(tax,"연금 인출세");
   state.taxPaid=(state.taxPaid||0)+tax;
   t.taxPaidByAccount.pension=(t.taxPaidByAccount.pension||0)+tax;
   t.pensionDeferred=0;
@@ -5461,7 +5528,7 @@ function dashMoreOpen(){ return (state.ui&&state.ui.dashMore!=null)?!!state.ui.d
 function toggleDashMore(){ state.ui=Object.assign({},state.ui,{dashMore:!dashMoreOpen()}); dashboardPage(); }
 function dashboardPage(){
   const gross=grossAssetsKRW(), net=netAssetsKRW(), debt=state.loan||0;
-  const stockV=stockValueKRW(), prodV=productValueKRW(), estateV=estateValue(), metalV=metalValue(), companyV=companyValue();
+  const stockV=stockValueKRW(), prodV=productValueKRW(), estateV=estateValue(), metalV=metalValue(), companyV=companyValue(), usdV=(state.usd||0)*fx.usd, bondV=bondValueKRW(), shortV=shortValueKRW();
   const top=stockReturnRows().slice(0,4);
   const news=(state.news||[]).slice(0,3);
   const eco=state.economy||ECON_DEFAULT;
@@ -5478,7 +5545,7 @@ function dashboardPage(){
     ${challengePanelHtml()}
     <section class="section"><div class="section-head"><h3>자산 구성</h3><button class="ghost small" onclick="show('portfolio')">전체 보기</button></div>
       <div class="breakdown">
-        ${[["주식",stockV,"stock","show('domestic')"],["금융상품",prodV,"product","show('banking')"],["부동산",estateV,"estate","show('realestate')"],["실물자산",metalV,"metal","show('realestate')"],["기업",companyV,"company","show('company')"]].map(([label,val,key,go])=>`<button class="breakdown-row" onclick="${go}"><span>${label}</span><b data-live="asset:${key}">${won(val)}</b><i>›</i></button>`).join("")}
+        ${[["현금",state.cash,"cash","show('portfolio')"],["달러",usdV,"usd","show('fx')"],["주식",stockV,"stock","show('domestic')"],["금융상품",prodV,"product","show('banking')"],["부동산",estateV,"estate","show('realestate')"],["실물자산",metalV,"metal","show('realestate')"],["기업",companyV,"company","show('company')"],["채권",bondV,"bond","show('banking')"],["공매도 손익",shortV,"short","show('short')"]].map(([label,val,key,go])=>`<button class="breakdown-row" onclick="${go}"><span>${label}</span><b data-live="asset:${key}">${won(val)}</b><i>›</i></button>`).join("")}
       </div>
     </section>
     <div class="dash-more" ${dashMoreOpen()?"":"hidden"}>
@@ -6267,6 +6334,7 @@ function applySaveData(data) {
   ["loan","loanRate","realizedYTD","taxedProfit","taxPaid","wealthFeePaid","wealthFeeAt"].forEach(k => {
     if(!Number.isFinite(state[k]) || state[k] < 0) state[k] = 0;
   });
+  if((state.loan||0)>0 && !(state.loanRate>0)) state.loanRate=TAX_DEBT_RATE;
   if(!Number.isFinite(fx.anchor)) fx.anchor = fx.usd || START_FX; // 구버전 저장 대응
   // 신규 기능 필드 기본값 보정
   if(!Array.isArray(state.watch)) state.watch=[];
@@ -6767,7 +6835,7 @@ function laborPanelHtml(){
     </div>
     <p class="labor-note">컨디션이 낮을수록 일당이 줄고 작업이 흔들립니다. 15게임초마다 컨디션이 조금 회복되며, 휴식 버튼으로 즉시 30을 회복할 수 있습니다. 경력 XP 120마다 스킬 포인트 1P를 얻습니다. 집중력은 성공 구간을 넓히고, 체력은 최대 컨디션을, 서비스는 일당을 높입니다.</p>
     <div class="labor-grid">${LABOR_JOBS.map(laborJobCard).join("")}</div>
-    <p class="labor-note">일자리마다 <b>타이밍·연타·기억·계산</b> 4종 미니게임이 있습니다. 기본 일자리는 타이밍 작업 3회로 일당이 지급되고, 완벽 100% · 성공 80% · 실패 0%로 반영됩니다. 높은 일당일수록 구간이 좁거나 목표가 높아지며, 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주, 12회부터 데이터 입력, 14회부터 리서치 보조, 16회부터 전략 컨설팅이 열립니다.</p>`;
+    <p class="labor-note">일자리마다 <b>타이밍·연타·기억·계산</b> 4종 미니게임이 있습니다. 기본 일자리는 타이밍 작업 3회로 일당이 지급되고, 완벽 100% · 성공 65% · 실패 0%로 반영됩니다. 회차 사이 연타는 다음 작업으로 인정되지 않으며, 높은 일당일수록 구간이 좁거나 목표가 높고 계산·기억 문제도 길고 어려워집니다. 누적 2회부터 퀵배달, 4회부터 물류센터, 7회부터 과외, 10회부터 긴급 외주, 12회부터 데이터 입력, 14회부터 리서치 보조, 16회부터 전략 컨설팅이 열립니다.</p>`;
 }
 
 function goalsPanelHtml(){
@@ -7152,9 +7220,14 @@ function guidePage(){
 
 function loanPanelHtml(){
   const pol=loanPolicy(), loan=state.loan||0;
-  const limitText=pol.limit>0?`한도 ${won(pol.limit)}`:"실버 등급부터 이용할 수 있습니다";
+  const rate=(state.loanRate||0)>0?state.loanRate:(loan>0?TAX_DEBT_RATE:0);
+  const nextInterest=loan*rate*.015;
+  const available=Math.max(0,pol.limit-loan);
+  const limitText=pol.limit>0?`한도 ${won(pol.limit)} · 추가 가능 ${won(available)}`:(loan>0?"현재 등급은 추가 대출 불가 · 상환은 가능":"실버 등급부터 이용할 수 있습니다");
   return `<div class="panel">
-    <div class="holding-row compact"><b>대출 잔액</b><span>${won(loan)}</span><span>금리 연 ${((state.loanRate||0)*100).toFixed(1)}%</span><span>${limitText}</span></div>
+    <div class="holding-row compact"><b>대출 잔액</b><span>${won(loan)}</span><span>금리 연 ${(rate*100).toFixed(1)}%</span><span>${limitText}</span></div>
+    <div class="holding-row compact" style="margin-top:6px"><b>상환 가능 현금</b><span>${won(Math.max(0,state.cash||0))}</span><span>다음 15초 이자 ${won(nextInterest)}</span><span>${loan>0?`순자산에서 ${won(loan)} 차감 중`:"부채 없음"}</span></div>
+    ${loan>0?`<div class="notice" style="margin-top:10px">세금·수수료를 현금으로 내지 못하면 부족분이 자동으로 대출 잔액에 더해집니다. 이때도 최소 연 ${(TAX_DEBT_RATE*100).toFixed(1)}%가 적용되며, 이자는 15초마다 잔액에 가산될 수 있습니다.</div>`:""}
     <div class="inline-form" style="margin-top:10px">
       <label>금액 (1만원 단위)<input id="loan-amt" type="number" min="10000" step="10000" placeholder="예: 5000000"></label>
     </div>
@@ -7163,7 +7236,7 @@ function loanPanelHtml(){
       <button class="ghost" onclick="repayLoan()">상환하기</button>
       <button class="ghost" onclick="repayLoanFull()">전액 상환</button>
     </div>
-    <p class="muted-sm" style="margin-top:8px">대출 이자는 15초마다 잔액에 부과되고 순자산에서 차감됩니다.</p>
+    <p class="muted-sm" style="margin-top:8px">대출 이자는 15초마다 잔액에 부과되고 순자산에서 차감됩니다. 기존 대출이 있을 때 추가 대출하면 금액 가중 평균 금리가 적용됩니다. 전액 상환은 '전액 상환' 버튼을 이용하세요.</p>
   </div>`;
 }
 
@@ -7177,6 +7250,8 @@ function taxPanelHtml(){
   const modeDesc=t.mode==="isa"?"ISA: 연 2,000만원 납입한도 · 200만원 이익까지 비과세, 초과분 9.9% 분리과세 · 인출 자유(재납입은 한도에 재포함)":t.mode==="pension"?"연금저축: 연 1,800만원 납입한도 · 매도 시 비과세, 인출 시 5.5% 과세":"일반: 납입한도 없음 · 연 250만원 기본공제 후 22% 양도세";
   const accountRealized=taxAccountRealized(t.mode,t);
   const yearPaid=Math.max(0,+((t.taxPaidByAccount||{})[t.mode])||0);
+  const debt=Math.max(0,+state.loan||0);
+  const debtRate=(state.loanRate||0)>0?state.loanRate:(debt>0?TAX_DEBT_RATE:0);
   return `<div class="panel">
     <div class="section-head"><h3>세금 계좌</h3><span class="pill">${taxModeLabel(t.mode)} · ${t.year||1}년차</span></div>
     <div class="button-row">${[["general","일반"],["isa","ISA"],["pension","연금저축"]].map(([k,l])=>`<button class="${t.mode===k?"buy":"ghost"}" onclick="setTaxAccount('${k}')">${l}</button>`).join("")}</div>
@@ -7184,6 +7259,7 @@ function taxPanelHtml(){
     <p class="muted-sm">세금 연도 ${t.year||1}년차 · 다음 결산까지 ${clockText(taxYearRemaining())} · 연간 손익·기본공제·ISA 한도·납입한도가 리셋되고 이월 손실은 유지됩니다. <b>일반</b> ${won(state.realizedYTD||0)} · <b>ISA</b> ${won(t.isaGains||0)} · <b>연금</b> ${won(t.pensionDeferred||0)}</p>
     ${taxAccountSummaryHtml()}
     <div class="kpis" style="margin-top:10px"><div class="kpi"><small>${t.mode==="general"?"일반":t.mode==="isa"?"ISA":"연금"} 실현손익</small><b>${won(accountRealized)}</b></div><div class="kpi"><small>이번 연도 납부</small><b>${won(yearPaid)}</b></div><div class="kpi"><small>누적 납부</small><b>${won(state.taxPaid||0)}</b></div><div class="kpi"><small>이월 손실</small><b>${won(t.carryLoss||0)}</b><span class="delta">차감 가능 ${won(t.carryLossBase||0)}</span></div></div>
+    ${debt>0?`<div class="notice" style="margin-top:10px;background:#fff1f2;border-color:#fecdd3;color:#9f1239"><b>대출 부채 ${won(debt)}</b> · 연 ${(debtRate*100).toFixed(1)}% · 다음 15초 이자 약 ${won(debt*debtRate*.015)}<br>세금을 현금으로 낼 수 없으면 부족분이 자동으로 대출 잔액에 더해집니다. 순자산은 총자산에서 이 부채를 뺀 값입니다.</div>`:""}
     <div class="notice" style="margin-top:10px"><b>고액 자산 관리 수수료</b> · 순자산 10억원 초과분에 60초마다 <b>${wealthFeeRateText(netAssetsKRW())}</b>가 현금에서 차감됩니다(100억원 초과분은 0.02%). 초반 진행에는 영향이 없고, 후반 복리만 완만하게 눌러 줍니다. 다음 60초 예상 <b>${won(wealthFeeDue())}</b> · 누적 <b>${won(state.wealthFeePaid||0)}</b></div>
     ${t.mode==="pension"?`<div class="notice" style="margin-top:10px">인출 시 5.5% 세금이 적용됩니다. <button class="ghost small" onclick="withdrawPensionTax()">연금 세금 납부 (${won((t.pensionDeferred||0)*.055)})</button></div>`:""}
     <div class="section-head tax-sec-head" style="margin-top:14px"><h3>매도 전 세후 미리보기</h3><span class="pill">현재 계좌 · FIFO</span></div>
@@ -7866,6 +7942,8 @@ function interest(){
 
   // 대출 이자(15초 단위): 연이율 × 0.015, 현금이 부족하면 대출 잔액에 가산
   if(state.loan > 0) {
+    // 예전 저장 데이터의 0% 대출도 최소 기본 금리로 복구해 무이자 부채를 막습니다.
+    ensureDebtRate();
     let loanInterest = state.loan * ((state.loanRate || 0) * 0.015);
     if(state.cash >= loanInterest) state.cash -= loanInterest;
     else {
@@ -7969,11 +8047,15 @@ function liveValue(key){
   if(k==="indexRet") return pct(reportData().indexRet);
   if(k==="dashChange") return pct(liveNumber(k));
   if(k==="peakShort") return wonShort(state.peakNet||netAssetsKRW());
+  if(k==="asset:cash") return won(state.cash||0);
+  if(k==="asset:usd") return won((state.usd||0)*fx.usd);
   if(k==="asset:stock") return won(stockValueKRW());
   if(k==="asset:product") return won(productValueKRW());
   if(k==="asset:estate") return won(estateValue());
   if(k==="asset:metal") return won(metalValue());
   if(k==="asset:company") return won(companyValue());
+  if(k==="asset:bond") return won(bondValueKRW());
+  if(k==="asset:short") return won(shortValueKRW());
   if(k.startsWith("goal:")){
     const [,id,prop]=k.split(":"); const m=MILESTONES.find(x=>x.id===id); if(!m) return null;
     const total=netAssetsKRW(), done=!!state.goals[m.id], p=Math.min(1,Math.max(0,m.target>0?total/m.target:0));
@@ -8092,11 +8174,22 @@ function update(){
   let svWon=stockValueKRW();
   let pv=productValueKRW();
 
-  $("cash").textContent=won(state.cash);
-  let u=$("usdCash");if(u)u.textContent=usdStr(state.usd||0);
-  $("stockValue").textContent=won(svWon);
-  $("productValue").textContent=won(pv);
-  $("totalValue").textContent=won(totalAssetsKRW());
+  const assets=assetBreakdown();
+  $("cash").textContent=won(assets.cash);
+  let u=$("usdCash");if(u)u.textContent=`보유 ${usdStr(state.usd||0)}`;
+  $("usdValue").textContent=won(assets.usd);
+  $("stockValueTop").textContent=won(assets.stock);
+  $("productValueTop").textContent=won(assets.product);
+  $("estateValueTop").textContent=won(assets.estate);
+  $("metalValueTop").textContent=won(assets.metal);
+  $("companyValueTop").textContent=won(assets.company);
+  $("bondValueTop").textContent=won(assets.bonds);
+  $("shortValueTop").textContent=won(assets.shorts);
+  $("grossValueTop").textContent=won(assets.gross);
+  $("debtValueTop").textContent=assets.debt>0?won(assets.debt):"없음";
+  $("debtValueTop").title=assets.debt>0?`연 ${((state.loanRate||0)*100).toFixed(1)}% · 15초마다 이자 부과`:"부채 없음";
+  $("totalValue").textContent=won(assets.net);
+  $("taxValueTop").textContent=won(assets.taxPaid);
   updateMarketDayBar();
   updateIPOUI();
 

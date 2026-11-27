@@ -190,8 +190,10 @@ function check(name, ok, detail) {
   check('노동 미니게임 4종', new Set(modes).size === 4, modes.join(','));
   check('연타 일자리는 목표 횟수가 있음', g.run("LABOR_JOBS.filter(j=>j.mode==='tap').every(j=>j.tapTarget>=10)"));
   check('계산 문제는 정답 포함 4개 보기', g.run('(()=>{const q=laborMakeMath();return q.options.length===4&&q.options.includes(q.answer)})()'));
+  check('계산 문제는 다단계·큰 수로 출제', g.run("(()=>{for(let i=0;i<12;i++){const q=laborMakeMath();if(!q.hard||q.answer<=0||q.options.length!==4||!q.options.includes(q.answer)||q.text.length<10)return false;}return true;})()"), 'hard math');
   const memLen = g.run("(()=>{laborSession={job:laborJob('research'),mode:'memory',round:0,results:[],paid:false};laborBeginRound();const n=laborSession.seq.length;laborAbortShift(true);return n;})()");
-  check('기억 게임은 3개부터 시작', memLen === 3, memLen);
+  check('기억 게임은 4개부터 시작', memLen === 4, memLen);
+  check('고임금 노동일수록 목표·기억 난이도 상승', g.run("LABOR_JOBS.find(j=>j.mode==='tap').tapTarget>=26") && memLen >= 4, g.run("LABOR_JOBS.find(j=>j.mode==='tap').tapTarget"));
   const tapGrade = g.run("(()=>{laborSession={job:{tapTarget:10},mode:'tap',taps:10,results:[],round:0,paid:false};laborTapEnd();const g=laborSession.results[0].grade;laborAbortShift(true);return g;})()");
   check('연타 목표 달성은 완벽 판정', tapGrade === 'perfect', tapGrade);
 }

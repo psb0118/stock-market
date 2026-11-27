@@ -225,6 +225,26 @@ const RESET = total => `
   g.run('state.cash = 0; state.loan = 1000000; state.loanRate = 0.12; interest(); 1');
   check('대출 이자가 잔액에 가산', Math.abs(g.run('state.loan') - 1001800) < 1e-6, g.run('state.loan'));
 
+  // 세금을 현금으로 내지 못한 부족분도 무이자 대출이 아니라 기본 금리 부채가 되어야 합니다.
+  const taxLoan = createGame();
+  taxLoan.run(`clearGame(true); state.cash=0; state.loan=0; state.loanRate=0; state.realizedYTD=0; state.taxedProfit=0; state.taxPaid=0;
+    state.tax={mode:'general',carryLoss:0,carryLossBase:0,pensionDeferred:0,isaGains:0,isaTaxed:0,contributions:{general:0,isa:0,pension:0},taxPaidByAccount:{general:0,isa:0,pension:0},year:1,yearStart:0};
+    settleTax(3000000); 1`);
+  const taxLoanState = taxLoan.run('({loan:state.loan,rate:state.loanRate,paid:state.taxPaid,cash:state.cash,panel:taxPanelHtml(),loanPanel:loanPanelHtml()})');
+  check('세금 부족분은 0%가 아닌 대출로 기록', Math.round(taxLoanState.loan) === 110000 && taxLoanState.rate === 0.08 && taxLoanState.cash === 0, JSON.stringify(taxLoanState));
+  check('세금 화면에 대출 부채·이자 안내', taxLoanState.panel.includes('대출 부채') && taxLoanState.panel.includes('세금을 현금으로 낼 수 없으면'));
+  check('대출 화면에 세금 전환·다음 이자 안내', taxLoanState.loanPanel.includes('세금·수수료를 현금으로 내지 못하면') && taxLoanState.loanPanel.includes('다음 15초 이자'));
+
+  // 기존 대출 금리를 새 대출 금리로 덮어쓰지 않고 금액 가중 평균을 씁니다.
+  const blend = createGame();
+  blend.run("clearGame(true); state.cash=40000000; state.loan=5000000; state.loanRate=.08; document.getElementById('loan-amt').value='5000000'; borrowLoan(); 1");
+  check('추가 대출은 기존 금리와 가중 평균', Math.abs(blend.run('state.loanRate') - 0.10) < 1e-9 && Math.round(blend.run('state.loan')) === 10000000, blend.run('({loan:state.loan,rate:state.loanRate})'));
+
+  // 예전 저장의 0% 대출도 다음 이자 계산에서 기본 금리로 복구됩니다.
+  const legacyLoan = createGame();
+  legacyLoan.run('clearGame(true); state.cash=0; state.loan=1000000; state.loanRate=0; products.forEach(p=>{p.rate=0;}); interest(); 1');
+  check('0% 구버전 대출은 기본 금리로 복구', legacyLoan.run('state.loanRate') === 0.08 && legacyLoan.run('state.loan') > 1000000, legacyLoan.run('({rate:state.loanRate,loan:state.loan})'));
+
   // 거래세: 즉시 매도 손실 = 매수 수수료 + 매도 수수료 + 거래세
   // 업적 보상이 현금 검증을 흐리지 않도록 이 테스트에서는 보상을 미리 수령 처리합니다.
   g.run(RESET(10000000) + 'state.loan = 0; state.achievements = Object.fromEntries(ACHIEVEMENTS.map(a=>[a.id,true])); 1');
@@ -744,6 +764,8 @@ const RESET = total => `
 // ── 12. 노동·생계 시스템 ──────────────────────────────────────
 {
   const g = createGame();
+  // 판정 사이에는 반드시 다음 회차를 열어야 합니다. 연타로 회차를 건너뛰지 못하는지도 함께 검증합니다.
+  const laborPlayShift=(game,pos=".5")=>game.run(`laborStopAt(${pos}); if(laborSession) laborBeginRound(); laborStopAt(${pos}); if(laborSession) laborBeginRound(); laborStopAt(${pos}); 1`);
   g.run(`
     clearGame(true);
     state.cash=0; state.usd=0; state.loan=0;
@@ -767,45 +789,57 @@ const RESET = total => `
   check('노동 판정: 구간 안 성공', g.run("laborRoundResult({pay:60000,zone:.2},.62).grade") === 'good');
   check('노동 판정: 구간 밖 실패', g.run("laborRoundResult({pay:60000,zone:.2},.1).grade") === 'miss');
   check('노동 일당: 3회 완벽', g.run("laborShiftPay({pay:60000},['perfect','perfect','perfect']).pay") === 60000);
-  check('노동 일당: 성과만큼 삭감', g.run("laborShiftPay({pay:60000},['perfect','good','miss']).pay") === 36000, g.run("laborShiftPay({pay:60000},['perfect','good','miss']).pay"));
+  check('노동 일당: 성과만큼 삭감', g.run("laborShiftPay({pay:60000},['perfect','good','miss']).pay") === 33000, g.run("laborShiftPay({pay:60000},['perfect','good','miss']).pay"));
   check('노동 일당: 전부 실패면 0원', g.run("laborShiftPay({pay:60000},['miss','miss','miss']).pay") === 0);
 
   // 버튼만 눌러서는 돈이 들어오지 않고, 작업 3회를 마쳐야 일당이 지급됩니다.
   const started = g.run("workLabor('convenience')");
   check('노동 시작만으로는 미지급', started === true && g.run('state.cash') === 0 && g.run('state.labor.shifts') === 0, g.run('state.cash'));
-  g.run("laborStopAt(.5); laborStopAt(.5); 1");
+  g.run("laborStopAt(.5); if(laborSession) laborBeginRound(); laborStopAt(.5); 1");
   check('작업 2회까지 미지급', g.run('state.cash') === 0 && g.run('state.labor.shifts') === 0);
-  g.run("laborStopAt(.5); 1");
+  g.run("if(laborSession) laborBeginRound(); laborStopAt(.5); 1");
   check('기본 노동 수입 지급', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1 && g.run('state.labor.earned') === 60000, g.run('state.cash'));
 
   g.run("workLabor('convenience'); 1");
   check('쿨다운 중 중복 노동 차단', g.run('state.cash') === 60000 && g.run('state.labor.shifts') === 1, g.run('state.cash'));
 
-  g.run("workLabor('cafe'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
+  g.run("workLabor('cafe'); 1");
+  laborPlayShift(g);
   check('두 번째 기본 노동으로 최소 생활비 달성', g.run('state.cash') === 110000 && g.run('state.labor.shifts') === 2 && g.run('laborEmergency()') === false, g.run('state.cash'));
 
-  g.run("workLabor('delivery'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
+  g.run("workLabor('delivery'); 1");
+  laborPlayShift(g);
   check('경력 2회에 퀵배달 해금', g.run('state.cash') === 210000 && g.run('state.labor.shifts') === 3, g.run('state.cash'));
 
   // 작업을 모두 놓치면 일당도 경력도 없고, 바로 재도전할 수 있습니다.
   const gf = createGame();
-  gf.run("clearGame(true); state.cash=0; state.labor={shifts:0,earned:0,lastAt:{},warned:false}; workLabor('convenience'); laborStopAt(0); laborStopAt(0); laborStopAt(0); 1");
+  gf.run("clearGame(true); state.cash=0; state.labor={shifts:0,earned:0,lastAt:{},warned:false}; workLabor('convenience'); 1");
+  laborPlayShift(gf,0);
   check('전부 실패하면 일당·경력 없음', gf.run('state.cash') === 0 && gf.run('state.labor.shifts') === 0, gf.run('state.cash'));
   check('실패 후 쿨다운 없이 재도전', gf.run("laborRemaining(laborJob('convenience'))") === 0 && gf.run("workLabor('convenience')") === true);
 
   const gh = createGame();
-  gh.run("clearGame(true); state.cash=0; state.labor={shifts:10,earned:0,lastAt:{},warned:false}; workLabor('freelance'); laborStopAt(0); laborStopAt(0); laborStopAt(0); 1");
+  gh.run("clearGame(true); state.cash=0; state.labor={shifts:10,earned:0,lastAt:{},warned:false}; workLabor('freelance'); 1");
+  laborPlayShift(gh,0);
   check('고임금 노동 실패는 복귀 쿨다운', gh.run('state.cash') === 0 && gh.run('state.labor.shifts') === 10 && gh.run("laborRemaining(laborJob('freelance'))") > 0, gh.run("laborRemaining(laborJob('freelance'))"));
 
   // 표시선이 중앙에서 시작하면 열자마자 3연타로 만점이 나왔으므로 왼쪽 끝에서 출발합니다.
   check('노동 시작 위치는 왼쪽 끝', gf.run('laborSession.pos') === 0 && gf.run("laborRoundResult(laborJob('convenience'),laborSession.pos).grade") === 'miss', gf.run('laborSession.pos'));
   gf.run('laborStop(); laborStop(); laborStop(); 1');
   check('시작 직후 연타는 일당 0원', gf.run('state.cash') === 0 && gf.run('state.labor.shifts') === 0, gf.run('state.cash'));
+  gf.run('laborAbortShift(true); 1');
   gf.run("workLabor('convenience'); laborStopAt(.5); 1");
   check('판정 후 표시선을 다시 왼쪽 끝으로', gf.run('laborSession.pos') === 0 && gf.run('laborSession.results[0].grade') === 'perfect', gf.run('laborSession.pos'));
 
+  // 일시정지 중 멈추기 버튼을 연타해도 한 회차의 완벽 판정이 3회로 복제되지 않아야 합니다.
+  const spam = createGame();
+  spam.run("clearGame(true); state.cash=0; state.labor={shifts:0,earned:0,lastAt:{},warned:false}; state.paused=true; workLabor('convenience'); 1");
+  spam.run("laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
+  check('일시정지 연타로 완벽 3회 복제 방지', spam.run('laborSession.results.length') === 1 && spam.run('laborSession.round') === 1 && spam.run('state.cash') === 0 && spam.run('state.labor.shifts') === 0, JSON.stringify(spam.run('({results:laborSession.results,round:laborSession.round,cash:state.cash,shifts:state.labor.shifts})')));
+
   // 경력이 쌓이면 고소득 노동이 열립니다.
-  g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); laborStopAt(.5); laborStopAt(.5); laborStopAt(.5); 1");
+  g.run("state.labor.shifts=10; state.labor.lastAt={}; workLabor('freelance'); 1");
+  laborPlayShift(g);
   // 일당은 경력 레벨 배율이 붙어 정확한 금액 대신 "지급되었는지"를 확인합니다.
   const freelancePay = g.run('state.cash');
   check('경력 10회에 긴급 외주 해금', freelancePay > 0 && g.run('state.labor.shifts') === 11, freelancePay);
@@ -929,6 +963,26 @@ const RESET = total => `
   const expectedGross = formula.cash + 1000000 + formula.stock + formula.product + formula.estate + formula.metal + formula.company;
   check('총자산 = 현금+주식+금융+부동산+실물+기업', Math.round(formula.gross) === Math.round(expectedGross), formula.gross);
   check('순자산 = 총자산 - 부채', Math.round(formula.net) === Math.round(formula.gross - 3000000), formula.net);
+
+  // 금융상품 5,000만원 + 대출 1,000만원이면 총자산 5,000만원, 순자산 4,000만원으로
+  // 상단에 부채가 함께 보여야 합니다. 상단 바와 총자산 공식이 같은 숫자를 쓰는지 검증합니다.
+  const top = createGame();
+  top.run(`clearGame(true); state.cash=0; state.usd=0; state.loan=10000000; state.loanRate=.12; state.taxPaid=330000;
+    products.forEach(p=>{p.amount=0;}); product('deposit').amount=50000000;
+    state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null; state.bonds={qty:0,avg:0}; state.shorts=[];
+    update(); 1`);
+  const topText = top.run(`({
+    product:document.getElementById('productValueTop').textContent,
+    gross:document.getElementById('grossValueTop').textContent,
+    debt:document.getElementById('debtValueTop').textContent,
+    net:document.getElementById('totalValue').textContent,
+    tax:document.getElementById('taxValueTop').textContent,
+    estate:document.getElementById('estateValueTop').textContent,
+    usd:document.getElementById('usdValue').textContent
+  })`);
+  check('상단 금융상품 5천만·부채 1천만 표시', topText.product === top.run("won(50000000)") && topText.debt === top.run("won(10000000)"), JSON.stringify(topText));
+  check('상단 총자산·순자산 분리 표시', topText.gross === top.run("won(50000000)") && topText.net === top.run("won(40000000)"), JSON.stringify(topText));
+  check('상단 부동산·달러·누적 세금 항목 표시', topText.estate === top.run("won(0)") && topText.usd === top.run("won(0)") && topText.tax === top.run("won(330000)"), JSON.stringify(topText));
 
   const cashBefore = g.run('state.cash');
   g.run(`stock('future_ai').price = 150000; 1`);
