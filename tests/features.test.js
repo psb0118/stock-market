@@ -332,13 +332,25 @@ function check(name, ok, detail) {
   const diagHtml = g.run(`(()=>{
     fbDiag={at:Date.now(),running:false,rows:[
       {key:'domain',label:'승인된 도메인',state:'pass',detail:'example.com 승인됨',fix:''},
-      {key:'index',label:'리더보드 색인',state:'fail',detail:'복합 색인이 <아직> 없습니다',fix:'Firestore → 색인'}]};
+      {key:'index',label:'리더보드 색인',state:'fail',detail:'복합 색인이 <아직> 없습니다',fix:'Firestore → 색인',link:'https://console.firebase.google.com/v1/r/project/p/firestore/indexes?create_composite=abc',linkLabel:'색인 만들기 화면 열기'},
+      {key:'google',label:'Google 로그인',state:'warn',detail:'확인하지 못했습니다',fix:''}]};
     const h=fbDiagHtml(), b=fbDiagBtnHtml(); fbDiag=null; return {h,b};
   })()`);
   check('점검 결과에 통과/실패 아이콘', diagHtml.h.includes('✅') && diagHtml.h.includes('❌'));
   check('점검 결과 요약에 실패 개수', diagHtml.h.includes('1개 실패'), diagHtml.h.slice(0, 80));
+  check('점검 결과 요약에 확인 불가 개수', diagHtml.h.includes('1개 확인 불가') && diagHtml.h.includes('1개 통과'), diagHtml.h.slice(0, 120));
   check('점검 상세 문구는 이스케이프', diagHtml.h.includes('&lt;아직&gt;') && !diagHtml.h.includes('<아직>'));
+  check('색인 실패에 콘솔 링크 노출', diagHtml.h.includes('href="https://console.firebase.google.com/v1/r/project/p/firestore/indexes?create_composite=abc"') && diagHtml.h.includes('색인 만들기 화면 열기'));
   check('점검 버튼은 다시 점검으로 바뀜', diagHtml.b.includes('다시 점검'), diagHtml.b.slice(0, 60));
+  const allPass = g.run(`(()=>{ fbDiag={at:0,running:false,rows:[{key:'a',label:'A',state:'pass'},{key:'b',label:'B',state:'pass'}]}; const h=fbDiagHtml(); fbDiag=null; return h; })()`);
+  check('전부 통과하면 모두 통과로 표시', allPass.includes('2개 모두 통과'), allPass.slice(0, 90));
+  const links = g.run(`(()=>{
+    const withLink=fbIndexLinkFromError({message:'The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/p/firestore/indexes?create_composite=AAA'}).toString();
+    const noLink=fbIndexLinkFromError({message:'no url here'}).toString();
+    return {withLink, noLink};
+  })()`);
+  check('오류 메시지의 색인 링크 추출', links.withLink === 'https://console.firebase.google.com/v1/r/project/p/firestore/indexes?create_composite=AAA', links.withLink);
+  check('링크가 없으면 색인 목록으로 이동', links.noLink.includes('/firestore/indexes') && links.noLink.startsWith('https://console.firebase.google.com/project/'), links.noLink);
   const noCfg = g.run(`(()=>{ const keep=FIREBASE_CONFIG; FIREBASE_CONFIG=null; fbDiag=null; firebaseDiagnose(); const r={running:fbDiag.running, n:fbDiag.rows.length, state:fbDiag.rows[0].state}; fbDiag=null; FIREBASE_CONFIG=keep; return r; })()`);
   check('설정이 비면 점검 즉시 실패로 표시', noCfg.running === false && noCfg.n === 1 && noCfg.state === 'fail', JSON.stringify(noCfg));
   const hit = g.run(`(()=>{
