@@ -5,7 +5,7 @@
  *  - 1억: 사모펀드, 블록딜 수수료 우대, 오프라인 +2시간
  *  - 5억: 기업 인수 게이트, 배당 재투자(DRIP), 공모주 우선 배정
  *  - 10억: 헤지펀드, 부동산 개발, 세무 컨설팅, 오프라인 +4시간
- *  - 하루 배당 0.5% 모델
+ *  - 하루 배당 1.5% 모델(오프라인 전체 경과 시간 정산)
  * 실행: node tests/gates.test.js
  */
 'use strict';
@@ -79,7 +79,7 @@ const g = createGame();
   check('1억 이상 블록딜 우대 적용', open.blockDeal === true && open.net > 0, JSON.stringify(open));
 }
 
-// ── 하루 배당 0.5% · DRIP ────────────────────────────────
+// ── 하루 배당 1.5% · DRIP ────────────────────────────────
 {
   const r = g.run(`(()=>{
     clearGame(true); state.cash=0; state.usd=0;
@@ -88,8 +88,8 @@ const g = createGame();
     const perPay=expectedDividend();
     return {perPay, daily:perPay*720, holdings:10*100000};
   })()`);
-  check('지급 1회분 = 하루 0.5% ÷ 720', Math.abs(r.perPay * 720 - r.holdings * 0.005) < 1e-6, JSON.stringify(r));
-  check('하루 배당이 보유액의 0.5%', Math.abs(r.daily / r.holdings - 0.005) < 1e-9, r.daily / r.holdings);
+  check('지급 1회분 = 하루 1.5% ÷ 720', Math.abs(r.perPay * 720 - r.holdings * 0.015) < 1e-6, JSON.stringify(r));
+  check('하루 배당이 보유액의 1.5%', Math.abs(r.daily / r.holdings - 0.015) < 1e-9, r.daily / r.holdings);
 
   const drip = g.run(`(()=>{
     clearGame(true); state.cash=450000000; state.usd=0;
@@ -123,8 +123,8 @@ const g = createGame();
     checkAchievements=ach; checkGoals=goals;
     return {before, after:{isa:accountQty(s,'isa'),general:accountQty(s,'general'),pension:accountQty(s,'pension')}};
   })()`);
-  check('DRIP: ISA 보유분은 ISA 로트로 재투자', split.after.isa - split.before.isa === 4, JSON.stringify(split));
-  check('DRIP: 일반 보유분은 일반 로트로 재투자', split.after.general - split.before.general === 2, JSON.stringify(split));
+  check('DRIP: ISA 보유분은 ISA 로트로 재투자', split.after.isa - split.before.isa === 12, JSON.stringify(split));
+  check('DRIP: 일반 보유분은 일반 로트로 재투자', split.after.general - split.before.general === 8, JSON.stringify(split));
   check('DRIP: 보유하지 않은 연금 계좌는 그대로', split.after.pension === split.before.pension, JSON.stringify(split));
 
   // 현재 계좌(ISA)가 달라도 보유 계좌(일반)로 들어가야 합니다.
@@ -143,6 +143,19 @@ const g = createGame();
     return {before, after:{isa:accountQty(s,'isa'),general:accountQty(s,'general')}};
   })()`);
   check('DRIP: 선택 계좌가 달라도 보유 계좌로', cross.after.general > cross.before.general && cross.after.isa === cross.before.isa, JSON.stringify(cross));
+
+  // 오프라인 상한(2시간)과 무관하게, 자리를 비운 하루 전체 배당이 정산되어야 합니다.
+  const awayDay = g.run(`(()=>{
+    clearGame(true); state.cash=0; state.usd=0;
+    stocks.forEach(s=>{s.own=0});
+    const s=stock('future_ai'); s.own=1000000; s.price=1000;
+    setAutoIncomeMode('auto');
+    const before=state.dividendTotal||0;
+    OFFLINE_AWAY_FULL_SECONDS=86400;   // 하루 종일 접속하지 않음(오프라인 상한은 2시간)
+    offlineSettle(7200,{idxBefore:marketIndex(),fxBefore:fx.usd,heldBefore:{}});
+    return {gain:(state.dividendTotal||0)-before, expected:1000000*1000*0.015, cap:offlineMaxSeconds()};
+  })()`);
+  check('오프라인 하루 배당은 상한과 무관하게 1.5%', Math.abs(awayDay.gain - awayDay.expected) < 1 && awayDay.cap < 86400, JSON.stringify(awayDay));
 
   const lockedDrip = g.run(`(()=>{
     clearGame(true); state.cash=1000; state.usd=0;

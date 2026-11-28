@@ -756,11 +756,12 @@ const TAX_ACCOUNTS=["general","isa","pension"];
 const TAX_ACCOUNT_LIMITS={general:Infinity, isa:20000000, pension:18000000}; // 계좌별 연간 납입한도
 const TAX_YEAR_SECONDS=30*86400; // 실제 30일(30게임일) = 1세금연도
 const SAVE_VERSION=4;
-// 하루(24시간) 배당 0.5%를 2분마다 나눠 지급합니다. 하루가 실제 24시간이 되면서
-// 예전 120초당 0.1%(하루 72%)는 일일 시세(하루 한 번, 최대 ±50%)보다 훨씬 커졌기 때문에
-// 하루 합계를 예전 하루(0.5%)에 맞춰 다시 잡았습니다.
+// 하루(24시간) 배당 1.5%를 2분마다 나눠 지급합니다. 플레이 중에는 2분마다, 자리를 비운
+// 시간은 복귀할 때 경과 시간만큼 정산해 "하루 1.5%"가 실제로 지켜지게 했습니다.
+// (예전 120초당 0.1% = 하루 72%는 일일 시세(최대 ±50%)를 압도했고,
+//  하루 0.5%로 낮춘 뒤에는 플레이 시간이 짧아 실제로는 하루 0.02~0.06%밖에 받지 못했습니다.)
 const REAL_DAY_SECONDS = 86400;
-const DIVIDEND_DAILY_YIELD = 0.005;
+const DIVIDEND_DAILY_YIELD = 0.015;
 const DIVIDEND_YIELD = DIVIDEND_DAILY_YIELD * 120 / REAL_DAY_SECONDS; // 지급 1회분(≈0.0007%)
 const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
 // 후반 밸런스: 순자산 10억원 초과분에 60초마다 자산 관리 수수료를 부과합니다.
@@ -3583,12 +3584,17 @@ async function replayOfflineMarketChunked(seconds, budgetMs, onProgress){
   } finally { OFFLINE_REPLAY=false; }
   state.marketOpen=(state.marketSeconds%240)<180;
 }
+// 배당은 "하루" 단위 수익이라 플레이 시간과 무관하게 실제 경과 시간으로 정산해야 합니다.
+// 오프라인 상한(수수료·예금 이자용)과 별도로, 자리를 비운 전체 시간을 기억해 둡니다.
+let OFFLINE_AWAY_FULL_SECONDS=0;
 function offlineElapsedSeconds(){
   const now=Date.now();
   const last=state.lastSeen||0;
   state.lastSeen=now;
-  if(!last || last>now) return null;
-  const sec=Math.min(offlineMaxSeconds(), Math.floor((now-last)/1000));
+  if(!last || last>now){ OFFLINE_AWAY_FULL_SECONDS=0; return null; }
+  const full=Math.floor((now-last)/1000);
+  OFFLINE_AWAY_FULL_SECONDS=full;
+  const sec=Math.min(offlineMaxSeconds(), full);
   return sec>=120?sec:null;
 }
 // 재생 전 시세를 기억해 두고, 같은 시간만큼 시장을 돌려 놓습니다(돈 정산은 따로).
@@ -3656,8 +3662,11 @@ function offlineSettle(sec, start, opts){
       else { state.loan+=li-state.cash; state.cash=0; }
     }
   }
-  // 배당은 지급 1회분이 아주 작아졌으므로(하루 0.5%) 오프라인에서도 경과 시간만큼 빠짐없이 정산합니다.
-  const divPeriods=Math.floor(sec/DIVIDEND_EVERY);
+  // 배당은 하루치 수익이므로 오프라인 상한과 무관하게 "자리를 비운 전체 시간"으로 정산합니다.
+  // 플레이 중 2분 지급과 합치면 하루 배당(DIVIDEND_DAILY_YIELD)이 정확히 채워집니다.
+  const awayRaw=OFFLINE_AWAY_FULL_SECONDS; OFFLINE_AWAY_FULL_SECONDS=0;
+  const dividendSec=Math.min(30*REAL_DAY_SECONDS, Math.max(sec, awayRaw, 0));
+  const divPeriods=dividendSec/DIVIDEND_EVERY;
   const dividends=expectedDividend()*divPeriods*rebirthBonus("dividend",.03);
   if(dividends>0){
     creditAutoIncome(dividends,"주식 배당");
@@ -7937,7 +7946,7 @@ function dashPanelHtml(){
   const alloc=allocation();
   const allocBar=alloc.parts.map(p=>p.pct>0.4?`<span data-live-style="alloc:${p.label}:width" style="width:${p.pct.toFixed(2)}%;background:${p.color}" title="${p.label} ${p.pct.toFixed(1)}%"></span>`:"").join("");
   const allocLegend=alloc.parts.map(p=>`<span><i style="background:${p.color}"></i>${p.label} <b data-live="alloc:${p.label}:value">${p.pct.toFixed(1)}%</b></span>`).join("");
-  const expDiv=expectedDividend();
+  const expDiv=expectedDividend()*720; // 하루 예상 배당(2분 지급 720회 합계)
   return `<section class="panel dash">
     <div class="dash-top">
       <div><small>순자산</small><b class="dash-total" data-live="netShort" title="${won(total)}">${wonShort(total)}</b></div>
@@ -7955,7 +7964,7 @@ function dashPanelHtml(){
     <div class="section-head" style="margin-top:10px"><h3>세금 계좌별 주식</h3><span class="pill">평가액 기준</span></div>
     ${taxAccountAllocationHtml()}
     <div class="dash-foot">
-      <span>다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b> <span class="muted-sm">(하루 0.5%를 2분마다 나눠 지급)</span></span>
+      <span>하루 예상 배당 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b> · 다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> <span class="muted-sm">(하루 1.5%를 2분마다 나눠 지급)</span></span>
       <span>총부채 <b data-live="debt">${debt>0?won(debt):"없음"}</b></span>
     </div>
   </section>`;
