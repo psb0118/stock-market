@@ -567,5 +567,68 @@ function createGame() {
   check('환생 0회에서는 환생 정보 없는 저장도 적용', firstSave.count === 0 && firstSave.cash === 777, JSON.stringify(firstSave));
 }
 
+// ── 보고된 이상 동작 수정(기업명 XSS·뉴스 이스케이프·노동 시간/자산 판정) ──
+{
+  const g = createGame();
+
+  const companyModal = g.run(`(()=>{
+    clearGame(true);
+    state.company={name:'<img src=x onerror=1>',level:1,valuation:100000000,book:100000000,revenue:2000000,profit:600000,payout:.3,upkeep:0,risk:0,listed:null,acquired:{}};
+    closeModal(); openAssetDetail('company');
+    return document.getElementById('modalRoot').innerHTML||'';
+  })()`);
+  check('기업 상세 모달이 기업명을 이스케이프', companyModal.includes('&lt;img') && !companyModal.includes('<img'), companyModal.slice(0, 120));
+
+  const nameLimit = g.run(`(()=>{
+    applySaveData({version:SAVE_VERSION,state:{cash:1,company:{name:'가'.repeat(40)+'\\u0007',level:1,valuation:100,revenue:0,profit:0,payout:.3}}});
+    return {name:state.company.name, len:state.company.name.length};
+  })()`);
+  check('저장 파일의 기업명은 12자·제어문자 제한', nameLimit.len === 12 && !/[\u0000-\u001f]/.test(nameLimit.name), JSON.stringify(nameLimit));
+
+  const newsHtml = g.run(`(()=>{
+    state.news=['<img src=x onerror=1>'];
+    news(); const page=document.getElementById('news').innerHTML||'';
+    dashboardPage(); const dash=document.getElementById('dashboard').innerHTML||'';
+    economyPage(); const eco=document.getElementById('economy').innerHTML||'';
+    state.notify=Object.assign({},state.notify,{news:true,master:false}); breakingShownAt=0;
+    publishBreakingNews('<img src=x onerror=1>','<b>본문</b>');
+    return {page,dash,eco,banner:document.getElementById('breaking').innerHTML||''};
+  })()`);
+  check('뉴스 화면이 저장된 뉴스 문자열을 이스케이프', newsHtml.page.includes('&lt;img') && !newsHtml.page.includes('<img'), newsHtml.page.slice(0, 120));
+  check('대시보드·경제 화면 뉴스도 이스케이프', !newsHtml.dash.includes('<img') && !newsHtml.eco.includes('<img'), JSON.stringify([newsHtml.dash.length, newsHtml.eco.length]));
+  check('속보 배너도 제목·본문을 이스케이프', newsHtml.banner.includes('&lt;img') && !newsHtml.banner.includes('<img') && newsHtml.banner.includes('&lt;b&gt;'), newsHtml.banner.slice(0, 120));
+
+  const emergency = g.run(`(()=>{
+    clearGame(true); state.cash=0;
+    stocks.forEach(s=>{s.own=0}); products.forEach(p=>{p.amount=0});
+    state.estate={}; state.metals={gold:{qty:0,avg:0},silver:{qty:0,avg:0}}; state.company=null; state.shorts=[]; state.bonds={qty:10,avg:10000};
+    const withBonds=laborEmergency();
+    state.bonds={qty:0,avg:0}; state.shorts=[{id:'s1',stockId:'future_ai',qty:1,entry:1000,margin:500000,at:0}];
+    const withMargin=laborEmergency();
+    state.shorts=[];
+    const broke=laborEmergency();
+    return {withBonds,withMargin,broke};
+  })()`);
+  check('채권·공매도 증거금이 있으면 생계 위기가 아님', emergency.withBonds === false && emergency.withMargin === false && emergency.broke === true, JSON.stringify(emergency));
+
+  const cooldown = g.run(`(()=>{
+    state.labor.lastAt.convenience=Date.now()+600000;
+    const remain=laborRemaining(laborJob('convenience'));
+    state.labor.stamina=0; state.labor.restAt=Date.now()+600000;
+    ensureLabor();
+    const restAt=state.labor.restAt;
+    const rested=restLabor();
+    return {remain, restAt, rested, stamina:state.labor.stamina};
+  })()`);
+  check('미래 시각이 적힌 저장도 쿨다운·휴식을 잠그지 않음', cooldown.remain === 0 && cooldown.restAt === 0 && cooldown.rested === true && cooldown.stamina > 0, JSON.stringify(cooldown));
+
+  const beginner = g.run(`(()=>{
+    state.rebirth.count=0; state.labor.shifts=0; const before=laborBeginnerHelp();
+    state.rebirth.count=1; const after=laborBeginnerHelp();
+    return {before, after};
+  })()`);
+  check('환생 후에는 초보자 도움을 다시 켜지 않음', beginner.before === true && beginner.after === false, JSON.stringify(beginner));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

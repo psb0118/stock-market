@@ -1417,7 +1417,6 @@ function rebirthPointsFor(net){
   if(v<REBIRTH_MIN) return 0;
   return Math.max(1,Math.floor(Math.sqrt(v/10000000)));
 }
-function rebirthEarnedPoints(){ return rebirthPointsFor(Math.max(totalAssetsKRW(),ensureRebirth().bestNet||0)); }
 function canRebirth(){ return totalAssetsKRW()>=REBIRTH_MIN; }
 function rebirthStartCash(){ return START_CASH + 2000000*rebirthLevel("start"); }
 function rebirthBonus(id, per){ return 1 + per*rebirthLevel(id); }
@@ -2026,6 +2025,7 @@ function ensureLabor(){
   const staminaMax=100+20*(l.skills.stamina||0);
   l.stamina=Math.max(0,Math.min(staminaMax,Number.isFinite(+l.stamina)?+l.stamina:staminaMax));
   if(!Number.isFinite(+l.restAt)) l.restAt=0;
+  if(+l.restAt>Date.now()) l.restAt=0; // 저장 파일의 미래 시각으로 휴식이 잠기지 않게 합니다.
   return l;
 }
 function laborCareerLevel(){ return 1+Math.floor(ensureLabor().xp/120); }
@@ -2035,7 +2035,12 @@ function laborCondition(){
   // 컨디션 40% 이상은 정상 지급, 그 아래로 떨어지면 일당·속도에 불이익이 생깁니다.
   return ratio>=.4?1:Math.max(.55,.55+.45*(ratio/.4));
 }
-function laborBeginnerHelp(){ return (!state.settings || state.settings.beginnerMode!==false) ? ensureLabor().shifts<10 : false; }
+function laborBeginnerHelp(){
+  // 환생 뒤에는 영구 업그레이드가 있으므로 초보자 도움을 다시 켜지 않습니다.
+  if(ensureRebirth().count>0) return false;
+  if(state.settings && state.settings.beginnerMode===false) return false;
+  return ensureLabor().shifts<10;
+}
 function laborZoneFor(job){ return Math.max(.05,Math.min(.45,(job&&job.zone||.2)*(1+.06*(ensureLabor().skills.focus||0))*(laborBeginnerHelp()?1.2:1))); }
 function laborSkillCost(id){ const l=ensureLabor(), lv=l.skills[id]||0; return 1+lv; }
 function buyLaborSkill(id){
@@ -2051,8 +2056,9 @@ function buyLaborSkill(id){
   return true;
 }
 function restLabor(){
-  const l=ensureLabor();
-  const wait=Math.max(0,30000-(Date.now()-(+l.restAt||0)));
+  const l=ensureLabor(), now=Date.now();
+  if((+l.restAt||0)>now) l.restAt=0; // 미래 시각이면 휴식을 잠그지 않습니다.
+  const wait=Math.max(0,30000-(now-(+l.restAt||0)));
   if(wait>0) return alert(`아직 휴식 중입니다. ${Math.ceil(wait/1000)}초 후 다시 쉴 수 있습니다.`);
   if(l.stamina>=laborStaminaMax()) return alert("컨디션이 이미 최상입니다.");
   l.restAt=Date.now();
@@ -2068,13 +2074,16 @@ function recoverLaborCondition(){
 function laborJob(id){ return LABOR_JOBS.find(j=>j.id===id)||null; }
 function laborRemaining(job){
   if(!job) return 0;
-  const l=ensureLabor(), last=+l.lastAt[job.id]||0;
-  if(!last) return 0;
-  return Math.max(0, job.cooldown*1000-(Date.now()-last));
+  const l=ensureLabor(), now=Date.now(), last=+l.lastAt[job.id]||0;
+  // 시계가 뒤로 갔거나 저장 파일에 미래 시각이 있으면 쿨다운을 걸지 않습니다.
+  if(!last || last>now) return 0;
+  return Math.max(0, job.cooldown*1000-(now-last));
 }
 // 현금과 팔 수 있는 자산이 모두 바닥난 상태인지 판정합니다.
 function laborEmergency(){
-  const assets=stockValueKRW()+productValueKRW()+estateValue()+metalValue()+companyValue();
+  // 채권과 공매도 증거금도 현금으로 돌려받을 수 있는 자산이라 생계 위기 판정에 넣습니다.
+  const margin=(Array.isArray(state.shorts)?state.shorts:[]).reduce((a,p)=>a+Math.max(0,+p.margin||0),0);
+  const assets=stockValueKRW()+productValueKRW()+estateValue()+metalValue()+companyValue()+bondValueKRW()+margin;
   return (state.cash||0)<LABOR_MIN_CASH && assets<=0.01;
 }
 function laborJobCard(job){
@@ -2514,7 +2523,7 @@ function foundCompany(){
   if(state.company) return alert("이미 기업을 운영 중입니다.");
   const def=COMPANY_LEVELS[0];
   if(state.cash<def.cost) return alert(`기업 설립에는 ${won(def.cost)}이 필요합니다.`);
-  const name=($("company-name")?$("company-name").value.trim():"")||"나의 기업";
+  const name=(($("company-name")?$("company-name").value:"")||"").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,12)||"나의 기업";
   if(!confirmTrade("기업 설립",`${name} · ${won(def.cost)}`)) return;
   state.cash-=def.cost;
   state.company={name,level:1,valuation:def.val,book:def.val,revenue:def.revenue,profit:def.profit,payout:.3,upkeep:0,risk:0,listed:null};
@@ -2702,7 +2711,7 @@ function sellBond(qty){
 function updateCompanyName(){
   const c=state.company; if(!c) return;
   const input=$("company-rename");
-  const name=((input&&input.value)||"").trim().slice(0,12);
+  const name=((input&&input.value)||"").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,12);
   if(!name) return alert("기업명을 입력해 주세요.");
   c.name=name;
   addLog(`🏭 기업명 변경: ${name}`);
@@ -3088,7 +3097,7 @@ function openAssetDetail(kind,id){
   } else if(kind==="company"){
     const c=state.company; if(!c) return;
     const cg=companyGradeInfo(c);
-    html=`<div class="kpis"><div class="kpi"><small>기업명</small><b>${c.name}</b></div><div class="kpi"><small>기업 등급</small><b style="color:${cg.color}">${cg.name}</b></div><div class="kpi"><small>레벨</small><b>Lv.${c.level}</b></div><div class="kpi"><small>기업 가치</small><b>${won(c.valuation)}</b></div><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>인수 기업</small><b>${Object.keys(c.acquired||{}).length}개</b></div></div>
+    html=`<div class="kpis"><div class="kpi"><small>기업명</small><b>${escHtml(c.name)}</b></div><div class="kpi"><small>기업 등급</small><b style="color:${cg.color}">${cg.name}</b></div><div class="kpi"><small>레벨</small><b>Lv.${c.level}</b></div><div class="kpi"><small>기업 가치</small><b>${won(c.valuation)}</b></div><div class="kpi"><small>매출</small><b>${won(c.revenue)}</b></div><div class="kpi"><small>순이익</small><b>${won(c.profit)}</b></div><div class="kpi"><small>배당 성향</small><b>${Math.round((c.payout||0)*100)}%</b></div><div class="kpi"><small>인수 기업</small><b>${Object.keys(c.acquired||{}).length}개</b></div></div>
     <div style="margin-top:10px"><div class="mission-top"><small>다음 등급 ${cg.next?cg.next.name:"최고 등급"}</small><small>${cg.next?`${Math.round(cg.progress*100)}%`:"MAX"}</small></div><div class="bar"><span style="width:${(cg.progress*100).toFixed(0)}%"></span></div></div>`;
   }
   openModal("자산 상세",html||"<p>정보가 없습니다.</p>");
@@ -5911,7 +5920,7 @@ function dashboardPage(){
       <div class="panel labor-quick">${jobs.map(j=>`<div class="holding-row compact"><b>${j.icon} ${j.name}</b><span>최대 ${won(j.pay)}</span><button class="buy small" onclick="workLabor('${j.id}')">일하기</button></div>`).join("")}${laborBeginnerHelp()?`<p class="muted-sm" style="margin-top:8px;color:#067647">초보자 도움 중 · 첫 10회는 성공 구간이 20% 넓고 표시선이 12% 느립니다.</p>`:""}</div>
     </section>
     <section class="section"><div class="section-head"><h3>최신 속보</h3><button class="ghost small" onclick="show('news')">전체</button></div>
-      <div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${n}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div>
+      <div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${escHtml(n)}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div>
     </section>
     </div>`;
 }
@@ -6093,7 +6102,7 @@ function economyPage(){
     ${marketHealthPanelHtml()}
     <section class="section">${calendarPanelHtml()}</section>
     <div class="two-col" style="margin-top:14px">
-      <section class="section"><div class="section-head"><h3>최신 속보</h3><button class="ghost small" onclick="show('news')">전체</button></div><div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${n}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div></section>
+      <section class="section"><div class="section-head"><h3>최신 속보</h3><button class="ghost small" onclick="show('news')">전체</button></div><div class="panel news-feed">${news.length?news.map(n=>`<div class="news-line">${escHtml(n)}</div>`).join(""):`<p class="muted-sm">아직 속보가 없습니다.</p>`}</div></section>
       <section class="section"><div class="section-head"><h3>내 자산 목표</h3></div><div class="panel">
         <label class="field-label">목표 금액 (원)<input id="goal-target" type="number" min="1000000" step="10000000" value="${state.targetGoal||1000000000}" onchange="setTargetGoal(this.value)"></label>
         <div class="bar" style="margin-top:10px"><span style="width:${Math.min(100,(netAssetsKRW()/Math.max(1,state.targetGoal||1))*100).toFixed(1)}%"></span></div>
@@ -6812,6 +6821,8 @@ function sanitizeSaveData(data){
   }));
   // 최근 거래 로그는 문자열만 남깁니다.
   st.logs=(Array.isArray(st.logs)?st.logs:[]).filter(l=>typeof l==="string").slice(0,20).map(l=>saveText(l,200));
+  // 뉴스 기록은 기업명 같은 입력값이 섞여 들어가므로 문자열·길이를 제한합니다.
+  st.news=(Array.isArray(st.news)?st.news:[]).filter(n=>typeof n==="string").slice(0,25).map(n=>saveText(n,200));
   return data;
 }
 
@@ -6910,7 +6921,7 @@ function applySaveData(data) {
   state.labor.points=Math.max(0,Math.floor(+state.labor.points||0));
   if(!state.labor.skills||typeof state.labor.skills!=="object") state.labor.skills={focus:0,stamina:0,service:0};
   if(!state.labor.lastAt||typeof state.labor.lastAt!=="object") state.labor.lastAt={};
-  LABOR_JOBS.forEach(j=>{ const t=+state.labor.lastAt[j.id]; if(!Number.isFinite(t)||t<0) delete state.labor.lastAt[j.id]; });
+  LABOR_JOBS.forEach(j=>{ const t=+state.labor.lastAt[j.id]; if(!Number.isFinite(t)||t<0||t>Date.now()) delete state.labor.lastAt[j.id]; });
   state.labor.warned=!!state.labor.warned;
   if(!Number.isFinite(+state.rewardedGrade)) state.rewardedGrade=gradeIndex(currentGrade());
   if(!Number.isFinite(+state.targetGoal)||+state.targetGoal<=0) state.targetGoal=1000000000;
@@ -6954,7 +6965,8 @@ function applySaveData(data) {
     c.revenue=Math.max(0,+c.revenue||0); c.profit=Math.max(0,+c.profit||0);
     c.payout=Math.max(0,Math.min(1,Number.isFinite(+c.payout)?+c.payout:.3));
     if(!c.acquired||typeof c.acquired!=="object"||Array.isArray(c.acquired)) c.acquired={};
-    if(typeof c.name!=="string") c.name="나의 기업";
+    // 기업명은 화면에 그대로 그려지므로 저장 파일에서도 길이·제어문자를 제한합니다.
+    c.name=String(typeof c.name==="string"?c.name:"").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,12)||"나의 기업";
     c.upkeep=Math.max(0,+c.upkeep||0);
     c.risk=Math.max(0,+c.risk||0);
     if(c.listed&&typeof c.listed==="object"){
@@ -7407,7 +7419,7 @@ function productCard(p){
 function news(){
   $("news").innerHTML=`${pageHeader("MARKET","뉴스 속보","시장 속보와 주요 이벤트를 실시간으로 제공합니다.")}
   ${marketTabs("news")}
-  <div class="panel news-feed">${(state.news||[]).map(n=>`<div class="news-line">${n}</div>`).join("")||"<p>발행된 속보가 없습니다. 시장이 움직이면 이곳에 표시됩니다.</p>"}</div>`;
+  <div class="panel news-feed">${(state.news||[]).map(n=>`<div class="news-line">${escHtml(n)}</div>`).join("")||"<p>발행된 속보가 없습니다. 시장이 움직이면 이곳에 표시됩니다.</p>"}</div>`;
 }
 
 // ── 자산 화면 구성 요소 ───────────────────────────────────────
@@ -8545,7 +8557,7 @@ function publishBreakingNews(title, text){
   const box=bannerOn?$("breaking"):null;
   if(box){
     breakingShownAt=now;
-    box.innerHTML=`<b>${title}</b> ${text}`;
+    box.innerHTML=`<b>${escHtml(title)}</b> ${escHtml(text)}`;
     box.classList.add("show");
     setTimeout(()=>box.classList.remove("show"),5500);
   }
