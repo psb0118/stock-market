@@ -6,6 +6,7 @@
  * 실행: node tests/sw-update.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -63,29 +64,21 @@ function createEnv({ visibility = 'visible', modal = null, activeElement = null 
     }
   };
 
-  const ctx = {
-    console, Math, Date, JSON, Number, isFinite, Intl, Promise, Object, Array, String,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true,
+  const storage = {
+    getItem: k => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: k => { delete store[k]; }
+  };
+  const h = harness.createGame({
     document: doc, navigator,
     location: { protocol: 'http:', reload: () => { calls.reload++; } },
-    sessionStorage: {
-      getItem: k => (k in store ? store[k] : null),
-      setItem: (k, v) => { store[k] = String(v); },
-      removeItem: k => { delete store[k]; }
-    },
-    localStorage: {
-      getItem: k => (k in store ? store[k] : null),
-      setItem: (k, v) => { store[k] = String(v); },
-      removeItem: k => { delete store[k]; }
-    },
+    sessionStorage: storage,
+    localStorage: storage,
     window: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
+  });
 
   const env = {
-    run: code => vm.runInContext(code, ctx),
+    run: h.run,
     store, calls, listeners, doc,
     fireNav(type, payload) { (listeners.nav[type] || []).forEach(fn => fn(payload)); },
     fireDoc(type, payload) { (listeners.doc[type] || []).forEach(fn => fn(payload)); }

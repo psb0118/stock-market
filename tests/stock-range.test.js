@@ -8,6 +8,7 @@
  *       다시 발생하지 않는지, 종목별 등락이 한 가격대로 붙지 않는지 봅니다.
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -33,23 +34,9 @@ function makeElement(id) {
 }
 
 function createContext(seed) {
-  const elements = new Map();
-  const el = id => { if (!elements.has(id)) elements.set(id, makeElement(id)); return elements.get(id); };
-  const document = { getElementById: el, querySelector: () => null, querySelectorAll: () => [], createElement: id => makeElement(id), body: makeElement('body') };
-  const store = {};
-  const seededMath = Object.create(Math);
-  seededMath.random = mulberry32(seed);
-  const ctx = {
-    console, Math: seededMath, Date, JSON, Number, isFinite, Intl,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document,
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    window: { __stockStat: null }
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  return { ctx, run: code => vm.runInContext(code, ctx) };
+  return harness.createGame({ Math: harness.seededMath(seed), window: { __stockStat: null } });
 }
+
 
 /**
  * gameLoop와 같은 순서(5초 단위)로 게임 시간을 진행하며 주가를 표본 수집합니다.

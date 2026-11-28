@@ -873,5 +873,87 @@ function check(name, ok, detail) {
   check('설정에 개발자용 GA4 설정 안내가 노출되지 않음', !screens.s.includes('ga4-id'));
 }
 
+// ── 오프라인 복귀 리포트 ────────────────────────────────────────
+{
+  const g = createGame();
+  const off = g.run(`(()=>{
+    clearGame(true);
+    state.lastSeen=Date.now()-3*3600*1000;
+    products.forEach(p=>{p.amount=0;p.rate=0});
+    const d=product('deposit'); d.amount=10000000; d.rate=.05; d.startedAt=0; d.term=1e9;
+    state.cash=0; state.loan=0;
+    const r=applyOfflineProgress();
+    return {sec:r.sec, interest:r.interest, net:r.net, auto:r.autoProfit, stored:!!state.lastOfflineReport, modal:document.getElementById('modalRoot').innerHTML||''};
+  })()`);
+  check('복귀 리포트: 경과 시간·이자 계산', off.sec >= 3500 && off.interest > 0 && Number.isFinite(off.net), JSON.stringify({ sec: off.sec, interest: Math.round(off.interest) }));
+  check('복귀 리포트: 한 장 요약 카드 표시', off.modal.includes('오프라인 복귀 리포트') && off.modal.includes('자동 수익') && off.modal.includes('금리·이자'), off.modal.slice(0, 80));
+  check('복귀 리포트를 저장해 다시 열 수 있음', off.stored === true && g.run(`(()=>{ document.getElementById('modalRoot').innerHTML=''; openLastOfflineReport(); return document.getElementById('modalRoot').innerHTML.includes('오프라인 복귀 리포트'); })()`));
+
+  const auto = g.run(`(()=>{
+    clearGame(true);
+    state.lastSeen=Date.now()-3600*1000;
+    products.forEach(p=>{p.amount=0;p.rate=0});
+    state.cash=0;
+    const s=stock('future_ai'); s.own=100; s.avgBuy=s.price*0.5; s.price=s.avgBuy*3;
+    state.auto={enabled:true,autoSell:true,takeProfit:0.01,stopLoss:0,every:60,stockPct:0,minCash:0};
+    const r=applyOfflineProgress();
+    return {auto:r.autoProfit, own:s.own, net:r.net};
+  })()`);
+  check('오프라인 동안 자동매매 실행·손익 반영', auto.own === 0 && auto.auto > 0, JSON.stringify(auto));
+}
+
+// ── 주간 저장 파일 백업 안내 ───────────────────────────────────
+{
+  const g = createGame();
+  const bk = g.run(`(()=>{
+    state.lastFileBackupAt=Date.now()-8*24*3600*1000;
+    state.backupPromptAt=0;
+    const due=fileBackupDue();
+    const shown=maybeFileBackupPrompt();
+    const modal=document.getElementById('modalRoot').innerHTML||'';
+    snoozeFileBackup();
+    const snoozed=state.backupPromptAt>0;
+    const again=maybeFileBackupPrompt();
+    state.lastFileBackupAt=Date.now();
+    return {due,shown,modal,snoozed,again,nowDue:fileBackupDue()};
+  })()`);
+  check('7일 지나면 백업 안내 표시', bk.due === true && bk.shown === true && bk.modal.includes('주간 저장 백업'));
+  check('미루면 3일 동안 다시 띄우지 않음', bk.snoozed === true && bk.again === false);
+  check('백업 후에는 안내를 띄우지 않음', bk.nowDue === false && bk.modal.includes('백업 파일 받기'));
+
+  const exported = (() => {
+    const g2 = createGame({ Blob: class { constructor() {} }, URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} } });
+    return g2.run(`(()=>{ state.lastFileBackupAt=0; exportSave(); return {at:state.lastFileBackupAt, due:fileBackupDue(), label:fileBackupLabel()}; })()`);
+  })();
+  check('내보내기하면 백업 시각 기록', exported.at > 0 && exported.due === false && exported.label !== '아직 없음', JSON.stringify(exported));
+}
+
+// ── 모바일 고정 거래 영역 · 접근성 ──────────────────────────────
+{
+  const g = createGame();
+  check('종목 카드에 하단 고정 거래 영역', /trade trade-qty[^"]*trade-dock/.test(html) && html.includes('.trade.trade-dock{position:sticky'));
+  const svg = g.run("sparklineSVG(stock('future_ai'))");
+  check('차트에 스크린리더 라벨', svg.includes('role="img"') && svg.includes('aria-label="'), svg.slice(0, 90));
+  check('키보드 포커스 표시 스타일', html.includes(':focus-visible{outline:'));
+  check('자산 추이 그래프 라벨', html.includes('role="img" aria-label="자산 추이 그래프'));
+}
+
+// ── 기준금리가 신규 대출 금리에 반영 ────────────────────────────
+{
+  const g = createGame();
+  const eco = g.run(`(()=>{
+    clearGame(true);
+    state.cash=50000000;
+    const baseDelta=economyRateDelta();
+    state.economy.baseRate=.06; state.economy.rateAdj=.004;
+    const pol=loanPolicy().rate;
+    document.getElementById('loan-amt').value='1000000';
+    borrowLoan();
+    return {baseDelta, pol, rate:state.loanRate, loan:state.loan};
+  })()`);
+  check('중립 경제에서는 금리 가산 없음', Math.abs(eco.baseDelta) < 1e-12, eco.baseDelta);
+  check('기준금리 상승이 신규 대출 금리에 반영', eco.loan === 1000000 && eco.rate > eco.pol && Math.abs(eco.rate - (eco.pol + 0.02)) < 1e-9, JSON.stringify(eco));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

@@ -4,6 +4,7 @@
  * 실행: node tests/notify.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -36,29 +37,9 @@ function makeElement(id) {
 }
 
 function createGame(seed = 5) {
-  const els = new Map();
-  const el = id => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
-  const document = {
-    getElementById: el, querySelector: () => null, querySelectorAll: () => [],
-    createElement: () => makeElement('toast'), body: makeElement('body'), addEventListener() {}
-  };
-  const store = {};
-  let seedState = seed;
-  const rand = () => { seedState = (seedState * 1103515245 + 12345) & 0x7fffffff; return seedState / 0x7fffffff; };
-  const seededMath = Object.create(Math); seededMath.random = rand;
-  const ctx = {
-    console, Math: seededMath, Date, JSON, Number, isFinite, Intl, Promise,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document,
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    window: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; 1');
-  return { run, el, store };
+  return harness.createGame({ Math: harness.seededMath(seed) });
 }
+
 
 // ── 기본값 ───────────────────────────────────────
 {

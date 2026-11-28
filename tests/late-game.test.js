@@ -7,6 +7,7 @@
  * 실행: node tests/late-game.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -38,35 +39,15 @@ function makeElement(id) {
 }
 
 function createGame(options = {}) {
-  const els = new Map();
-  const el = id => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
+  const h = harness.createGame();
   const live = (options.live || []).map(([key, id]) => {
-    const e = makeElement(id);
+    const e = h.el(id);
     e.getAttribute = sel => (sel === 'data-live' ? key : null);
     return e;
   });
-  const document = {
-    getElementById: el,
-    querySelector: () => null,
-    querySelectorAll: sel => (sel === '[data-live]' ? live : []),
-    createElement: () => makeElement('toast'),
-    body: makeElement('body'),
-    addEventListener() {},
-    activeElement: null
-  };
-  const store = {};
-  const ctx = {
-    console, Math, Date, JSON, Number, isFinite, Intl, Promise,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document,
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    window: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; 1');
-  return { run, el, live, document };
+  const document = h.ctx.document;
+  document.querySelectorAll = sel => (sel === '[data-live]' ? live : []);
+  return { run: h.run, el: h.el, live, document };
 }
 
 // ── 후반 자산 관리 수수료 ─────────────────────────

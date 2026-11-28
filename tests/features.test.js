@@ -5,6 +5,7 @@
  * 실행: node tests/features.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -25,25 +26,9 @@ function makeElement(id) {
   return { id, value: '', textContent: '', disabled: false, className: '', style: {}, checked: false, classList: { add() {}, remove() {}, toggle() {} } };
 }
 function createGame(seed = 3) {
-  const elements = new Map();
-  const el = id => { if (!elements.has(id)) elements.set(id, makeElement(id)); return elements.get(id); };
-  const document = { getElementById: el, querySelector: () => null, querySelectorAll: () => [], createElement: id => makeElement(id), body: makeElement('body') };
-  const store = {};
-  const seededMath = Object.create(Math);
-  seededMath.random = mulberry32(seed);
-  const ctx = {
-    console, Math: seededMath, Date, JSON, Number, isFinite, Intl,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document,
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    window: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; 1');
-  return { run, el };
+  return harness.createGame({ Math: harness.seededMath(seed) });
 }
+
 
 let pass = 0, fail = 0;
 function check(name, ok, detail) {

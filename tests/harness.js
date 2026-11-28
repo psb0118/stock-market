@@ -19,11 +19,17 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const source = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
 
 function makeElement(id) {
+  const classes = new Set();
   return {
     id, value: '', textContent: '', innerHTML: '', disabled: false, className: '', style: {}, checked: false,
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    classList: {
+      add(c) { classes.add(c); }, remove(c) { classes.delete(c); }, contains: c => classes.has(c),
+      toggle(c, on) { const next = on === undefined ? !classes.has(c) : !!on; if (next) classes.add(c); else classes.delete(c); return next; },
+      _set: classes
+    },
     appendChild(child) { child.parentNode = this; (this.children || (this.children = [])).push(child); },
     removeChild(child) { const i = (this.children || []).indexOf(child); if (i >= 0) this.children.splice(i, 1); },
+    click() {},
     setAttribute(k, v) { this[k] = v; },
     getAttribute(k) { return this[k] == null ? null : this[k]; },
     querySelector() { return null; },

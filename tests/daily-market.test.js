@@ -8,6 +8,7 @@
  * 실행: node tests/daily-market.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -38,29 +39,9 @@ function makeElement(id) {
 }
 
 function createGame(seed = 7) {
-  const els = new Map();
-  const el = id => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
-  const document = {
-    getElementById: el, querySelector: () => null, querySelectorAll: () => [],
-    createElement: () => makeElement('toast'), body: makeElement('body'), addEventListener() {}
-  };
-  const store = {};
-  let s = seed;
-  const rand = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-  const seededMath = Object.create(Math); seededMath.random = rand;
-  const ctx = {
-    console, Math: seededMath, Date, JSON, Number, isFinite, Intl, Promise,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document,
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    window: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; 1');
-  // 카드 갱신을 확인할 수 있게 특정 종목의 data-change 요소를 하나 연결합니다.
-  run(`
+  const h = harness.createGame({ Math: harness.seededMath(seed) });
+  // 카드 갱신을 확인할 수 있게 data-change 조회를 가로챕니다.
+  h.run(`
     window.__ce={textContent:'',className:''};
     window.__ceId=null;
     document.querySelectorAll=sel=>{
@@ -68,8 +49,9 @@ function createGame(seed = 7) {
       return [];
     };
     1`);
-  return { run, el, store };
+  return h;
 }
+
 
 const DOMESTIC = 'stocks.findIndex(s=>s.group==="domestic" && !s.indexPower)';
 

@@ -4,6 +4,7 @@
  * 실행: node tests/admin.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -28,35 +29,9 @@ function makeElement(id) {
 }
 
 function createGame() {
-  const els = new Map();
-  const el = id => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
-  const document = {
-    visibilityState: 'visible',
-    getElementById: el,
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    createElement: id => makeElement(id),
-    body: makeElement('body'),
-    addEventListener() {}
-  };
-  const store = {};
-  const localStorage = {
-    getItem: k => (k in store ? store[k] : null),
-    setItem: (k, v) => { store[k] = String(v); },
-    removeItem: k => { delete store[k]; }
-  };
-  const ctx = {
-    console, Math, Date, JSON, Number, isFinite, Intl, Promise,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document, localStorage,
-    window: { addEventListener() {} }, navigator: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.settings.confirmTrades=false; 1');
-  return { run, el, ctx, store, localStorage };
+  return harness.createGame();
 }
+
 
 function fakeDb(calls) {
   return {

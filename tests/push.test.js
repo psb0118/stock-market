@@ -5,6 +5,7 @@
  * 실행: node tests/push.test.js
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -27,8 +28,6 @@ function makeElement(id) {
 }
 
 function createGame() {
-  const els = new Map();
-  const el = id => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
   const sent = [];
   const registration = {
     showNotification(title, opts) { sent.push({ title, opts, via: 'sw' }); return Promise.resolve(); }
@@ -36,26 +35,14 @@ function createGame() {
   const notification = function (title, opts) { sent.push({ title, opts, via: 'constructor' }); };
   notification.permission = 'granted';
   notification.requestPermission = () => Promise.resolve('granted');
-  const document = {
-    visibilityState: 'hidden',
-    getElementById: el, querySelector: () => null, querySelectorAll: () => [],
-    createElement: () => makeElement('toast'), body: makeElement('body'), addEventListener() {}
-  };
-  const store = {};
-  const ctx = {
-    console, Math, Date, JSON, Number, isFinite, Intl, Promise,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: () => {}, confirm: () => true, document,
+  const h = harness.createGame({
     navigator: { serviceWorker: { ready: Promise.resolve(registration) } },
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
     window: { Notification: notification }
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.settings.confirmTrades=false; 1');
-  return { run, el, sent, document, store, registration, notification };
+  });
+  h.ctx.document.visibilityState = 'hidden';
+  return { run: h.run, el: h.el, sent, document: h.ctx.document, store: h.store, registration, notification };
 }
+
 
 (async () => {
   {

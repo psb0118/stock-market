@@ -61,6 +61,20 @@ p{margin:0;color:#667085;line-height:1.45}
 .spark svg{display:block;width:100%;height:28px}
 .spark-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:6;background:#111827;color:#fff;border:1px solid #334155;border-radius:6px;padding:4px 7px;font-size:11px;line-height:1.35;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px #0003}
 .spark-tip.on{display:block}
+/* 키보드 사용자를 위한 포커스 표시 */
+:focus-visible{outline:2px solid #1a73e8;outline-offset:2px;border-radius:4px}
+/* 오프라인 복귀 리포트 카드 */
+.offline-report{background:linear-gradient(160deg,#f8fafc,#eef2ff);border:1px solid #dbe3f4;border-radius:16px;padding:16px;margin-bottom:12px}
+.offline-total{font-size:30px;font-weight:800;line-height:1.15;margin:4px 0}
+.offline-total.up{color:#b42318}
+.offline-total.down{color:#1d4ed8}
+.offline-rows{margin-top:10px}
+.offline-rows .snap-row{padding:4px 0;border-bottom:1px dashed #e4e7ec}
+.offline-rows .snap-row:last-child{border-bottom:0}
+/* 모바일에서 거래 버튼을 화면 아래에 고정 */
+@media (max-width:760px){
+  .trade.trade-dock{position:sticky;bottom:0;z-index:6;background:var(--card,#fff);border-top:1px solid #e4e7ec;padding:8px 0 calc(8px + env(safe-area-inset-bottom));box-shadow:0 -6px 18px #0f172a1a;border-radius:10px}
+}
 .spark-tip b{color:#f7c948}
 .trade.trade-sell-only{grid-template-columns:minmax(64px,1fr) 1fr}
 .holding-mini{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1140,6 +1154,9 @@ const state={
     year:1, yearStart:0}, // 세금 계좌·이월 손실·납입한도·세금연도
   challenge: {active:null, history:[], best:0, last:null}, // 현재 진행을 초기화하지 않는 시나리오 챌린지
   riskScenario: "base", // 리스크 탭에서 선택한 스트레스 시나리오
+  lastOfflineReport: null, // 마지막 오프라인 복귀 요약(대시보드에서 다시 보기)
+  lastFileBackupAt: 0,     // 마지막 저장 파일 백업 시각(실제 시간)
+  backupPromptAt: 0,       // 백업 안내를 다시 띄울 시각
   shortRealized: 0, // 공매도 누적 실현손익
   listedIds: [],    // 공모주로 새로 상장된 종목 id
   goals: {},        // 달성한 목표 id
@@ -3366,11 +3383,17 @@ function offlineMaxSeconds(){ return OFFLINE_MAX_BASE + 2*3600*rebirthLevel("off
 let OFFLINE_REPLAY=false;
 // 재생을 한 번에 오래 돌리면 화면이 멈추므로, 같은 단계를 작은 덩어리로 나눠 돌릴 수 있게 분리했습니다.
 function replayOfflineSteps(from,to){
+  const every=Math.max(10,Math.round(+(state.auto&&state.auto.every)||60));
   for(let i=from;i<to;i++){
     state.marketSeconds++;
     if(state.marketSeconds%15===0) tickAlt();
     if(state.marketSeconds%5===0){ tickMarket(); updateFX(); }
     if(state.marketSeconds%7===0) marketEventsAndNews();
+    // 자리를 비운 동안에도 자동매매 규칙을 같은 주기로 돌립니다.
+    // (복귀 후 한 번만 돌리면 그 사이 가격 변동을 놓쳐 '자동매매'가 없던 일이 됩니다.)
+    if(state.auto && state.auto.enabled && state.marketSeconds%every===0){
+      try{ autoSellRules(); autoInvest(true); }catch(e){}
+    }
   }
 }
 function replayOfflineMarket(seconds){
@@ -3426,7 +3449,34 @@ function offlineElapsedSeconds(){
 function offlineMarketStart(){
   const idxBefore=marketIndex(), fxBefore=fx.usd, heldBefore={};
   stocks.forEach(s=>{ if(+s.own>0) heldBefore[s.id]=s.price; });
-  return {idxBefore, fxBefore, heldBefore};
+  const realizedBefore=stocks.reduce((a,s)=>a+(+s.realizedProfit||0),0);
+  return {idxBefore, fxBefore, heldBefore, realizedBefore};
+}
+// 복귀 요약 카드: 경과 시간과 자동 수익을 한 장으로 보여 줍니다.
+function offlineReportHtml(r){
+  if(!r) return "";
+  const mins=Math.max(0,Math.floor((r.sec||0)/60)), hours=Math.floor(mins/60);
+  const elapsed=hours?`${hours}시간 ${mins%60}분`:`${mins}분`;
+  const rows=[
+    ["주식 배당",r.dividends||0],
+    ["금리·이자",r.interest||0],
+    ["임대 수익",r.rent||0],
+    ["기업 배당",r.companyPay||0],
+    ["자동매매 실현손익",r.autoProfit||0],
+    ["대출 이자",-(r.loanInterest||0)],
+    ["유지비",-(r.upkeep||0)]
+  ].filter(([,v])=>Math.abs(v)>=1);
+  return `<div class="offline-report">
+    <p class="muted-sm" style="margin:0">${escHtml(elapsed)} 동안 자리를 비웠습니다</p>
+    <div class="offline-total ${(r.net||0)>=0?"up":"down"}">${(r.net||0)>=0?"+":""}${won(r.net||0)}</div>
+    <p class="muted-sm" style="margin:0">배당·이자·자동매매에서 생긴 자동 수익 합계</p>
+    <div class="offline-rows">${rows.length?rows.map(([k,v])=>`<div class="snap-row"><span>${k}</span><b class="${v>=0?"up":"down"}">${v>=0?"+":""}${won(v)}</b></div>`).join(""):`<p class="muted-sm" style="margin-top:8px">이번에는 자동 수익이 없었습니다.</p>`}</div>
+  </div>`;
+}
+function openLastOfflineReport(){
+  const r=state.lastOfflineReport;
+  if(!r) return alert("최근 복귀 리포트가 없습니다.");
+  openModal("오프라인 복귀 리포트",offlineReportHtml(r));
 }
 function offlineSettle(sec, start, opts){
   const {idxBefore, fxBefore, heldBefore}=start;
@@ -3469,27 +3519,25 @@ function offlineSettle(sec, start, opts){
   creditAutoIncome(companyPay,"기업 배당");
   if(upkeep>0) state.cash-=upkeep;
   const market={idxBefore,idxAfter,fxBefore,fxAfter,held};
+  const realizedAfter=stocks.reduce((a,s)=>a+(+s.realizedProfit||0),0);
+  const autoProfit=realizedAfter-(start.realizedBefore||0);
+  const net=interest+dividends+(rent||0)+(companyPay||0)+autoProfit-(loanInterest||0)-(upkeep||0);
+  const report={at:Date.now(),sec,interest,dividends,loanInterest,rent:rent||0,upkeep:upkeep||0,companyPay:companyPay||0,autoProfit,net,market};
+  state.lastOfflineReport=report;
   try{ trackEvent("offline_settlement",{min:Math.floor(sec/60)}); }catch(e){}
-  const summary={sec,interest,dividends,loanInterest,rent,upkeep,companyPay,market};
-  addLog(`오프라인 정산: ${Math.floor(sec/60)}분 · 이자 ${won(interest)} · 배당 ${won(dividends)}`);
-  notify("system","오프라인 정산",`${Math.floor(sec/60)}분 동안 이자 ${won(interest)} · 배당 ${won(dividends)}`);
-  openModal("오프라인 정산",`<div class="kpis">
-    <div class="kpi"><small>경과 시간</small><b>${Math.floor(sec/60)}분</b></div>
-    <div class="kpi"><small>금융상품 이자</small><b>${won(interest)}</b></div>
-    <div class="kpi"><small>배당(최대 1시간)</small><b>${won(dividends)}</b></div>
-    <div class="kpi"><small>대출 이자</small><b>${won(loanInterest)}</b></div>
-    <div class="kpi"><small>임대 수익</small><b>${won(rent||0)}</b></div>
-    <div class="kpi"><small>유지비</small><b>${won(upkeep||0)}</b></div>
-    <div class="kpi"><small>기업 배당</small><b>${won(companyPay||0)}</b></div>
-  </div>
+  const summary=report;
+  addLog(`오프라인 복귀: ${Math.floor(sec/60)}분 · 자동 수익 ${won(net)} (이자 ${won(interest)} · 배당 ${won(dividends)})`);
+  notify("system","오프라인 복귀",`${Math.floor(sec/60)}분 동안 자동 수익 ${won(net)}`);
+  openModal("오프라인 복귀 리포트",`${offlineReportHtml(report)}
   ${autoIncomeMode()==="auto"?"":`<p class="muted-sm" style="margin-top:10px">자동 수익이 <b>${autoIncomeModeLabel()}</b>로 설정되어 있어 배당·임대료·기업 배당은 현금 대신 대기액에 쌓이거나 지급되지 않았습니다. 현금 카드에서 바로 받을 수 있습니다.</p>`}
-  <h4 style="margin:14px 0 8px;font-size:13px">재생된 시장 (최대 ${Math.floor(offlineMaxSeconds()/3600)}시간)</h4>
-  <div class="kpis">
-    <div class="kpi"><small>시장 지수</small><b class="${idxAfter>=idxBefore?"up":"down"}">${pct(idxBefore>0?idxAfter/idxBefore-1:0)}</b></div>
-    <div class="kpi"><small>환율</small><b class="${fxAfter>=fxBefore?"up":"down"}">${pct(fxBefore>0?fxAfter/fxBefore-1:0)}</b></div>
-    ${held.length?held.map(h=>`<div class="kpi"><small>${escHtml(h.name)}</small><b class="${h.ret>=0?"up":"down"}">${pct(h.ret)}</b></div>`).join(""):`<div class="kpi"><small>보유 종목</small><b>없음</b></div>`}
-  </div>
-  <p style="margin-top:10px;font-size:12px;color:#667085">꺼져 있던 시간만큼 시장을 그대로 재생해 보여 줍니다(같은 시간이면 모든 플레이어가 같은 시세). 이자·배당·임대료는 위에서 함께 정산했습니다.</p>`);
+  <details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;font-weight:700">재생된 시장 보기 (최대 ${Math.floor(offlineMaxSeconds()/3600)}시간)</summary>
+    <div class="kpis" style="margin-top:8px">
+      <div class="kpi"><small>시장 지수</small><b class="${idxAfter>=idxBefore?"up":"down"}">${pct(idxBefore>0?idxAfter/idxBefore-1:0)}</b></div>
+      <div class="kpi"><small>환율</small><b class="${fxAfter>=fxBefore?"up":"down"}">${pct(fxBefore>0?fxAfter/fxBefore-1:0)}</b></div>
+      ${held.length?held.map(h=>`<div class="kpi"><small>${escHtml(h.name)}</small><b class="${h.ret>=0?"up":"down"}">${pct(h.ret)}</b></div>`).join(""):`<div class="kpi"><small>보유 종목</small><b>없음</b></div>`}
+    </div>
+    <p style="margin-top:10px;font-size:12px;color:#667085">꺼져 있던 시간만큼 시장을 그대로 재생했습니다(같은 시간이면 모든 플레이어가 같은 시세). 자동매매를 켜 둔 경우 같은 주기로 매수·매도가 실행됐습니다.</p>
+  </details>`);
   saveGame();
   if(opts&&opts.refresh){ try{ update(); dashboardPage(); portfolio(); }catch(e){} }
   return summary;
@@ -3625,7 +3673,7 @@ function assetTrendSVG(){
   const coords=vals.map((v,i)=>`${(i*step).toFixed(1)},${(h-((v-min)/span)*(h-6)-3).toFixed(1)}`).join(" ");
   const up=vals[vals.length-1]>=vals[0];
   const color=up?"#d92d20":"#1d4ed8";
-  return `<div class="trend-chart" onpointermove="assetTrendHover(event)" onpointerdown="assetTrendHover(event)" onpointerleave="assetTrendLeave(event)">
+  return `<div class="trend-chart" role="img" aria-label="자산 추이 그래프 · 최근 자산 변화" onpointermove="assetTrendHover(event)" onpointerdown="assetTrendHover(event)" onpointerleave="assetTrendLeave(event)">
     <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,${h} ${coords} ${w},${h}" fill="${color}" opacity=".10"/><polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/><line class="trend-guide" x1="0" y1="0" x2="0" y2="${h}" style="visibility:hidden"/><circle class="trend-dot" cx="0" cy="0" r="4" style="visibility:hidden"/></svg>
     <span class="trend-tip" id="assetTrendTip"></span>
   </div>`;
@@ -3705,7 +3753,7 @@ function sparklineSVG(s){
   const w = 100, h = 28, step = w / Math.max(1, data.length - 1);
   const points = data.map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(" ");
   const up = data[data.length - 1] >= data[0];
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="${up ? "#d92d20" : "#1d4ed8"}" stroke-width="1.6"/></svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${escAttr(s.name)} 최근 주가 추이"><polyline points="${points}" fill="none" stroke="${up ? "#d92d20" : "#1d4ed8"}" stroke-width="1.6"/></svg>`;
 }
 // 그래프 위 마우스 위치를 실제 가격으로 바꿔 줍니다. hist는 최근 60틱의 실제 가격입니다.
 function sparkPointAt(s, ratio){
@@ -4012,6 +4060,14 @@ function settleTax(profitKRW, account){
 // ── 신용 대출 ───────────────────────────────────
 function loanPolicy(){ return LOAN_POLICY[currentGrade()] || LOAN_POLICY["브론즈"]; }
 
+// 기준금리·금리 조정을 신규 대출 금리에 반영합니다(변동 폭은 ±1%p~+2%p로 제한).
+function economyRateDelta(){
+  const e=state.economy||{};
+  const base=Number.isFinite(+e.baseRate)?+e.baseRate:ECON_DEFAULT.baseRate;
+  const adj=Number.isFinite(+e.rateAdj)?+e.rateAdj:0;
+  const raw=(base-ECON_DEFAULT.baseRate)*0.6+adj*0.5;
+  return Math.max(-0.01,Math.min(0.02,raw));
+}
 function borrowLoan(){
   const pol = loanPolicy();
   if(pol.limit <= 0) return alert("대출은 실버 등급부터 이용할 수 있습니다.");
@@ -4019,13 +4075,15 @@ function borrowLoan(){
   const amt = Math.floor((+($("loan-amt") ? $("loan-amt").value : 0) || 0) / 10000) * 10000;
   if(amt <= 0) return alert("대출 금액을 입력해 주세요.");
   if(amt > avail) return alert(`대출 한도를 초과했습니다. (가능 ${won(avail)})`);
-  const oldLoan=state.loan||0, oldRate=(state.loanRate||0)>0?state.loanRate:(oldLoan>0?TAX_DEBT_RATE:pol.rate);
+  // 기준금리·금리 조정이 신규 대출 금리에 반영됩니다(기존 대출은 가중 평균으로 유지).
+  const polRate=Math.max(0.01,pol.rate+economyRateDelta());
+  const oldLoan=state.loan||0, oldRate=(state.loanRate||0)>0?state.loanRate:(oldLoan>0?TAX_DEBT_RATE:polRate);
   // 기존 대출이 있으면 새 대출 금리로 전체 잔액을 덮어쓰지 않고 금액 가중 평균을 씁니다.
   state.loan = oldLoan + amt;
-  state.loanRate = oldLoan>0 ? ((oldLoan*oldRate)+(amt*pol.rate))/state.loan : pol.rate;
+  state.loanRate = oldLoan>0 ? ((oldLoan*oldRate)+(amt*polRate))/state.loan : polRate;
   state.loanTotal = (state.loanTotal || 0) + amt;
   state.cash += amt;
-  addLog(`신용 대출 실행: ${won(amt)} (연 ${(pol.rate * 100).toFixed(1)}%)`);
+  addLog(`신용 대출 실행: ${won(amt)} (연 ${(polRate * 100).toFixed(1)}%)`);
   if(!OFFLINE_REPLAY){ saveGame(); portfolio(); update(); }
 }
 
@@ -4729,7 +4787,32 @@ function exportSave(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
+  state.lastFileBackupAt=Date.now();
+  try{ saveGame(); }catch(e){}
   addLog("저장 파일을 내보냈습니다.");
+}
+// 주 1회 저장 파일 백업 안내(브라우저 다운로드는 사용자 클릭이 필요합니다).
+const FILE_BACKUP_EVERY=7*24*60*60*1000;
+function fileBackupDue(){
+  if(!state.lastFileBackupAt) return (state.marketSeconds||0)>300;
+  return Date.now()-state.lastFileBackupAt>=FILE_BACKUP_EVERY;
+}
+function fileBackupLabel(){
+  return state.lastFileBackupAt?new Date(state.lastFileBackupAt).toLocaleDateString("ko-KR"):"아직 없음";
+}
+function maybeFileBackupPrompt(){
+  if(!fileBackupDue()) return false;
+  if(state.backupPromptAt && Date.now()-state.backupPromptAt<3*24*60*60*1000) return false;
+  openModal("주간 저장 백업",`
+    <p style="font-size:13px">마지막 백업 파일: <b>${escHtml(fileBackupLabel())}</b></p>
+    <p class="muted-sm" style="margin-top:6px">브라우저 데이터를 지우면 진행이 사라집니다. JSON 파일로 한 번 백업해 두면 언제든 되돌릴 수 있습니다.</p>
+    <div class="button-row" style="margin-top:12px"><button class="buy" onclick="exportSave();closeModal();">백업 파일 받기</button><button class="ghost" onclick="snoozeFileBackup()">3일 뒤</button></div>`);
+  return true;
+}
+function snoozeFileBackup(){
+  state.backupPromptAt=Date.now();
+  try{ saveGame(); }catch(e){}
+  closeModal();
 }
 
 const IMPORT_MAX_BYTES=5*1024*1024;
@@ -5965,7 +6048,7 @@ function economyPage(){
         <label class="field-label">목표 금액 (원)<input id="goal-target" type="number" min="1000000" step="10000000" value="${state.targetGoal||1000000000}" onchange="setTargetGoal(this.value)"></label>
         <div class="bar" style="margin-top:10px"><span style="width:${Math.min(100,(netAssetsKRW()/Math.max(1,state.targetGoal||1))*100).toFixed(1)}%"></span></div>
         <p class="muted-sm" style="margin-top:6px">${won(netAssetsKRW())} / ${won(state.targetGoal||1000000000)}</p>
-        <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="show('rebirth')">환생</button><button class="ghost" onclick="show('settings')">설정</button></div>
+        <div class="button-row" style="margin-top:10px">${state.lastOfflineReport?`<button class="ghost" onclick="openLastOfflineReport()">복귀 리포트</button>`:""}<button class="ghost" onclick="show('rebirth')">환생</button><button class="ghost" onclick="show('settings')">설정</button></div>
       </div></section>
     </div>`;
 }
@@ -6463,6 +6546,7 @@ function init(){
   // 기기 클라우드 저장을 접으면서 남은 옛 연결 열쇠도 기기에서 지웁니다.
   try{ localStorage.removeItem(LEGACY_CLOUD_CREDS_KEY); }catch(e){}
   ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); firebaseBoot();
+  try{ maybeFileBackupPrompt(); }catch(e){}
   // 이전에 켜 둔 자동 매수가 남아 있으면 시작할 때 바로 알려 줍니다(몰래 매수되는 일 방지).
   renderAutoBadge();
   if(autoBuySources().length) notifyAlways("🤖 자동 매수가 켜져 있습니다", `${autoBuySources().join(" · ")}가 켜져 있습니다. 원치 않으면 눌러서 끄세요.`, {durationMs:9000, onClick:()=>{ const b=$("autoBadge"); if(b) b.click(); }});
@@ -6723,6 +6807,8 @@ const SAVE_STATE_SPEC={
   speed:SAVE_INT(1,5),
   revision:SAVE_INT(0,1e9),
   savedAt:SAVE_INT(0,1e15),
+  lastFileBackupAt:SAVE_INT(0,1e15),
+  backupPromptAt:SAVE_INT(0,1e15),
   riskScenario:{kind:"enum",values:["base","crash","rate","fx"],fallback:"base"}
 };
 let saveFixReport=[];
@@ -7138,7 +7224,7 @@ function holdingCard(s){
       <div><small>평가손익</small><b class="${pnl>=0?"up":"down"}" data-hold-pnl="${s.id}">${pnl>=0?"+":""}${won(pnl)}</b></div>
     </div>
     <p class="muted-sm" style="margin:6px 0">현재 계좌 ${taxModeLabel(acct)} · 평단 ${acctAvg>0?(isForeign?usdStr(acctAvg):won(acctAvg)):"-"} · 매도 가능 <b>${qtyText(aq)}</b>${s.own>aq?` (다른 계좌 ${qtyText(s.own-aq)})`:""}</p>
-    <div class="trade trade-qty trade-sell-only">
+    <div class="trade trade-qty trade-sell-only trade-dock">
       <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 매도 수량">
       <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
     </div>
@@ -7190,7 +7276,7 @@ function card(s, group){
       <div><small>풀매수 가능</small><b data-maxbuy="${s.id}">${qtyText(maxBuy)}</b></div>
       <div><small>풀매도 가능</small><b data-maxsell="${s.id}">${qtyText(s.own)}</b></div>
     </div>
-    <div class="trade trade-qty">
+    <div class="trade trade-qty trade-dock">
       <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 거래 수량">
       <button class="buy" onclick="buyQty('${s.id}','${ctx}')">매수</button>
       <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
@@ -7921,7 +8007,8 @@ function savePanelHtml(){
       <button class="ghost" onclick="restoreLatestBackup()">직전 세이브로 복원</button>
       <span class="muted-sm">최근 백업: ${escHtml(backupLabel())}</span>
     </div>
-    <p class="muted-sm" style="margin-top:10px">저장 파일을 내보내거나 불러와서 진행 상황을 보관할 수 있습니다. 불러오기는 내용을 먼저 보여 주고 확인한 뒤에만 적용합니다. CSV는 Excel에서 바로 열 수 있습니다.</p>`;
+    <p class="muted-sm" style="margin-top:10px">저장 파일을 내보내거나 불러와서 진행 상황을 보관할 수 있습니다. 불러오기는 내용을 먼저 보여 주고 확인한 뒤에만 적용합니다. CSV는 Excel에서 바로 열 수 있습니다.</p>
+    <p class="muted-sm">마지막 백업 파일: ${escHtml(fileBackupLabel())} · 주 1회 백업을 권장합니다.</p>`;
 }
 
 function portfolio(){
