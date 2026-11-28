@@ -458,5 +458,62 @@ function createGame() {
   check('state가 객체가 아니면 기본 상태 유지', weirdState === 'number', weirdState);
 }
 
+// ── CSV 수식 삽입 방어 ──────────────────────────────────────────
+{
+  const g = createGame();
+  const APO = "'", DQ = '"';
+  const quoted = v => DQ + v + DQ;
+
+  const cells = g.run(`({
+    eq: csvCell('=1+1'),
+    plus: csvCell('+82 10-1234-5678'),
+    minus: csvCell("-cmd|/c calc|'!A1'"),
+    at: csvCell('@SUM(A1:A9)'),
+    tab: csvCell('\\t=1+1'),
+    cr: csvCell('\\r=1+1'),
+    comma: csvCell('=1,2'),
+    quote: csvCell('=HYPERLINK("http://evil","x")'),
+    negNum: csvCell(-5000),
+    negNumText: csvCell('-5000'),
+    decNum: csvCell(1234.5),
+    plain: csvCell('삼성전자'),
+    empty: csvCell(null)
+  })`);
+  check('=로 시작하는 셀은 수식이 되지 않게 고정', cells.eq === APO + '=1+1', cells.eq);
+  check('+·-·@로 시작하는 셀도 고정', cells.plus === APO + '+82 10-1234-5678' && cells.minus.startsWith(APO + '-cmd') && cells.at === APO + '@SUM(A1:A9)', JSON.stringify([cells.plus, cells.minus, cells.at]));
+  check('탭·CR로 시작하는 셀도 수식이 되지 않게 고정', cells.tab === APO + '=1+1' && cells.cr === APO + '=1+1', JSON.stringify([cells.tab, cells.cr]));
+  check('쉼표·따옴표가 있으면 인용부호로 감싸고 앞에 고정', cells.comma === quoted(APO + '=1,2') && cells.quote === quoted(APO + '=HYPERLINK(""http://evil"",""x"")'), JSON.stringify([cells.comma, cells.quote]));
+  check('숫자 셀은 그대로 두어 계산 가능', cells.negNum === '-5000' && cells.negNumText === '-5000' && cells.decNum === '1234.5', JSON.stringify([cells.negNum, cells.negNumText, cells.decNum]));
+  check('일반 문자열·빈 값은 그대로', cells.plain === '삼성전자' && cells.empty === '', JSON.stringify([cells.plain, cells.empty]));
+
+  const journalCsv = g.run(`(()=>{
+    clearGame(true);
+    const captured=[];
+    const prev=downloadCsv;
+    downloadCsv=(filename,rows)=>{ captured.push({ filename, csv: rows.map(r=>r.map(csvCell).join(',')).join('\\r\\n') }); };
+    state.journal=[{ at:0, side:'buy', name:'=HYPERLINK("http://evil","x")', qty:1, valueKRW:100, fee:0, profit:-5 }];
+    exportCsv('journal');
+    downloadCsv=prev;
+    return captured[0];
+  })()`);
+  const journalRow = journalCsv.csv.split('\r\n')[1];
+  check('거래 내역 CSV가 악성 종목명을 수식으로 내보내지 않음', !journalCsv.csv.includes(',=HYPERLINK') && journalCsv.csv.includes(APO + '=HYPERLINK') && journalCsv.csv.includes('""http://evil""'), journalRow);
+  check('거래 내역 CSV의 숫자 열은 그대로', /,1,100,0,-5$/.test(journalCsv.csv), journalRow);
+  check('거래 내역 CSV 파일명 유지', /^money-playground-journal-\d{4}-\d{2}-\d{2}\.csv$/.test(journalCsv.filename), journalCsv.filename);
+
+  const holdingsCsv = g.run(`(()=>{
+    clearGame(true);
+    const captured=[];
+    const prev=downloadCsv;
+    downloadCsv=(filename,rows)=>{ captured.push({ filename, csv: rows.map(r=>r.map(csvCell).join(',')).join('\\r\\n') }); };
+    const s=stock('future_ai'); s.name='=1+1'; s.ticker='@SUM(A1)'; s.own=3; s.avgBuy=1000;
+    exportCsv('holdings');
+    downloadCsv=prev;
+    return captured[0];
+  })()`);
+  const holdingsRow = holdingsCsv.csv.split('\r\n')[1];
+  check('보유 종목 CSV도 수식 시작 값을 고정', !holdingsCsv.csv.includes(',=1+1') && holdingsCsv.csv.includes(APO + '=1+1') && holdingsCsv.csv.includes(APO + '@SUM(A1)'), holdingsRow);
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);
