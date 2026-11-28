@@ -85,7 +85,8 @@ function createGame(globals) {
   vm.createContext(ctx);
   vm.runInContext(source, ctx, { filename: 'index.html#script' });
   const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; state.savedAt=0; 1');
+  // 날짜는 실제 시각으로 흐르므로, 테스트는 하루 경계 바로 뒤(2026-01-01 01:00 KST)로 시계를 고정합니다.
+  run('setDayClock(GAME_DAY_EPOCH_MS+3600*1000); clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; state.savedAt=0; 1');
   return { run, el, ctx, store };
 }
 

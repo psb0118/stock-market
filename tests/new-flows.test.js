@@ -82,10 +82,10 @@ function check(name, ok, detail) {
 // ── 자산 추이 그래프: 포인터 위치의 당시 자산액 ─────────────────
 {
   const g = createGame();
-  g.run(`assetHistory.points=[{t:0,v:10000000},{t:600,v:20000000},{t:1200,v:15000000}]; 1`);
+  g.run(`state.marketSeconds=1800; assetHistory.points=[{t:0,v:10000000},{t:600,v:20000000},{t:1200,v:15000000}]; 1`);
   const point = g.run('assetTrendPointAt(.5)');
   check('그래프 중간 위치의 자산액', point.value === 20000000 && point.index === 1, JSON.stringify(point));
-  check('그래프 시점 라벨', g.run('assetTrendTimeLabel(assetHistory.points[1])') === '2일차 · 0초', g.run('assetTrendTimeLabel(assetHistory.points[1])'));
+  check('그래프 시점 라벨', g.run('assetTrendTimeLabel(assetHistory.points[1])') === '20분 전' && g.run('assetTrendTimeLabel(assetHistory.points[2])') === '10분 전', g.run('assetTrendTimeLabel(assetHistory.points[1])'));
   const svg = g.run('assetTrendSVG()');
   check('그래프에 호버 이벤트·툴팁 포함', svg.includes('onpointermove="assetTrendHover(event)"') && svg.includes('trend-tip') && svg.includes('trend-guide'), svg.slice(0, 120));
 
@@ -97,7 +97,7 @@ function check(name, ok, detail) {
     assetTrendHover({currentTarget:chart,clientX:300});
     return {html:tip.innerHTML,on:tip.classList.on,left:tip.style.left,guide:guide.x1,dot:dot.cy};
   })()`);
-  check('그래프 호버 시 당시 자산액·시각 툴팁', hover.html.includes(g.run('won(20000000)')) && hover.html.includes('2일차') && hover.on === true, hover.html);
+  check('그래프 호버 시 당시 자산액·시각 툴팁', hover.html.includes(g.run('won(20000000)')) && hover.html.includes('20분 전') && hover.on === true, hover.html);
   check('그래프 호버 가이드·점 표시', hover.guide === '300.0' && hover.dot > 0, `${hover.guide}/${hover.dot}`);
 }
 

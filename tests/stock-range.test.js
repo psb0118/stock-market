@@ -76,7 +76,12 @@ const STEP = `
 function simulate(seed, seconds) {
   const { run } = createContext(seed);
   run('clearGame(true); state.paused=false; state.auto.enabled=false; 1');
-  for (let t = 0; t < seconds; t += 5) run(STEP);
+  // 날짜는 실제 시각으로 흐르므로, 장기 시세를 보려면 하루(24시간)씩 시계를 넘깁니다.
+  run('window.__day=marketDayIndex(); 1');
+  for (let t = 0; t < seconds; t += 5) {
+    if (t % 600 === 0) run('setDayClock(dayStartMs(++window.__day)+1000); 1');
+    run(STEP);
+  }
   return run('stocks.filter(s=>window.__stockStat[s.id]).map(s=>({id:s.id,start:s.start,price:s.price,stat:window.__stockStat[s.id]}))');
 }
 
