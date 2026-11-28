@@ -2,68 +2,18 @@
 /**
  * 새 흐름 회귀 테스트: 상단 자산 순서 · 자동 현금 수익 표시·수령 설정 · 종목 상세 ·
  * 자산 추이 호버 · 은행 이율 안내 · 세금 원장 · 튜토리얼 · 리더보드 ·
- * 리서치 기억 게임 · 관리자 UID 검사.
+ * 리서치 기억 게임 · 관리자 UID 검사 · 저장 파일 미리보기 · 자동 백업 ·
+ * 저장 값 스키마 보정.
  * 실행: node tests/new-flows.test.js
  */
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const source = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
+const { html, createGame } = require('./harness');
 
 let pass = 0, fail = 0;
 function check(name, ok, detail) {
   if (ok) { pass++; console.log(`PASS ${name}${detail !== undefined ? `  [${detail}]` : ''}`); }
   else { fail++; console.log(`FAIL ${name}${detail !== undefined ? `  [${detail}]` : ''}`); }
-}
-function makeElement(id) {
-  return {
-    id, value: '', textContent: '', innerHTML: '', disabled: false, className: '', style: {}, checked: false,
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    appendChild(child) { child.parentNode = this; (this.children || (this.children = [])).push(child); },
-    removeChild(child) { const i = (this.children || []).indexOf(child); if (i >= 0) this.children.splice(i, 1); },
-    setAttribute(k, v) { this[k] = v; },
-    getAttribute(k) { return this[k] == null ? null : this[k]; },
-    querySelector() { return null; },
-    querySelectorAll() { return []; },
-    getBoundingClientRect() { return { width: 0, height: 0, left: 0, top: 0 }; }
-  };
-}
-function createGame() {
-  const elements = new Map();
-  const el = id => { if (!elements.has(id)) elements.set(id, makeElement(id)); return elements.get(id); };
-  const body = makeElement('body');
-  const document = {
-    visibilityState: 'visible',
-    getElementById: el,
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    createElement: id => { const node = makeElement(id || 'div'); if (id) elements.set(id, node); return node; },
-    body,
-    documentElement: {},
-    addEventListener() {}
-  };
-  const store = {};
-  const ctx = {
-    console, Math, Date, JSON, Number, isFinite, Intl, Promise,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0, clearTimeout: () => 0,
-    alert: () => {}, confirm: () => true, document,
-    localStorage: {
-      getItem: k => (k in store ? store[k] : null),
-      setItem: (k, v) => { store[k] = String(v); },
-      removeItem: k => { delete store[k]; }
-    },
-    window: { addEventListener() {}, location: { hostname: 'test.local' } },
-    navigator: {}
-  };
-  vm.createContext(ctx);
-  vm.runInContext(source, ctx, { filename: 'index.html#script' });
-  const run = code => vm.runInContext(code, ctx);
-  run('clearGame(true); state.marketOpen=true; state.settings.confirmTrades=false; state.savedAt=0; 1');
-  return { run, el, ctx };
 }
 
 // ── 상단 자산 바: 정확히 12개, 사용자가 지정한 순서 ──────────────
@@ -773,6 +723,57 @@ function createGame() {
 
   const panel = g.run('savePanelHtml()');
   check('설정 화면에 백업 복원 버튼·시각 표시', panel.includes('직전 세이브로 복원') && panel.includes('최근 백업'), panel.slice(0, 80));
+}
+
+// ── 저장 값 스키마 보정 보고 ────────────────────────────────────
+{
+  const g = createGame();
+  const norm = g.run(`(()=>{
+    clearGame(true);
+    applySaveData({version:SAVE_VERSION,state:{cash:-5,usd:'abc',loanRate:9,speed:99,marketSeconds:'x',riskScenario:'evil',targetGoal:0,revision:-3}});
+    return {cash:state.cash,usd:state.usd,loanRate:state.loanRate,speed:state.speed,marketSeconds:state.marketSeconds,riskScenario:state.riskScenario,targetGoal:state.targetGoal,revision:state.revision,fixes:lastSaveFixReport.map(f=>f.key)};
+  })()`);
+  check('숫자 범위·열거형 저장 값을 규칙표로 보정', norm.cash === 0 && norm.usd === 0 && norm.loanRate === 1 && norm.speed === 5 && norm.marketSeconds === 0 && norm.riskScenario === 'base' && norm.targetGoal === 1000000 && norm.revision === 0, JSON.stringify(norm));
+  check('보정한 항목을 보고', ['cash', 'usd', 'loanRate', 'speed', 'marketSeconds', 'riskScenario', 'targetGoal', 'revision'].every(k => norm.fixes.includes(k)), JSON.stringify(norm.fixes));
+
+  const clean = g.run(`(()=>{ clearGame(true); const d=JSON.parse(JSON.stringify(buildSaveData())); applySaveData(d); return lastSaveFixReport.length; })()`);
+  check('정상 저장 파일은 보정 보고가 없음', clean === 0, clean);
+}
+
+// ── 노동 미니게임 키보드 조작 · 라이브 영역 ─────────────────────
+{
+  const g = createGame();
+  const laborHtml = g.run("laborGameHtml(laborJob('convenience'))");
+  check('노동 화면에 키보드 안내·라이브 영역', laborHtml.includes('Space') && laborHtml.includes('aria-live="polite"') && laborHtml.includes('role="status"'), laborHtml.slice(0, 60));
+
+  const timing = g.run(`(()=>{
+    clearGame(true);
+    workLabor('convenience');
+    const s=laborSession; if(!s) return {started:false};
+    s.pos=.5; s.accepting=true;
+    const handled=laborKeydown({key:' ',preventDefault(){}});
+    return {started:true, handled, round:laborSession?laborSession.round:'none', grade:((laborSession&&laborSession.results[0])||{}).grade};
+  })()`);
+  check('Space로 타이밍 멈추기', timing.started === true && timing.handled === true && timing.round === 1 && ['perfect', 'good', 'miss'].includes(timing.grade), JSON.stringify(timing));
+
+  const memory = g.run(`(()=>{
+    laborAbortShift(true);
+    laborSession={job:laborJob('stockcheck'),mode:'memory',round:0,results:[],paid:false,accepting:true,phase:'input',seq:['a','b'],icons:['a','b','c','d'],input:[],mistakes:0};
+    const handled=laborKeydown({key:'1',preventDefault(){}});
+    return {handled, input:((laborSession&&laborSession.input)||[]).length};
+  })()`);
+  check('숫자 키로 기억 게임 선택', memory.handled === true && memory.input >= 1, JSON.stringify(memory));
+
+  const math = g.run(`(()=>{
+    laborAbortShift(true);
+    laborSession={job:laborJob('stockcheck'),mode:'math',round:0,results:[],paid:false,accepting:true,phase:'input',q:{text:'2 × 3',answer:6,options:[5,6,7,8]},qStart:Date.now()};
+    const handled=laborKeydown({key:'2',preventDefault(){}});
+    return {handled, round:laborSession?laborSession.round:null, results:((laborSession&&laborSession.results)||[]).length};
+  })()`);
+  check('숫자 키로 계산 게임 정답 선택', math.handled === true && math.results === 1, JSON.stringify(math));
+
+  const detach = g.run(`(()=>{ laborAbortShift(true); return {session:laborSession, ref:laborKeyRef, handled:laborKeydown({key:' '})}; })()`);
+  check('노동을 끝내면 키보드 핸들러 해제', detach.session === null && detach.ref === null && detach.handled === false, JSON.stringify(detach));
 }
 
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
