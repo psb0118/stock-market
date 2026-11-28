@@ -197,8 +197,9 @@ function check(name, ok, detail) {
     return {html:document.getElementById('leaderboard').innerHTML,nav:document.getElementById('nav').innerHTML,season:seasonKey()};
   })()`);
   check('리더보드 페이지에 월간 순위·내 기록 표시', page.html.includes('리더보드') && page.html.includes('월간 순위') && page.html.includes('내 기록'), page.html.length);
-  check('리더보드에 시즌·닉네임·순위 표시', page.html.includes(page.season) && page.html.includes('테스터') && page.html.includes('3위'));
-  check('리더보드 미연결 안내 표시', page.html.includes('아직 리더보드가 연결되지 않았습니다'));
+  check('리더보드에 시즌·닉네임 표시', page.html.includes(page.season) && page.html.includes('테스터'), page.html.includes(page.season));
+  check('서버 미설정이면 클라우드 순위 카드 없음', !page.html.includes('기기 클라우드') && !page.html.includes('3위'));
+  check('로그인 전 안내 표시', page.html.includes('아직 로그인하지 않았습니다'));
   check('사이드바 리더보드 내비게이션', page.nav.includes('data-page="leaderboard"') && page.nav.includes('리더보드') && html.includes('data-page="leaderboard"'), page.nav.slice(0, 120));
 }
 

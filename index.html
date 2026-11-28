@@ -3134,7 +3134,8 @@ function openAssetDetail(kind,id){
   openModal("자산 상세",html||"<p>정보가 없습니다.</p>");
 }
 function openGlobalRanking(){
-  if(!cloudConfigured()){ openModal("글로벌 랭킹",`<p style="font-size:13px">글로벌 랭킹은 클라우드 서버가 연결되면 켜집니다. <code>meta[name=cloud-api]</code>에 Worker 주소를 넣어 주세요.</p>`); return; }
+  // 서버 주소가 없으면 기능 자체가 꺼진 상태이므로 아무 안내도 남기지 않습니다.
+  if(!cloudConfigured()) return;
   openModal("글로벌 랭킹",`<div id="rank-modal-body"><p>불러오는 중…</p></div>`);
   cloudCall(`/api/leaderboard?season=${encodeURIComponent(seasonKey())}&limit=20`,{auth:!!cloudCreds()}).then(d=>{
     const rows=((d&&d.entries)||[]).map(e=>`<div class="rank-row"><b>${e.rank}</b><span>${escHtml(e.nickname)}${e.verified?` <span class="pill ok" title="저장 파일과 대조해 검증">검증</span>`:""}</span><span>${won(e.score)}</span></div>`).join("");
@@ -4996,9 +4997,7 @@ function escHtml(s){
 }
 
 function cloudPanelHTML(msg){
-  if(!CLOUD_API){
-    return `<p style="font-size:13px;">클라우드 저장과 월간 리더보드는 아직 꺼져 있습니다. <code>meta[name=cloud-api]</code>에 Worker 주소를 넣으면 켜집니다.</p>`;
-  }
+  if(!CLOUD_API) return "";
   const creds=cloudCreds();
   if(!creds){
     return `<div class="inline-form">
@@ -5740,7 +5739,7 @@ async function firebaseLeaderboard(){
     const snap=await api.db.getDocs(q);
     const rows=snap.docs.map((d,i)=>{ const x=d.data()||{}; return `<div class="rank-row${fbUser&&x.uid===fbUser.uid?" me":""}"><b>${i+1}</b><span>${escHtml(x.nickname||"익명")}</span><span>${won(x.score||0)}</span></div>`; }).join("");
     const box=document.getElementById("fb-board");
-    if(box) box.innerHTML=(rows||`<p>이번 시즌 기록이 없습니다.</p>`)+`<p class="muted-sm" style="margin-top:8px">시즌 ${seasonKey()} · 상위 20명 · 순위는 로그인한 Google 계정의 순자산입니다.</p><p class="muted-sm">Google 랭킹은 Firestore에 클라이언트가 기록하므로 서버 검증이 없습니다. 저장 파일과 대조한 검증 순위는 <b>기기 연결 클라우드</b>의 글로벌 랭킹을 봐 주세요.</p>`;
+    if(box) box.innerHTML=(rows||`<p>이번 시즌 기록이 없습니다.</p>`)+`<p class="muted-sm" style="margin-top:8px">시즌 ${seasonKey()} · 상위 20명 · 순위는 로그인한 Google 계정의 순자산입니다.</p><p class="muted-sm">Google 랭킹은 Firestore에 이 기기가 기록하므로 서버 검증이 없습니다.</p>`;
   }catch(e){
     const info=firebaseNoteError(e,"리더보드");
     const box=document.getElementById("fb-board");
@@ -6219,13 +6218,13 @@ function leaderboardPage(){
       <div class="metric"><small>내 닉네임</small><b>${escHtml(nickname)}</b><span class="muted-sm">시즌 ${season}</span></div>
       <div class="metric"><small>현재 순자산</small><b>${won(net)}</b><span class="muted-sm">${currentGrade()} · ${currentTitle()}</span></div>
       <div class="metric"><small>최고 순자산</small><b>${won(peak)}</b><span class="muted-sm">이번 시즌 기준</span></div>
-      <div class="metric"><small>기기 클라우드 순위</small><b>${cloudRank}</b><span class="muted-sm">${cloudOn?"연결됨":"클라우드 미연결"}</span></div>
+      ${cloudOn?`<div class="metric"><small>기기 클라우드 순위</small><b>${cloudRank}</b><span class="muted-sm">연결됨</span></div>`:""}
     </section>
     <section class="section"><div class="section-head"><h3>월간 순위</h3><span class="pill">${season}</span></div>
       <div class="panel">
-        <p class="muted-sm">순위는 저장 파일의 순자산을 서버가 대조해 검증한 기록입니다. Google 로그인 또는 기기 클라우드 연결이 필요합니다.</p>
+        <p class="muted-sm">Google 계정으로 로그인하면 이번 시즌 순자산이 월간 순위에 올라갑니다. 기록은 이 기기에서 전송됩니다.</p>
         <div class="button-row" style="margin-top:10px">${buttons}</div>
-        ${!fbOn&&!cloudOn?`<div class="notice" style="margin-top:10px">아직 리더보드가 연결되지 않았습니다. 설정 → Google 계정에서 로그인하거나 기기 클라우드를 연결하면 순위에 참여할 수 있습니다.</div>`:""}
+        ${!fbOn?`<div class="notice" style="margin-top:10px">아직 로그인하지 않았습니다. 설정 → Google 계정에서 로그인하면 순위에 참여할 수 있습니다.</div>`:""}
       </div>
     </section>
     <section class="section"><div class="section-head"><h3>내 기록</h3><span class="pill">로컬 저장 기준</span></div>

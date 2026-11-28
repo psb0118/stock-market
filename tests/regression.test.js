@@ -610,7 +610,12 @@ const RESET = total => `
   g.run('state.cloud={nickname:"x",auto:true,revision:4}; saveGame(); state.cloud={}; loadGame(); 1');
   check('클라우드 설정 저장/복원', g.run('state.cloud.nickname') === 'x' && g.run('state.cloud.revision') === 4);
   g.run('setCloudApi(""); 1');
-  check('클라우드 패널: 서버 미설정 안내', g.run('cloudPanelHTML()').includes('꺼져'));
+  check('서버 미설정이면 클라우드 패널을 그리지 않음', g.run('cloudPanelHTML()') === '', g.run('cloudPanelHTML()'));
+  const noRank = g.run(`(()=>{ document.getElementById('modalRoot').innerHTML=''; openGlobalRanking(); return document.getElementById('modalRoot').innerHTML||''; })()`);
+  check('서버 미설정이면 글로벌 랭킹 모달도 안내도 없음', noRank === '', noRank.slice(0, 60));
+  const board = g.run(`(()=>{ leaderboardPage(); return document.getElementById('leaderboard').innerHTML||''; })()`);
+  check('서버 미설정이면 리더보드에 클라우드 항목이 없음', !board.includes('기기 클라우드') && !board.includes('클라우드 미연결'), board.slice(0, 60));
+  check('리더보드 문구가 Google 로그인 기준', board.includes('Google 계정으로 로그인'));
   g.run('setCloudApi("http://127.0.0.1:8787"); 1');
   check('클라우드 패널: 연결 폼', g.run('cloudPanelHTML()').includes('cloud-name'));
   g.run('setCloudCreds({playerId:"p1",token:"a".repeat(64),nickname:"테스터"}); state.cloud={nickname:"테스터",auto:false,revision:2,lastSync:0}; 1');
