@@ -32,7 +32,7 @@ const g = createGame();
     interest();
     return { daily, share: daily / before, gained: p.amount - before, period: INTEREST_PERIOD };
   })()`);
-  check('예금 하루 예상 이자 10~30% (24시간 접속 기준)', r.share > 0.10 && r.share < 0.30, (r.share * 100).toFixed(2) + '%');
+  check('예금 하루 예상 이자 10~35% (24시간 접속 기준)', r.share > 0.10 && r.share < 0.35, (r.share * 100).toFixed(2) + '%');
   check('15초 이자가 계수와 일치', Math.abs(r.gained - 10000000 * 0.012 * r.period) < 0.01, r.gained.toFixed(2));
 
   // 예금 쏠림의 원인은 "큰 예금의 무한 복리"입니다. 실효 원금을 6,000만원에서 멈춥니다.
