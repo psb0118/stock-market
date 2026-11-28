@@ -81,22 +81,22 @@ function fakeDb(calls) {
   };
 }
 
-// ── 접속 중인 사용자만 추리기 ───────────────────────────────
+// ── 접속자 정렬 · 하트비트 신선도 ────────────────────────────
 {
   const g = createGame();
   const result = g.run(`(()=>{
     const now=Date.now();
-    fbUser={uid:'admin',email:'soundpsb1@gmail.com',displayName:'관리자'};
-    const list=fbOnlineFromDocs([
+    const list=fbAdminFromDocs([
       {id:'u1',data:()=>({uid:'u1',nickname:'활성',email:'a@x.com',online:true,lastSeen:now-1000})},
       {id:'u2',data:()=>({uid:'u2',nickname:'오래됨',email:'b@x.com',online:true,lastSeen:now-200000})},
       {id:'u3',data:()=>({uid:'u3',nickname:'오프라인',email:'c@x.com',online:false,lastSeen:now})},
       {id:'u4',data:()=>({uid:'u4',nickname:'방금',email:'d@x.com',online:true,lastSeen:now-2000})}
-    ],now);
+    ]);
     return {ids:list.map(x=>x.uid), online:fbPresenceOnline({online:true,lastSeen:now-1000},now), stale:fbPresenceOnline({online:true,lastSeen:now-200000},now)};
   })()`);
-  check('최근 접속자만 목록에 포함', result.ids.join(',') === 'u1,u4', result.ids.join(','));
-  check('오프라인·오래된 하트비트 제외', result.online === true && result.stale === false);
+  check('접속 중인 사용자를 먼저 정렬', result.ids[0] === 'u1' && result.ids[1] === 'u4', result.ids.join(','));
+  check('오프라인 사용자도 목록에 남김', result.ids.includes('u3') && result.ids.length === 4, result.ids.join(','));
+  check('오래된 하트비트는 오프라인 취급', result.online === true && result.stale === false);
 }
 
 // ── 관리자 전체 사용자 목록(오프라인 포함) ───────────────────

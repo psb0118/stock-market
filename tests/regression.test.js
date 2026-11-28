@@ -593,35 +593,14 @@ const RESET = total => `
   check('index.html PWA 연결', html.includes('rel="manifest"') && html.includes('serviceWorker'));
 }
 
-// ── 9. 클라우드 저장·리더보드 ──────────────────
+// ── 9. 리더보드 시즌 키 · 기기 클라우드 클라이언트 제거 확인 ──────
 {
   const g = createGame();
-  check('클라우드 기본 비활성', g.run('cloudConfigured()') === false);
-  g.run('setCloudApi("http://127.0.0.1:8787/")');
-  check('서버 주소 설정(끝 슬래시 제거)', g.run('cloudConfigured()') === true && g.run('CLOUD_API') === 'http://127.0.0.1:8787', g.run('CLOUD_API'));
   check('시즌 키 YYYY-MM', /^\d{4}-\d{2}$/.test(g.run('seasonKey()')), g.run('seasonKey()'));
-  g.run('setCloudCreds({playerId:"p1",token:"a".repeat(64),nickname:"테스터"}); 1');
-  check('연결 정보 저장', g.run('cloudCreds().nickname') === '테스터');
-  check('내보내기 데이터에 토큰 없음', !g.run('JSON.stringify(buildSaveData())').includes('a'.repeat(64)));
-  g.run('setCloudCreds(null); 1');
-  check('연결 해제', g.run('cloudCreds()') === null);
-  g.run('applySaveData({state:{cash:1000000},stocks:[],products:[]}); 1');
-  check('구버전 세이브에 클라우드 기본값', g.run('state.cloud.auto===false && state.cloud.revision===0'));
-  g.run('state.cloud={nickname:"x",auto:true,revision:4}; saveGame(); state.cloud={}; loadGame(); 1');
-  check('클라우드 설정 저장/복원', g.run('state.cloud.nickname') === 'x' && g.run('state.cloud.revision') === 4);
-  g.run('setCloudApi(""); 1');
-  check('서버 미설정이면 클라우드 패널을 그리지 않음', g.run('cloudPanelHTML()') === '', g.run('cloudPanelHTML()'));
-  const noRank = g.run(`(()=>{ document.getElementById('modalRoot').innerHTML=''; openGlobalRanking(); return document.getElementById('modalRoot').innerHTML||''; })()`);
-  check('서버 미설정이면 글로벌 랭킹 모달도 안내도 없음', noRank === '', noRank.slice(0, 60));
+  check('기기 클라우드 클라이언트가 남아 있지 않음', ['cloudConfigured', 'cloudPanelHTML', 'openGlobalRanking', 'cloudCall', 'CLOUD_API'].every(n => g.run(`typeof ${n}`) === 'undefined'));
   const board = g.run(`(()=>{ leaderboardPage(); return document.getElementById('leaderboard').innerHTML||''; })()`);
-  check('서버 미설정이면 리더보드에 클라우드 항목이 없음', !board.includes('기기 클라우드') && !board.includes('클라우드 미연결'), board.slice(0, 60));
-  check('리더보드 문구가 Google 로그인 기준', board.includes('Google 계정으로 로그인'));
-  g.run('setCloudApi("http://127.0.0.1:8787"); 1');
-  check('클라우드 패널: 연결 폼', g.run('cloudPanelHTML()').includes('cloud-name'));
-  g.run('setCloudCreds({playerId:"p1",token:"a".repeat(64),nickname:"테스터"}); state.cloud={nickname:"테스터",auto:false,revision:2,lastSync:0}; 1');
-  const panel = g.run('cloudPanelHTML()');
-  check('클라우드 패널: 연결됨·순위', panel.includes('지금 올리기') && panel.includes('월간 리더보드'));
-  check('클라우드 패널: 닉네임 이스케이프', g.run('escHtml("<b>x</b>")') === '&lt;b&gt;x&lt;/b&gt;');
+  check('리더보드는 Google 로그인 기준', board.includes('Google 계정으로 로그인') && !board.includes('기기 클라우드'), board.slice(0, 60));
+  check('저장 데이터에 클라우드 연결 정보가 없음', !('cloud' in g.run('buildSaveData().state')) && !g.run('JSON.stringify(buildSaveData())').includes('mp_cloud_creds'));
 }
 
 // ── 10. 대규모 확장: 8단계 등급·부동산·금은·기업·주간 미션·만기·설정 ──
@@ -742,8 +721,8 @@ const RESET = total => `
   check('자동 매매 익절', g.run("stock('future_ai').own") === 0 && g.run('state.cash') > 0, Math.round(g.run('state.cash')));
   g.run("setNotify('dividend',false); 1");
   check('알림 설정 저장', g.run('state.notify.dividend') === false);
-  g.run("setNotify('dividend',true); setCloudApi(''); portfolio(); 1");
-  check('클라우드 미설정 시 UI 숨김', !g.run("document.getElementById('portfolio').innerHTML").includes('클라우드 저장·랭킹'));
+  g.run("setNotify('dividend',true); portfolio(); 1");
+  check('포트폴리오에 클라우드 저장·랭킹 섹션이 없음', !g.run("document.getElementById('portfolio').innerHTML").includes('클라우드 저장·랭킹'));
 }
 
 // ── 11. 고정 시드 1시간 시뮬레이션(자산 폭주 회귀) ─────────────────

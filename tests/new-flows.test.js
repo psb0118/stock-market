@@ -191,7 +191,7 @@ function check(name, ok, detail) {
 {
   const g = createGame();
   const page = g.run(`(()=>{
-    state.cloud=Object.assign({},state.cloud,{nickname:'테스터',rank:3});
+    fbUser={uid:'u1',displayName:'테스터'};
     leaderboardPage();
     nav();
     return {html:document.getElementById('leaderboard').innerHTML,nav:document.getElementById('nav').innerHTML,season:seasonKey()};
@@ -619,7 +619,6 @@ function check(name, ok, detail) {
     state.weekly={key:evil,counts:{},claimed:{}};
     state.ipo={offer:{id:'ipo_med',name:evil,ticker:evil,theme:evil,group:'domestic',vol:.038,price:42000,qty:60000,closesAt:99999,subscribed:0,mine:0,reminded:false},nextAt:0,history:[]};
     state.disclosures=[{at:0,stockId:'future_ai',name:evil,title:evil,text:evil,move:1}];
-    state.cloud=Object.assign({},state.cloud,{nickname:evil});
     state.watch=[];
     const stock0=stocks[0]; stock0.own=1; stock0.avgBuy=stock0.start;
     products[0].amount=100000;
@@ -806,6 +805,33 @@ function check(name, ok, detail) {
     return {backups:list.length, cashes:list.map(b=>JSON.parse(b.data).state.cash)};
   })()`);
   check('초기화 뒤 쌓이는 백업에 예전 진행이 없음', fresh.cashes.every(c => c !== 777 && c !== 888), JSON.stringify(fresh));
+}
+
+// ── 저장 파일 가져오기 안전장치 · 옛 클라우드 열쇠 정리 ─────────
+{
+  const g = createGame();
+
+  const closed = g.run(`(()=>{
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    previewImportSave(data,'x.json');
+    closeModal();
+    return {pending:pendingImport, modal:document.getElementById('modalRoot').innerHTML||''};
+  })()`);
+  check('미리보기를 닫으면 대기 중인 파일도 버림', closed.pending === null && closed.modal === '', JSON.stringify(closed));
+
+  const oversize = g.run(`(()=>{
+    const alerts=[]; const orig=alert; alert=m=>alerts.push(String(m));
+    try{ handleImport({target:{files:[{size:IMPORT_MAX_BYTES+1,name:'big.json'}],value:'x'}}); } finally { alert=orig; }
+    return alerts;
+  })()`);
+  check('5MB 넘는 저장 파일은 읽지 않음', oversize.length === 1 && oversize[0].includes('너무 큽니다'), JSON.stringify(oversize));
+
+  const legacy = g.run(`(()=>{
+    localStorage.setItem('mp_cloud_creds','{"token":"x"}');
+    clearGame(true);
+    return localStorage.getItem('mp_cloud_creds');
+  })()`);
+  check('초기화하면 옛 클라우드 연결 열쇠도 삭제', legacy === null);
 }
 
 console.log(`\n== ${pass}/${pass + fail} passed ==`);

@@ -46,16 +46,14 @@ npm run smoke               # API 통합 테스트
 
 로컬 D1 데이터는 `server/.wrangler/state`에 남습니다. 초기화하려면 그 폴더를 지우고 `db:local`을 다시 실행하세요.
 
-## 게임 연결
+## 게임 연결 (현재 제거됨)
 
-`index.html`의 `<head>`에 있는 `meta[name="cloud-api"]` 값을 Worker 주소로 바꾸면 클라우드 섹션이 켜집니다.
+클라우드 저장을 당분간 접기로 하면서 `index.html`의 Worker 클라이언트 코드와
+`meta[name="cloud-api"]`를 제거했습니다. 이 서버는 나중에 다시 켤 때를 위해 남겨 둡니다.
 
-```html
-<meta name="cloud-api" content="https://mp-cloud.<계정>.workers.dev">
-```
-
-비워 두면(현재 상태) 클라우드 기능은 꺼져 있고 기존 게임은 그대로 동작합니다.
-로컬 테스트에서는 페이지에서 `setCloudApi("http://127.0.0.1:8787")`를 호출하면 됩니다.
+다시 붙이려면 삭제 직전 커밋(`d3d2493`)의 `index.html`에서 `cloud*` 함수 묶음,
+`openGlobalRanking`, 설정 섹션을 복원하고 `meta[name="cloud-api"]`를 Worker 주소로
+채우면 됩니다. 서버 API·D1 스키마는 그대로 쓸 수 있습니다.
 
 ## 배포 절차 (승인 후)
 

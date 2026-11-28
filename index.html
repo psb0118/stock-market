@@ -4,8 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <meta name="theme-color" content="#17202b" />
-<!-- 클라우드 저장·리더보드 Worker 주소. 비워 두면 기능이 꺼집니다. -->
-<meta name="cloud-api" content="" />
 <!-- Firebase 웹 앱 설정(Google 로그인·클라우드 저장·리더보드). 비워 두면 기능이 꺼집니다. -->
 <meta name='firebase-config' content='{"apiKey":"AIzaSyCcHoJw8EIMmU3ikZdrnsZRhQB0lWeunok","authDomain":"stock-market-889c1.firebaseapp.com","projectId":"stock-market-889c1","storageBucket":"stock-market-889c1.firebasestorage.app","messagingSenderId":"25859849736","appId":"1:25859849736:web:8e85865b59bd9db3245bbd","measurementId":"G-HJLY6MB6LW"}' />
 <link rel="manifest" href="manifest.webmanifest" />
@@ -186,7 +184,6 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
 /* 인라인 4열 행이 모바일에서 화면을 밀어내지 않도록 클래스로 전환한 행 */
 @media(max-width:850px){.kv-row,.order-row{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.row,.kv-row,.order-row{grid-template-columns:1fr;gap:6px}.dash{padding:12px}.dash-foot{font-size:12px}}
-.cloud-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
 .rank{display:grid;gap:6px;margin-top:8px}
 .rank-row{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center;padding:7px 9px;border-radius:7px;background:#f5f8fa;font-size:13px}
 .rank-row.me{background:#e7f5ef;font-weight:700}
@@ -1170,7 +1167,6 @@ const state={
   speed: 1, paused: false, lastSeen: 0,
   revision: 0, savedAt: 0, // 저장 리바이전(기기 간 충돌 판단용)
   seasonBase: START_CASH, seasonBaseIndex: 1000, reportMonth: "", lastGrade: "브론즈",
-  cloud: {nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:"", verified:false},
   wealthFeePaid: 0, wealthFeeAt: 0, // 고액 자산 관리 수수료 누적·마지막 차감 시각
   // 자동 수익(기업·주식 배당, 채권 이자, 임대료) 처리 방식: auto 즉시 지급 · manual 모아 받기 · off 받지 않음
   autoIncome: {mode:"auto", pending:0, detail:{}, skipped:0},
@@ -1777,8 +1773,11 @@ function openModal(title,html){
   root.classList.add("on");
   if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","false");
 }
+let pendingImport=null;
+const LEGACY_CLOUD_CREDS_KEY="mp_cloud_creds";
 function closeModal(){
   laborAbortShift(true);
+  pendingImport=null;
   const root=$("modalRoot"); if(!root) return;
   root.classList.remove("on");
   if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","true");
@@ -1911,11 +1910,6 @@ function saveAutoSettings(enable){
   if(nextOn && !wasOn) notify("system","자동 투자","자동 매수를 켰습니다. 화면의 🤖 배지를 누르면 바로 끌 수 있습니다.");
   else if(!nextOn && wasOn) notify("system","자동 투자","자동 매수를 껐습니다.");
   else notify("system","자동 투자",`규칙만 저장했습니다 · 자동 매수 ${nextOn?"켜짐":"꺼짐"} · 주식 ${state.auto.stockPct}% · 최소 현금 ${won(state.auto.minCash)} · ${state.auto.every}초 주기`);
-}
-function disableAuto(){
-  state.auto=Object.assign({},state.auto,{enabled:false});
-  saveGame(); if(activePage()==="settings") settingsPage(); else portfolio(); update();
-  notify("system","자동 투자","규칙을 껐습니다.");
 }
 // 자동 매매: 보유 종목이 설정한 익절/손절선에 닿으면 전량 매도합니다.
 function autoSellRules(){
@@ -3133,15 +3127,6 @@ function openAssetDetail(kind,id){
   }
   openModal("자산 상세",html||"<p>정보가 없습니다.</p>");
 }
-function openGlobalRanking(){
-  // 서버 주소가 없으면 기능 자체가 꺼진 상태이므로 아무 안내도 남기지 않습니다.
-  if(!cloudConfigured()) return;
-  openModal("글로벌 랭킹",`<div id="rank-modal-body"><p>불러오는 중…</p></div>`);
-  cloudCall(`/api/leaderboard?season=${encodeURIComponent(seasonKey())}&limit=20`,{auth:!!cloudCreds()}).then(d=>{
-    const rows=((d&&d.entries)||[]).map(e=>`<div class="rank-row"><b>${e.rank}</b><span>${escHtml(e.nickname)}${e.verified?` <span class="pill ok" title="저장 파일과 대조해 검증">검증</span>`:""}</span><span>${won(e.score)}</span></div>`).join("");
-    const body=$("rank-modal-body"); if(body) body.innerHTML=(d&&d.me?`<p style="font-size:13px">내 순위 <b>${d.me.rank}위</b> · ${won(d.me.score)}${d.me.verified?` <span class="pill ok">검증됨</span>`:""}</p>`:"")+(rows||"<p>등록된 순위가 없습니다.</p>")+"<p class='muted-sm'>검증 표시는 서버가 저장 파일의 순자산과 점수를 대조했다는 뜻입니다.</p>";
-  }).catch(e=>{ const body=$("rank-modal-body"); if(body) body.innerHTML=`<p>${escHtml(cloudErr(e))}</p>`; });
-}
 // 진행 초기화는 환생(rebirthNow)만 제공합니다. 은퇴·시즌 종료 같은 별도 초기화 경로는 두지 않습니다.
 
 // ── 일일 미션 · 업적 ───────────────────────────────
@@ -3175,7 +3160,6 @@ function isoWeekKey(){
   const w=Math.ceil(((t-new Date(Date.UTC(y,0,1)))/86400000+1)/7);
   return `${y}-W${String(w).padStart(2,"0")}`;
 }
-function weeklyMissions(){ ensureWeekly(); return WEEKLY_POOL; }
 function ensureWeekly(){
   const k=isoWeekKey();
   if(!state.weekly||state.weekly.key!==k||!state.weekly.counts||!state.weekly.claimed){
@@ -4748,10 +4732,13 @@ function exportSave(){
   addLog("저장 파일을 내보냈습니다.");
 }
 
+const IMPORT_MAX_BYTES=5*1024*1024;
 function handleImport(ev){
   const file = ev.target.files && ev.target.files[0];
   if(!file) return;
+  if(file.size>IMPORT_MAX_BYTES){ alert("저장 파일이 너무 큽니다. 5MB 이하 파일을 선택해 주세요."); ev.target.value=""; return; }
   const reader = new FileReader();
+  reader.onerror = () => alert("저장 파일을 읽지 못했습니다. 다시 선택해 주세요.");
   reader.onload = () => {
     try {
       previewImportSave(JSON.parse(String(reader.result)), file.name);
@@ -4764,7 +4751,6 @@ function handleImport(ev){
 }
 
 // 저장 파일을 바로 덮어쓰지 않고, 무엇이 들어오는지 먼저 보여 줍니다.
-let pendingImport=null;
 function saveFileSummary(data){
   const st=(data && typeof data==="object" && data.state && typeof data.state==="object")?data.state:null;
   if(!st) return null;
@@ -4822,219 +4808,9 @@ function applyPendingImport(){
   }
 }
 
-// ── 클라우드 저장·월간 리더보드 ─────────────────────────────────
-const CLOUD_CREDS_KEY="mp_cloud_creds";
-let CLOUD_API="";
-try{
-  const cm=document.querySelector('meta[name="cloud-api"]');
-  CLOUD_API=(cm && cm.getAttribute ? (cm.getAttribute("content")||"") : "").trim().replace(/\/+$/,"");
-}catch(e){ CLOUD_API=""; }
-let cloudBoard=null, cloudBusy=false;
-
-function cloudConfigured(){ return !!CLOUD_API; }
-function setCloudApi(url){ CLOUD_API=String(url||"").trim().replace(/\/+$/,""); try{ portfolio(); }catch(e){} }
-function cloudCreds(){
-  try{ const v=JSON.parse(localStorage.getItem(CLOUD_CREDS_KEY)||"null"); return v&&v.playerId&&v.token?v:null; }catch(e){ return null; }
-}
-function setCloudCreds(v){
-  try{ if(v) localStorage.setItem(CLOUD_CREDS_KEY,JSON.stringify(v)); else localStorage.removeItem(CLOUD_CREDS_KEY); }catch(e){}
-}
 function seasonKey(){ return new Date().toISOString().slice(0,7); }
-function cloudErr(e){
-  if(saveStaleRebirth(e)) return SAVE_STALE_REBIRTH_MSG;
-  const map={no_api:"서버 주소가 설정되지 않았습니다.",unauthorized:"연결이 만료되었습니다. 다시 연결해 주세요.",nickname_taken:"이미 사용 중인 닉네임입니다.",rate_limited:"요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",bad_nickname:"닉네임은 한글/영문/숫자 2~16자입니다.",conflict:"서버에 더 최신 저장이 있습니다.",too_large:"저장 파일이 너무 큽니다.",bad_save:"서버가 저장 데이터를 거부했습니다.",bad_json:"요청 형식이 올바르지 않았습니다.",no_save:"서버에 저장된 진행이 없습니다."};
-  if(e&&e.status===429) return map.rate_limited;
-  if(e&&(map[e.code]||map[e.message])) return map[e.code]||map[e.message];
-  return "네트워크 오류가 발생했습니다. 연결을 확인해 주세요.";
-}
-
-async function cloudCall(path,{method="GET",body,auth=true,timeout=8000}={}){
-  if(!CLOUD_API) throw Object.assign(new Error("no_api"),{code:"no_api"});
-  const creds=cloudCreds();
-  const headers={"content-type":"application/json"};
-  if(auth && creds) headers.authorization="Bearer "+creds.token;
-  const ctrl=typeof AbortController!=="undefined"?new AbortController():null;
-  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeout):0;
-  try{
-    const res=await fetch(CLOUD_API+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:ctrl?ctrl.signal:undefined});
-    const txt=await res.text();
-    let data=null; try{ data=txt?JSON.parse(txt):null; }catch(e){}
-    if(!res.ok){
-      const err=new Error((data&&data.error)||("http_"+res.status));
-      err.code=data&&data.error; err.status=res.status; err.data=data;
-      throw err;
-    }
-    return data;
-  } finally { if(timer) clearTimeout(timer); }
-}
-
-async function cloudRegister(){
-  if(!CLOUD_API){ notify("system","클라우드","서버 주소가 설정되지 않았습니다."); return; }
-  const input=document.getElementById("cloud-name");
-  const nickname=String(input&&input.value||"").trim();
-  if(!/^[\p{L}\p{N} ._-]{2,16}$/u.test(nickname)){ alert("닉네임은 한글/영문/숫자 2~16자로 입력해 주세요."); return; }
-  if(cloudBusy) return;
-  cloudBusy=true; cloudRenderPanel("연결 중…");
-  try{
-    const out=await cloudCall("/api/register",{method:"POST",auth:false,body:{nickname}});
-    setCloudCreds({playerId:out.playerId,token:out.token,nickname:out.nickname});
-    state.cloud=Object.assign({},state.cloud,{nickname:out.nickname,revision:0,lastSync:0});
-    saveGame();
-    cloudBusy=false;
-    notify("system","클라우드 연결",`${out.nickname} 님으로 연결했습니다.`);
-    await cloudUpload(false);
-    await cloudRefreshBoard();
-  }catch(e){
-    cloudBusy=false;
-    alert("연결하지 못했습니다: "+cloudErr(e));
-    cloudRenderPanel();
-  }
-}
-
-async function cloudUpload(force){
-  if(!CLOUD_API){ notify("system","클라우드","서버 주소가 설정되지 않았습니다."); return; }
-  if(!cloudCreds()){ notify("system","클라우드","먼저 닉네임으로 연결해 주세요."); return; }
-  if(cloudBusy) return;
-  cloudBusy=true; cloudRenderPanel("동기화 중…");
-  try{
-    const data=buildSaveData();
-    const out=await cloudCall("/api/save",{method:"PUT",body:{data,revision:state.cloud.revision||0,force:!!force}});
-    state.cloud=Object.assign({},state.cloud,{revision:out.revision,lastSync:Date.now()});
-    saveGame();
-    let extra="";
-    try{ const s=await cloudSubmitScore(); if(s&&s.rank) extra=` · 순위 ${s.rank}위`; }catch(e){}
-    cloudBusy=false;
-    notify("system","클라우드 저장",`서버에 저장했습니다.${extra}`);
-    await cloudRefreshBoard();
-  }catch(e){
-    cloudBusy=false;
-    if(e.status===409){
-      if(confirm("서버에 이 기기보다 최신 저장이 있습니다.\n확인을 누르면 이 기기 것으로 덮어쓰고, 취소하면 서버 저장을 내려받습니다.")) return cloudUpload(true);
-      return cloudDownload();
-    }
-    notify("system","클라우드 저장 실패",cloudErr(e));
-    cloudRenderPanel(cloudErr(e));
-  }
-}
-
-async function cloudSubmitScore(){
-  try{
-    const out=await cloudCall("/api/score",{method:"POST",body:{season:seasonKey(),score:Math.round(totalAssetsKRW()),revision:state.cloud.revision||0}});
-    state.cloud=Object.assign({},state.cloud,{rank:out.rank,best:out.best,season:out.season,verified:out.verified===true});
-    saveGame();
-    return out;
-  }catch(e){
-    // 서버가 저장 파일의 순자산과 점수를 대조해 거부한 경우입니다. 점수만 올려 순위를 조작할 수 없습니다.
-    if(e&&e.code==="score_mismatch"){
-      notify("system","순위 점수 검증 실패","업로드한 저장 파일의 순자산과 점수가 달라 순위에 올리지 못했습니다. 잠시 뒤 다시 저장해 주세요.");
-      return null;
-    }
-    throw e;
-  }
-}
-
-async function cloudDownload(){
-  if(!CLOUD_API||!cloudCreds()||cloudBusy) return;
-  if(!confirm("서버에 저장된 진행으로 이 기기를 덮어쓸까요?\n현재 진행은 사라집니다.")) return;
-  cloudBusy=true; cloudRenderPanel("내려받는 중…");
-  try{
-    const out=await cloudCall("/api/save");
-    if(!out||!out.data) throw Object.assign(new Error("no_save"),{code:"no_save"});
-    applySaveData(out.data);
-    state.cloud=Object.assign({},state.cloud,{revision:out.revision,lastSync:Date.now()});
-    saveGame(); banking(); fxPage(); news(); portfolio(); update(); updateBell(); updateSpeedUI();
-    cloudBusy=false;
-    notify("system","클라우드 복원","서버 저장을 불러왔습니다.");
-    await cloudRefreshBoard();
-  }catch(e){
-    cloudBusy=false;
-    alert(e.code==="no_save"||e.status===404?"서버에 저장된 진행이 아직 없습니다.":"내려받지 못했습니다: "+cloudErr(e));
-    cloudRenderPanel();
-  }
-}
-
-async function cloudRefreshBoard(){
-  if(!CLOUD_API||cloudBusy) return;
-  try{
-    const q=`/api/leaderboard?season=${encodeURIComponent(seasonKey())}&limit=10`;
-    cloudBoard=await cloudCall(q,{auth:!!cloudCreds()});
-    if(cloudBoard&&cloudBoard.me) state.cloud=Object.assign({},state.cloud,{rank:cloudBoard.me.rank,best:cloudBoard.me.score});
-    cloudRenderPanel();
-  }catch(e){ cloudRenderPanel(cloudErr(e)); }
-}
-
-function cloudSetAuto(on){
-  state.cloud=Object.assign({},state.cloud,{auto:!!on});
-  saveGame();
-  if(on) cloudAutoTick(true);
-  cloudRenderPanel();
-}
-
-function cloudUnlink(){
-  if(!confirm("이 기기에서 클라우드 연결을 해제할까요?\n서버에 저장된 데이터는 남습니다.")) return;
-  setCloudCreds(null);
-  state.cloud=Object.assign({},state.cloud,{nickname:"",auto:false,revision:0,lastSync:0,rank:0,best:0});
-  cloudBoard=null;
-  saveGame();
-  cloudRenderPanel();
-}
-
-function cloudAutoTick(force){
-  if(!CLOUD_API||cloudBusy) return;
-  if(!cloudCreds()) return;
-  if(!force && !(state.cloud&&state.cloud.auto)) return;
-  if(!force && Date.now()-(state.cloud.lastSync||0)<60000) return;
-  if(typeof navigator!=="undefined" && navigator.onLine===false) return;
-  cloudUpload(false);
-}
-
-function cloudBoot(){
-  if(CLOUD_API && cloudCreds()) cloudRefreshBoard();
-}
-
 function escHtml(s){
   return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
-function cloudPanelHTML(msg){
-  if(!CLOUD_API) return "";
-  const creds=cloudCreds();
-  if(!creds){
-    return `<div class="inline-form">
-      <label>닉네임<input id="cloud-name" maxlength="16" placeholder="2~16자"></label>
-      <label>&nbsp;<button class="buy" onclick="cloudRegister()">연결하기</button></label>
-    </div>
-    <p style="font-size:12px;margin-top:8px;">닉네임과 순자산 순위가 공개됩니다. 비밀번호는 없고, 이 기기에만 저장되는 열쇠로 저장/복원합니다. 점수는 서버가 저장 파일과 대조해 검증합니다.</p>
-    ${msg?`<p style="font-size:12px;color:#b54708;">${escHtml(msg)}</p>`:""}`;
-  }
-  const c=state.cloud||{};
-  const last=c.lastSync?new Date(c.lastSync).toLocaleTimeString("ko-KR"):"아직 없음";
-  const rows=((cloudBoard&&cloudBoard.entries)||[]).map(e=>`<div class="rank-row${e.playerId===creds.playerId?" me":""}"><b>${e.rank}</b><span>${escHtml(e.nickname)}${e.verified?` <span class="pill ok" title="서버가 저장 파일과 대조해 검증한 점수">검증</span>`:""}</span><span>${won(e.score)}</span></div>`).join("");
-  const me=(cloudBoard&&cloudBoard.me)||(c.rank?{rank:c.rank,score:c.best}:null);
-  return `<div class="cloud-head">
-      <div><b>${escHtml(creds.nickname)}</b> <span class="pill">연결됨</span></div>
-      <div style="font-size:12px;">마지막 동기화 ${last} · 서버 저장 #${c.revision||0}</div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-      <button class="buy" onclick="cloudUpload(false)">지금 올리기</button>
-      <button class="ghost" onclick="cloudDownload()">서버에서 내려받기</button>
-      <button class="ghost" onclick="cloudRefreshBoard()">순위 새로고침</button>
-      <button class="sell" onclick="cloudUnlink()">연결 해제</button>
-    </div>
-    <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;">
-      <input type="checkbox" ${c.auto?"checked":""} onchange="cloudSetAuto(this.checked)"> 60초마다 자동으로 서버에 저장
-    </label>
-    ${msg?`<p style="font-size:12px;color:#b54708;">${escHtml(msg)}</p>`:""}
-    <h3 style="margin:16px 0 8px;font-size:15px;">월간 리더보드 · ${seasonKey()}</h3>
-    ${me?`<p style="font-size:13px;">내 순위 <b>${me.rank}위</b> · ${won(me.score)}${me.verified?` <span class="pill ok">검증됨</span>`:""}</p>`:`<p style="font-size:12px;">순위를 불러오는 중입니다.</p>`}
-    <p class="muted-sm">점수는 업로드한 저장 파일의 순자산과 대조해 검증됩니다. 검증 표시가 없는 점수는 신뢰할 수 없습니다.</p>
-    <div class="rank">${rows||`<div style="font-size:12px;">아직 등록된 순위가 없습니다.</div>`}</div>
-    <p style="font-size:11px;color:#667085;margin-top:8px;">서버가 저장 파일에서 순자산을 다시 계산해 점수와 대조하지만, 저장 파일 자체를 위조하는 것까지는 막지 못합니다. 시즌은 매월 1일(UTC)에 바뀝니다.</p>`;
-}
-
-function cloudRenderPanel(msg){
-  const el=document.getElementById("cloud-panel");
-  if(el) el.innerHTML=cloudPanelHTML(msg);
 }
 
 // ── Firebase: Google 로그인 · 클라우드 저장 · 실제 리더보드 ─────────
@@ -5208,12 +4984,6 @@ function fbPresenceOnline(data, now){
   if(!data || data.online!==true) return false;
   const at=fbMillis(data.lastSeen);
   return !!at && (now-at)<=FB_ONLINE_WINDOW_MS;
-}
-// Firestore 문서 배열을 최근 접속 순으로 추리고, 오래된 하트비트는 제외합니다.
-function fbOnlineFromDocs(docs, now){
-  return (docs||[]).map(d=>Object.assign({id:(d&&d.id)||""}, d&&d.data?d.data():(d||{})))
-    .filter(u=>fbPresenceOnline(u, now))
-    .sort((a,b)=>fbMillis(b.lastSeen)-fbMillis(a.lastSeen));
 }
 // 관리자 화면은 접속 중인 사용자뿐 아니라 오프라인 사용자도 보여 줍니다.
 // 접속 중인 사용자를 먼저, 그 안에서는 최근 접속 순으로 정렬합니다.
@@ -6195,7 +5965,7 @@ function economyPage(){
         <label class="field-label">목표 금액 (원)<input id="goal-target" type="number" min="1000000" step="10000000" value="${state.targetGoal||1000000000}" onchange="setTargetGoal(this.value)"></label>
         <div class="bar" style="margin-top:10px"><span style="width:${Math.min(100,(netAssetsKRW()/Math.max(1,state.targetGoal||1))*100).toFixed(1)}%"></span></div>
         <p class="muted-sm" style="margin-top:6px">${won(netAssetsKRW())} / ${won(state.targetGoal||1000000000)}</p>
-        <div class="button-row" style="margin-top:10px">${cloudConfigured()?'<button class="ghost" onclick="openGlobalRanking()">글로벌 랭킹</button>':''}<button class="ghost" onclick="show('rebirth')">환생</button><button class="ghost" onclick="show('settings')">설정</button></div>
+        <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="show('rebirth')">환생</button><button class="ghost" onclick="show('settings')">설정</button></div>
       </div></section>
     </div>`;
 }
@@ -6203,14 +5973,11 @@ function economyPage(){
 // ── 리더보드 ─────────────────────────────────────────────────
 function leaderboardPage(){
   const fbOn=typeof firebaseConfigured==="function" && firebaseConfigured();
-  const cloudOn=typeof cloudConfigured==="function" && cloudConfigured();
   const net=netAssetsKRW(), peak=Math.max(state.peakNet||0,net);
-  const nickname=(state.cloud&&state.cloud.nickname)||(typeof fbUser!=="undefined"&&fbUser&&fbUser.displayName)||"게스트";
+  const nickname=(typeof fbUser!=="undefined"&&fbUser&&fbUser.displayName)||"게스트";
   const season=seasonKey();
-  const cloudRank=state.cloud&&state.cloud.rank?`${state.cloud.rank}위`:"기록 없음";
   const buttons=[
     fbOn?`<button class="buy" onclick="firebaseLeaderboard()">Google 리더보드 보기</button>`:`<button class="ghost" onclick="show('settings')">Google 로그인 설정</button>`,
-    cloudOn?`<button class="ghost" onclick="openGlobalRanking()">기기 클라우드 랭킹</button>`:"",
     `<button class="ghost" onclick="leaderboardPage()">새로고침</button>`
   ].filter(Boolean).join("");
   $("leaderboard").innerHTML=`${pageHeader("RANKING","리더보드","월간 순자산 순위와 내 기록을 한곳에서 확인합니다.",buttons)}
@@ -6218,7 +5985,6 @@ function leaderboardPage(){
       <div class="metric"><small>내 닉네임</small><b>${escHtml(nickname)}</b><span class="muted-sm">시즌 ${season}</span></div>
       <div class="metric"><small>현재 순자산</small><b>${won(net)}</b><span class="muted-sm">${currentGrade()} · ${currentTitle()}</span></div>
       <div class="metric"><small>최고 순자산</small><b>${won(peak)}</b><span class="muted-sm">이번 시즌 기준</span></div>
-      ${cloudOn?`<div class="metric"><small>기기 클라우드 순위</small><b>${cloudRank}</b><span class="muted-sm">연결됨</span></div>`:""}
     </section>
     <section class="section"><div class="section-head"><h3>월간 순위</h3><span class="pill">${season}</span></div>
       <div class="panel">
@@ -6299,7 +6065,7 @@ function settingsPage(){
     <section class="settings-section"><h3>데이터</h3><div class="panel">${savePanelHtml()}</div></section>
     <section class="settings-section"><h3>진단 정보</h3><div class="panel">${diagPanelHtml()}</div></section>
     <section class="settings-section"><h3>Google 계정 · 실제 리더보드</h3><div class="panel"><div id="firebase-panel">${firebasePanelHtml()}</div></div></section>
-    ${CLOUD_API?`<section class="settings-section"><h3>기기 연결 클라우드</h3><div class="panel"><div id="cloud-panel">${cloudPanelHTML()}</div></div></section>`:""}`;
+    `;
 }
 
 // ── 환생 ────────────────────────────────────────────────────
@@ -6694,7 +6460,9 @@ function init(){
   const initialStats=document.querySelector(".stats"); if(initialStats) initialStats.classList.add("hidden");
   update();
   recordAssetHistory();
-  ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); cloudBoot(); firebaseBoot();
+  // 기기 클라우드 저장을 접으면서 남은 옛 연결 열쇠도 기기에서 지웁니다.
+  try{ localStorage.removeItem(LEGACY_CLOUD_CREDS_KEY); }catch(e){}
+  ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); firebaseBoot();
   // 이전에 켜 둔 자동 매수가 남아 있으면 시작할 때 바로 알려 줍니다(몰래 매수되는 일 방지).
   renderAutoBadge();
   if(autoBuySources().length) notifyAlways("🤖 자동 매수가 켜져 있습니다", `${autoBuySources().join(" · ")}가 켜져 있습니다. 원치 않으면 눌러서 끄세요.`, {durationMs:9000, onClick:()=>{ const b=$("autoBadge"); if(b) b.click(); }});
@@ -6768,7 +6536,6 @@ function startLoops(){
   setInterval(()=>{ if(!state.settings || state.settings.autoSave!==false) saveGame(); },10000);
 }
 function gameLoop(){
-  cloudAutoTick();
   if(state.paused){ updateSpeedUI(); return; }
   const n=Math.max(1,Math.min(5,Math.round(state.speed)||1));
   for(let i=0;i<n;i++){
@@ -6985,6 +6752,8 @@ function sanitizeSaveData(data){
   if(!st) return data;
   const fixes=[];
   normalizeSaveState(st, fixes);
+  // 기기 클라우드 저장을 접으면서 남은 연결 정보는 저장 데이터에서도 지웁니다.
+  delete st.cloud;
   saveFixReport=fixes;
   // 거래 저널: 화면에 종목명·수량·금액을 그대로 그리므로 모양을 강제합니다.
   st.journal=(Array.isArray(st.journal)?st.journal:[]).filter(x=>x && typeof x==="object").slice(0,200).map(x=>({
@@ -7133,9 +6902,6 @@ function applySaveData(data) {
   if(typeof state.paused!=="boolean") state.paused=false;
   if(!Number.isFinite(state.seasonBase) || state.seasonBase<=0) state.seasonBase=totalAssetsKRW();
   if(!Number.isFinite(state.seasonBaseIndex) || state.seasonBaseIndex<=0) state.seasonBaseIndex=marketIndex();
-  const CLOUD_DEFAULT={nickname:"", auto:false, lastSync:0, revision:0, rank:0, best:0, season:""};
-  state.cloud=Object.assign({},CLOUD_DEFAULT,(state.cloud&&typeof state.cloud==="object")?state.cloud:{});
-  delete state.cloud.token; // 기기 토큰은 localStorage에만 둠(내보내기 파일에 포함 금지)
   // 확장 자산 기본값/정규화(구버전 세이브 호환)
   if(!state.estate||typeof state.estate!=="object") state.estate={};
   ESTATES.forEach(e=>{ const h=state.estate[e.id]; if(!h||typeof h!=="object") { delete state.estate[e.id]; return; } h.qty=Math.max(0,Math.floor(+h.qty||0)); h.avgBuy=Math.max(0,+h.avgBuy||0); if(!h.qty) delete state.estate[e.id]; });
@@ -7194,6 +6960,7 @@ function clearGame(skipConfirm){
   // 백업을 남기면 초기화 후에도 예전 진행을 되살릴 수 있어 초기화가 아니게 됩니다.
   localStorage.removeItem(SAVE_KEY);
   clearSaveBackups();
+  try{ localStorage.removeItem(LEGACY_CLOUD_CREDS_KEY); }catch(e){}
   state.cash = START_CASH;
   state.usd = 0;
   state.tick = 0;
@@ -8563,16 +8330,6 @@ function tickSeconds() {
   }
 }
 
-function economicMarketBias(){
-  const e=state.economy||{};
-  const growth=Number.isFinite(+e.gdpGrowth)?+e.gdpGrowth:ECON_DEFAULT.gdpGrowth;
-  const inflation=Number.isFinite(+e.inflation)?+e.inflation:ECON_DEFAULT.inflation;
-  const unemployment=Number.isFinite(+e.unemployment)?+e.unemployment:ECON_DEFAULT.unemployment;
-  const rate=Number.isFinite(+e.baseRate)?+e.baseRate:ECON_DEFAULT.baseRate;
-  const phase=e.phase==="호황"?1:e.phase==="불황"?-1:0;
-  // 성장률은 우호적, 물가·실업률·금리 상승은 할인율과 소비 위축으로 부정적입니다.
-  return growth*.00015 + phase*.0002 - (inflation-ECON_DEFAULT.inflation)*.0003 - (unemployment-ECON_DEFAULT.unemployment)*.0015 - (rate-ECON_DEFAULT.baseRate)*.0005;
-}
 function tickMarket(){
   state.tick++;
   const dayIndex=marketDayIndex(state.marketSeconds);
