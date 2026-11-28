@@ -268,13 +268,15 @@ const RESET = total => `
   check('목표 보상은 한 번만 지급', g.run('state.cash') === 30500000, g.run('state.cash'));
 
   // 배당
-  g.run(RESET(0) + `
+  // 24시간 하루 = 하루 0.5% 모델이라 120초 1회분은 "보유액 × 하루 0.5% ÷ 720"입니다.
+  const dividendPayout = g.run(RESET(0) + `
     state.cash = 0; state.usd = 0; state.loan = 0;
     stock('future_ai').own = 10; stock('future_ai').price = 100000; stock('future_ai').avgBuy = 100000;
+    const expected = 10 * 100000 * DIVIDEND_YIELD * rebirthBonus('dividend', .03);
     payDividends();
-    1;
+    ({cash: state.cash, expected});
   `);
-  check('배당금 지급', Math.round(g.run('state.cash')) === 1000, g.run('state.cash'));
+  check('배당금 지급', Math.abs(dividendPayout.cash - dividendPayout.expected) < 1e-6, JSON.stringify(dividendPayout));
 
   // 저장/불러오기 라운드트립
   g.run(`
@@ -386,7 +388,7 @@ const RESET = total => `
   check('자산 배분 비중 합 100%', Math.abs(alloc.parts.reduce((a, p) => a + p.pct, 0) - 100) < 1e-9);
   check('자산 배분 현금·주식 50%', Math.abs(alloc.parts[0].pct - 50) < 1e-6 && Math.abs(alloc.parts[2].pct - 50) < 1e-6, alloc.parts.map(p => p.pct.toFixed(1)).join('/'));
 
-  // 배당 예상: 국내 10주 × 10만원 × 0.1%
+  // 배당 예상: 국내 10주 × 10만원 × 1회분 수익률(하루 0.5% ÷ 720)
   g.run(RESET(0) + `
     state.cash = 0; state.usd = 0; state.loan = 0;
     stocks.forEach(s => { s.own = 0; });
@@ -394,7 +396,9 @@ const RESET = total => `
     state.marketSeconds = 30;
     1
   `);
-  check('예상 배당금 계산', Math.round(g.run('expectedDividend()')) === 1000, g.run('expectedDividend()'));
+  const expectedOne = g.run('10 * 100000 * DIVIDEND_YIELD');
+  check('예상 배당금 계산', Math.abs(g.run('expectedDividend()') - expectedOne) < 1e-9, g.run('expectedDividend()'));
+  check('하루 배당 합계는 보유액의 0.5%', Math.abs(g.run('DIVIDEND_YIELD * 720') - 0.005) < 1e-12, g.run('DIVIDEND_YIELD * 720'));
   check('다음 배당까지 남은 시간', g.run('secondsToDividend()') === 90, g.run('secondsToDividend()'));
 
   // 전액 상환

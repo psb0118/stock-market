@@ -284,10 +284,12 @@ function check(name, ok, detail) {
     clearGame(true); state.cash=0; state.usd=0;
     state.autoIncome={mode:'manual',pending:0,detail:{},skipped:0};
     stocks.forEach(s=>{s.own=0});
-    const s=stock('future_ai'); s.own=10; s.price=100000; payDividends();
-    return {cash:state.cash,usd:state.usd,pending:ensureAutoIncome().pending,log:(state.logs[0]||'')};
+    const s=stock('future_ai'); s.own=10; s.price=100000;
+    const expected=expectedDividend(); payDividends();
+    return {cash:state.cash,usd:state.usd,pending:ensureAutoIncome().pending,expected,log:(state.logs[0]||'')};
   })()`);
-  check('주식 배당도 모아 받기 대상', dividend.cash === 0 && dividend.pending === 1000, JSON.stringify(dividend));
+  // 대기액은 소수점 둘째 자리까지 반올림되어 쌓입니다.
+  check('주식 배당도 모아 받기 대상', dividend.cash === 0 && Math.abs(dividend.pending - Math.round(dividend.expected * 100) / 100) < 1e-9, JSON.stringify(dividend));
   check('모아 받는 배당은 지급 알림 대신 발생 로그', dividend.log.includes('배당금 발생') && dividend.log.includes('모아 둠'), dividend.log);
 
   const skippedDividend = g.run(`(()=>{
@@ -301,10 +303,10 @@ function check(name, ok, detail) {
   const foreign = g.run(`(()=>{
     stocks.forEach(x=>{x.own=0});
     const s=stocks.find(x=>isForeignStock(x)); s.own=1; s.price=100;
-    const before=ensureAutoIncome().pending; payDividends();
-    return {gain:ensureAutoIncome().pending-before,usd:state.usd,expected:100*1*DIVIDEND_YIELD*fx.usd};
+    const before=ensureAutoIncome().pending, expected=expectedDividend(); payDividends();
+    return {gain:ensureAutoIncome().pending-before,usd:state.usd,expected};
   })()`);
-  check('해외 주식 배당도 원화 대기액으로 환산', Math.abs(foreign.gain - foreign.expected) < 1e-6 && foreign.usd === 0, JSON.stringify(foreign));
+  check('해외 주식 배당도 원화 대기액으로 환산', Math.abs(foreign.gain - Math.round(foreign.expected * 100) / 100) < 1e-9 && foreign.usd === 0, JSON.stringify(foreign));
 
   const offline = g.run(`(()=>{
     clearGame(true); state.cash=0; state.usd=0; state.loan=0;

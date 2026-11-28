@@ -756,16 +756,23 @@ const TAX_ACCOUNTS=["general","isa","pension"];
 const TAX_ACCOUNT_LIMITS={general:Infinity, isa:20000000, pension:18000000}; // 계좌별 연간 납입한도
 const TAX_YEAR_SECONDS=30*86400; // 실제 30일(30게임일) = 1세금연도
 const SAVE_VERSION=4;
-const DIVIDEND_YIELD = 0.001;   // 배당수익률(보유 평가액 대비, 120초 주기)
+// 하루(24시간) 배당 0.5%를 2분마다 나눠 지급합니다. 하루가 실제 24시간이 되면서
+// 예전 120초당 0.1%(하루 72%)는 일일 시세(하루 한 번, 최대 ±50%)보다 훨씬 커졌기 때문에
+// 하루 합계를 예전 하루(0.5%)에 맞춰 다시 잡았습니다.
+const REAL_DAY_SECONDS = 86400;
+const DIVIDEND_DAILY_YIELD = 0.005;
+const DIVIDEND_YIELD = DIVIDEND_DAILY_YIELD * 120 / REAL_DAY_SECONDS; // 지급 1회분(≈0.0007%)
 const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
 // 후반 밸런스: 순자산 10억원 초과분에 60초마다 자산 관리 수수료를 부과합니다.
 // 초반(1억~10억)에는 영향이 없고, 장기 복리로 자산이 폭주하는 구간만 완만하게 눌러 줍니다.
-const WEALTH_FEE={free:1000000000, tiers:[{from:1e9,rate:0.0001},{from:1e10,rate:0.0002}]};
+// 실제 24시간 하루 기준: 10억 초과분 연 0.5%/일, 100억 초과분 1%/일(구간별 합산).
+// 예전 0.01%/60초(하루 14.4%)는 큰 자산에 너무 가혹해 "큰 자산은 벌어도 빠진다"는 불만이 생겼습니다.
+const WEALTH_FEE={free:1000000000, tiers:[{from:1e9,perDay:0.005},{from:1e10,perDay:0.01}]};
 const MAX_DAILY_GAIN = 0.50; // 하루 상한 +50%
 const MAX_DAILY_LOSS = 0.30; // 하루 하한 -30%
 const MIN_TOTAL_RATIO = 0.40; // 시작가 대비 장기 하한 -60%
 const MAX_TOTAL_RATIO = 3.00; // 시작가 대비 장기 상한 +200%
-const DIVIDEND_EVERY = 120;     // 배당 지급 주기(초)
+const DIVIDEND_EVERY = 120;     // 배당 지급 주기(초) — 하루 720회 나눠 지급
 const EARNINGS_EVERY = 180;     // 실적 발표 주기(초)
 const SAVE_KEY = "money_playground_save";
 // 환생 전에 내보낸 저장 파일을 그대로 불러오면 영구 업그레이드가 되돌아가고, 같은 자산으로
@@ -1056,7 +1063,10 @@ let products=[
 {id:"etf",name:"글로벌 인덱스 ETF",type:"펀드",min:100000,risk:"보통",amount:0,rate:0,term:0,bonus:0},
 {id:"pension",name:"연금 모의 계좌",type:"연금",min:100000,risk:"보통",amount:0,rate:0,term:1800,bonus:0.005},
 {id:"prime",name:"프라임 정기예금",type:"예금",min:1000000,risk:"낮음",amount:0,rate:0,term:1800,bonus:0.006},
-{id:"private",name:"프라이빗 뱅킹",type:"종합",min:5000000,risk:"보통",amount:0,rate:0,term:2400,bonus:0.009}
+{id:"private",name:"프라이빗 뱅킹",type:"종합",min:5000000,risk:"보통",amount:0,rate:0,term:2400,bonus:0.009},
+// 자산 게이트 상품: 등급 대신 순자산 기준으로 열리고 고정 이율을 씁니다.
+{id:"pe",name:"사모펀드",type:"펀드",min:100000000,risk:"높음",amount:0,rate:0,term:86400,bonus:0.004,fixedRate:0.10},
+{id:"hedge",name:"헤지펀드",type:"펀드",min:300000000,risk:"매우 높음",amount:0,rate:0,term:172800,bonus:0.006,fixedRate:0.13}
 ];
 // 은행별 금리 경쟁: 같은 상품도 은행에 따라 이율이 다릅니다(가입 시점 확정).
 const BANKS=[
@@ -1164,12 +1174,51 @@ const GRADE_RATES={
 };
 // 상품별 해금 등급: 브론즈는 예금·적금만, 실버는 파킹, 골드는 채권, 플래티넘이 ETF·연금
 const PRODUCT_UNLOCK={deposit:"브론즈", saving:"브론즈", parking:"실버", bond:"골드", etf:"플래티넘", pension:"플래티넘", prime:"마스터", private:"레전드"};
+// ── 자산 게이트: 순자산이 기준을 넘으면 전용 기능이 열립니다 ─────────────────
+// 등급(순자산 비율)과 별개로, 큰 자본을 운용하는 플레이어에게 "새 목표"를 주는 장치입니다.
+const ASSET_GATES=[
+  {id:"g1", at:100000000, name:"1억 클럽",  features:["사모펀드","블록딜 수수료 우대","오프라인 정산 +2시간"]},
+  {id:"g5", at:500000000, name:"5억 클럽",  features:["기업 인수·합병","배당 재투자(DRIP)","공모주 우선 배정"]},
+  {id:"g10",at:1000000000, name:"10억 클럽", features:["헤지펀드","부동산 개발","세무 컨설팅","오프라인 정산 +4시간"]}
+];
+// 자산 게이트로 열리는 금융상품입니다(등급 이율 대신 고정 이율).
+const PRODUCT_ASSET_GATE={pe:"g1", hedge:"g10"};
+function assetGate(id){ return ASSET_GATES.find(g=>g.id===id)||null; }
+function gateUnlocked(id){ const g=assetGate(id); return !!g && netAssetsKRW()>=g.at; }
+function gateProgress(id){ const g=assetGate(id); if(!g) return 0; return Math.max(0,Math.min(1,netAssetsKRW()/g.at)); }
+function gateLevel(){ return gateUnlocked("g10")?3:gateUnlocked("g5")?2:gateUnlocked("g1")?1:0; }
+// 자산 게이트 전용 혜택 스위치(배당 재투자·세무 컨설팅)
+function ensurePerks(){
+  if(!state.perks || typeof state.perks!=="object" || Array.isArray(state.perks)) state.perks={};
+  state.perks.drip=!!state.perks.drip;
+  state.perks.taxConsulting=!!state.perks.taxConsulting;
+  return state.perks;
+}
+function perked(id){ return !!ensurePerks()[id]; }
+function setPerk(id,on){
+  const need={drip:"g5",taxConsulting:"g10"}[id];
+  if(on && need && !gateUnlocked(need)) return alert(`${assetGate(need).name} 해금 후 사용할 수 있습니다.`);
+  ensurePerks()[id]=!!on;
+  addLog(`${on?"✅":"⏸"} ${id==="drip"?"배당 재투자":"세무 컨설팅"} ${on?"켜짐":"꺼짐"}`);
+  saveGame(); update();
+  if(activePage()==="settings") settingsPage();
+}
 const FOREIGN_GROUPS=["foreign","mega","special"];
 const isForeignStock=s=>FOREIGN_GROUPS.includes(s.group);
 const gradeIndex=g=>GRADES.indexOf(g);
-const unlockLabel=id=>`${PRODUCT_UNLOCK[id]} 등급부터 가입 가능`;
-const gradeRateFor=(id,g)=>(GRADE_RATES[g]&&GRADE_RATES[g][id])||0;
-const canJoin=id=> (id==="private" && rebirthLevel("private")>0) || gradeIndex(currentGrade())>=gradeIndex(PRODUCT_UNLOCK[id]);
+const unlockLabel=id=>PRODUCT_ASSET_GATE[id]
+  ? `순자산 ${wonShort(assetGate(PRODUCT_ASSET_GATE[id]).at)} 이상부터 가입 가능`
+  : `${PRODUCT_UNLOCK[id] || "브론즈"} 등급부터 가입 가능`;
+const gradeRateFor=(id,g)=>{
+  // 자산 게이트 상품은 등급과 무관하게 고정 이율을 씁니다.
+  const p=products.find(x=>x.id===id);
+  if(p && Number.isFinite(+p.fixedRate) && +p.fixedRate>0) return +p.fixedRate;
+  return (GRADE_RATES[g]&&GRADE_RATES[g][id])||0;
+};
+const canJoin=id=>{
+  if(PRODUCT_ASSET_GATE[id]) return gateUnlocked(PRODUCT_ASSET_GATE[id]);
+  return (id==="private" && rebirthLevel("private")>0) || gradeIndex(currentGrade())>=gradeIndex(PRODUCT_UNLOCK[id]);
+};
 
 const state={
   cash:START_CASH,
@@ -1227,6 +1276,9 @@ const state={
   revision: 0, savedAt: 0, // 저장 리바이전(기기 간 충돌 판단용)
   seasonBase: START_CASH, seasonBaseIndex: 1000, reportMonth: "", lastGrade: "브론즈",
   wealthFeePaid: 0, wealthFeeAt: 0, // 고액 자산 관리 수수료 누적·마지막 차감 시각
+  gatesSeen: {},      // 이미 알린 자산 게이트(중복 알림 방지)
+  estateDev: {},      // 부동산 개발 단계(10억 게이트)
+  perks: {drip:false, taxConsulting:false}, // 게이트 혜택 스위치
   // 자동 수익(기업·주식 배당, 채권 이자, 임대료) 처리 방식: auto 즉시 지급 · manual 모아 받기 · off 받지 않음
   autoIncome: {mode:"auto", pending:0, detail:{}, skipped:0},
   // ── 확장 자산·성장 시스템 ──
@@ -1417,16 +1469,17 @@ function netAssetsKRW(){ return grossAssetsKRW() - (state.loan||0); }
 // 기존 함수 이름은 순자산 기준으로 유지합니다(등급·목표·랭킹 공통).
 function totalAssetsKRW(){ return netAssetsKRW(); }
 
-// 고액 자산 관리 수수료: 10억원 초과분 0.01%/60초, 100억원 초과분 0.02%/60초(구간별 합산).
+// 고액 자산 관리 수수료: 10억원 초과분 하루 0.5%, 100억원 초과분 하루 1%(구간별 합산).
+// 60초마다 부과하므로 하루(1440분)로 나눠 계산합니다.
 function wealthFeeDue(net=totalAssetsKRW()){
   const n=Math.max(0,+net||0), free=WEALTH_FEE.free;
   if(n<=free) return 0;
   const first=Math.min(n,WEALTH_FEE.tiers[1].from)-free;
   const second=Math.max(0,n-WEALTH_FEE.tiers[1].from);
-  return Math.round(first*WEALTH_FEE.tiers[0].rate + second*WEALTH_FEE.tiers[1].rate);
+  return Math.round((first*WEALTH_FEE.tiers[0].perDay + second*WEALTH_FEE.tiers[1].perDay)/1440);
 }
 function wealthFeeRateText(net){
-  return Math.max(0,+net||0)>WEALTH_FEE.tiers[1].from?"0.02%" : "0.01%";
+  return Math.max(0,+net||0)>WEALTH_FEE.tiers[1].from?"하루 1% (초과분)" : "하루 0.5% (초과분)";
 }
 function chargeWealthFee(){
   const due=wealthFeeDue();
@@ -1484,7 +1537,13 @@ function creditStockBonus(profitKRW){
   return bonus;
 }
 // ── 부동산·실물자산·기업 가치 ─────────────────────
-function estatePrice(id){ const d=ESTATES.find(x=>x.id===id); return (state.altPrices && Number.isFinite(state.altPrices[id])) ? state.altPrices[id] : (d?d.price:0); }
+function estateDevLevel(id){ return Math.max(0,Math.min(5,Math.floor(+((state.estateDev||{})[id])||0))); }
+function estatePrice(id){
+  const d=ESTATES.find(x=>x.id===id);
+  const base=(state.altPrices && Number.isFinite(state.altPrices[id])) ? state.altPrices[id] : (d?d.price:0);
+  // 10억 게이트 부동산 개발: 1단계당 해당 자산 가치 +12%(최대 5단계).
+  return Math.round(base*(1+0.12*estateDevLevel(id)));
+}
 function estateValue(){ return ESTATES.reduce((a,e)=>a + (state.estate&&state.estate[e.id]?state.estate[e.id].qty:0)*estatePrice(e.id),0); }
 function metalPrice(id){ const d=METALS.find(x=>x.id===id); return (state.altPrices && Number.isFinite(state.altPrices[id])) ? state.altPrices[id] : (d?d.price:0); }
 function metalValue(){ return METALS.reduce((a,m)=>a + ((state.metals&&state.metals[m.id]?state.metals[m.id].qty:0)||0)*metalPrice(m.id),0); }
@@ -2576,6 +2635,22 @@ function buyEstate(id){
   notify("system","부동산 매수",`${e.name} 1채 · ${won(price)}`);
   if(!OFFLINE_REPLAY){ saveGame(); portfolio(); update(); }
 }
+// 10억 게이트: 보유 부동산을 개발해 가치를 올립니다(재개발·상권 개선).
+function developEstate(id){
+  const e=ESTATES.find(x=>x.id===id), h=state.estate[id];
+  if(!e||!h||h.qty<=0) return alert("보유한 부동산만 개발할 수 있습니다.");
+  if(!gateUnlocked("g10")) return alert("부동산 개발은 순자산 10억원 이상(10억 클럽)부터 가능합니다.");
+  const lv=estateDevLevel(id);
+  if(lv>=5) return alert("이미 최고 단계(5단계)까지 개발했습니다.");
+  const cost=Math.round(estatePrice(id)*0.08);
+  if(state.cash<cost) return alert(`개발 비용 ${won(cost)}이 부족합니다.`);
+  if(!confirmTrade("부동산 개발",`${e.name} ${lv+1}단계 · ${won(cost)} · 가치 +12%`)) return;
+  state.cash-=cost;
+  state.estateDev=Object.assign({},state.estateDev,{[id]:lv+1});
+  addLog(`🏗️ 부동산 개발: ${e.name} ${lv+1}단계 (${won(cost)}) · 가치 +12%`);
+  notify("system","부동산 개발",`${e.name} ${lv+1}단계 · 자산 가치 +12%`);
+  if(!OFFLINE_REPLAY){ saveGame(); portfolio(); update(); }
+}
 function sellEstate(id){
   const e=ESTATES.find(x=>x.id===id); const h=state.estate[id];
   if(!e||!h||h.qty<=0) return alert("보유한 부동산이 없습니다.");
@@ -2645,6 +2720,7 @@ function expandCompany(){
 }
 function acquireRival(id){
   const c=state.company; if(!c) return alert("먼저 기업을 설립해 주세요.");
+  if(!gateUnlocked("g5")) return alert("기업 인수·합병은 순자산 5억원 이상(5억 클럽)부터 가능합니다.");
   const r=RIVALS.find(x=>x.id===id); if(!r||c.acquired&&c.acquired[id]) return;
   if(state.cash<r.cost) return alert(`인수 비용 ${won(r.cost)}이 부족합니다.`);
   if(!confirmTrade("기업 인수",`${r.name} · ${won(r.cost)}`)) return;
@@ -2948,13 +3024,19 @@ function cancelIPO(){
   notifyAlways("↩️ 청약 취소 완료",`${o.name} ${won(refund)} 전액 환불 · 다시 청약할 수 있습니다`,{durationMs:4500,onClick:()=>show("ipo")});
   if(!OFFLINE_REPLAY){ saveGame(); ipoPage(); update(); }
 }
+// 5억 게이트: 공모주 우선 배정. 같은 경쟁률에서 1.5배까지 받되 내 청약 수량은 넘지 않습니다.
+function ipoAllocation(mineShares,ratio){
+  const boost=gateUnlocked("g5")?1.5:1;
+  const shares=Math.max(0,+mineShares||0), r=Math.max(0,Math.min(1,+ratio||0));
+  return Math.max(0,Math.min(Math.floor(shares),Math.floor(shares*r*boost)));
+}
 function closeIPO(){
   const ipo=ensureIPO(),o=ipo.offer; if(!o) return;
   const mine=Math.max(0,+o.mine||0);
   const mineShares=o.price>0?mine/o.price:0;
   const demandShares=Math.round(o.qty*(0.3+worldRand("ipo",o.id,1)*2.2))+mineShares;
   const ratio=Math.min(1,o.qty/Math.max(1,demandShares));
-  const alloc=mine>0?Math.max(0,Math.floor(mineShares*ratio)):0;
+  const alloc=mine>0?ipoAllocation(mineShares,ratio):0;
   const acct=TAX_ACCOUNTS.includes(o.account)?o.account:"general", reserved=Math.max(0,+o.reserved||0);
   if(mine>0) state.cash+=mine-alloc*o.price;
   if(reserved>0) releaseTaxContribution(acct,Math.max(0,reserved-alloc*o.price));
@@ -3438,7 +3520,11 @@ function updateSpeedUI(){
 
 // ── 오프라인 정산(기본 2시간, 환생 업그레이드로 연장) ──────────────
 const OFFLINE_MAX_BASE=2*3600;
-function offlineMaxSeconds(){ return OFFLINE_MAX_BASE + 2*3600*rebirthLevel("offline"); }
+function offlineMaxSeconds(){
+  // 자산 게이트: 1억 +2시간, 10억 +4시간(5억은 다른 혜택).
+  const gateHours=gateUnlocked("g10")?4:gateUnlocked("g1")?2:0;
+  return OFFLINE_MAX_BASE + 2*3600*rebirthLevel("offline") + gateHours*3600;
+}
 // 오프라인 동안에도 시장을 결정론적으로 재생합니다(같은 게임 시각 = 같은 시세).
 let OFFLINE_REPLAY=false;
 // 재생을 한 번에 오래 돌리면 화면이 멈추므로, 같은 단계를 작은 덩어리로 나눠 돌릴 수 있게 분리했습니다.
@@ -3570,7 +3656,8 @@ function offlineSettle(sec, start, opts){
       else { state.loan+=li-state.cash; state.cash=0; }
     }
   }
-  const divPeriods=Math.min(30, Math.floor(sec/DIVIDEND_EVERY));
+  // 배당은 지급 1회분이 아주 작아졌으므로(하루 0.5%) 오프라인에서도 경과 시간만큼 빠짐없이 정산합니다.
+  const divPeriods=Math.floor(sec/DIVIDEND_EVERY);
   const dividends=expectedDividend()*divPeriods*rebirthBonus("dividend",.03);
   if(dividends>0){
     creditAutoIncome(dividends,"주식 배당");
@@ -3811,6 +3898,17 @@ function expectedDividend(){
 }
 
 // ── 목표 달성 보상 ──────────────────────────────────
+// 새로 해금된 자산 게이트를 한 번만 알립니다.
+function checkAssetGates(){
+  const seen=state.gatesSeen||{};
+  ASSET_GATES.forEach(g=>{
+    if(seen[g.id] || netAssetsKRW() < g.at) return;
+    seen[g.id]=true;
+    state.gatesSeen=seen;
+    addLog(`🔓 ${g.name} 해금: ${g.features.join(" · ")}`);
+    notifyAlways(`🔓 ${g.name} 해금`, g.features.join(" · "), {durationMs:7000});
+  });
+}
 function checkGoals(){
   const total = totalAssetsKRW();
   MILESTONES.forEach(m => {
@@ -4117,6 +4215,10 @@ function payTaxWithCashOrLoan(amount, label){
   if(!OFFLINE_REPLAY) notify("tax","세금 대출 전환",`${label} ${won(short)} · 연 ${((state.loanRate||TAX_DEBT_RATE)*100).toFixed(1)}%`);
   return short;
 }
+// 10억 게이트: 세무 컨설팅을 켜면 일반 계좌 양도세율이 22%에서 18%로 내려갑니다(최저 10% 보장).
+function gainsTaxRate(){
+  return (gateUnlocked("g10") && perked("taxConsulting")) ? Math.max(0.10, TAX_GAINS_RATE-0.04) : TAX_GAINS_RATE;
+}
 function taxProjection(profitKRW, account){
   ensureAdvancedState();
   const t=state.tax, acct=TAX_ACCOUNTS.includes(account)?account:t.mode, profit=+profitKRW||0;
@@ -4134,7 +4236,7 @@ function taxProjection(profitKRW, account){
   // 중복 차감되지 않습니다.
   const carryUsed=Math.min(taxable,Math.max(0,+t.carryLossBase||0));
   taxable=Math.max(0,taxable-carryUsed);
-  return Object.assign(base,{tax:taxable*TAX_GAINS_RATE,taxable,carryUsed});
+  return Object.assign(base,{tax:taxable*gainsTaxRate(),taxable,carryUsed});
 }
 function settleTax(profitKRW, account){
   ensureAdvancedState();
@@ -4255,27 +4357,50 @@ function applyShock(s, move){
   s.lastMove = before>0?(s.price-before)/before:0;
 }
 
+// 배당 재투자(DRIP): 배당금으로 같은 종목을 수수료 없이 다시 삽니다. 남는 금액은 현금으로.
+function reinvestDividend(s, amountNative){
+  const shares=Math.floor(amountNative/Math.max(1,s.price));
+  const spend=shares*s.price;
+  if(shares<=0){
+    // 1주도 못 사는 작은 배당은 현금으로 그대로 넣습니다(사라지지 않게).
+    if(isForeignStock(s)) state.usd+=amountNative; else state.cash+=amountNative;
+    return 0;
+  }
+  const beforeOwn=Math.max(0,+s.own||0);
+  s.own=beforeOwn+shares;
+  s.avgBuy=(Math.max(0,+s.avgBuy||0)*beforeOwn+spend)/Math.max(1,s.own);
+  addTaxLot(s,shares,s.price,state.tax.mode);
+  const rest=amountNative-spend;
+  if(rest>0){ if(isForeignStock(s)) state.usd+=rest; else state.cash+=rest; }
+  recordTrade(s,"buy",shares,s.price,0);
+  return spend;
+}
 function payDividends(){
-  let totalKRW = 0;
+  let totalKRW = 0, reinvestedKRW = 0;
   const auto=autoIncomeMode()==="auto";
+  // DRIP은 5억 게이트 + 자동 수령 + 설정 켜짐일 때만 동작합니다.
+  const drip=auto && perked("drip") && gateUnlocked("g5");
   const dividendBonus=rebirthBonus("dividend",.03);
   stocks.forEach(s => {
     if(s.own <= 0) return;
     const amount = s.price * s.own * DIVIDEND_YIELD * dividendBonus;
     if(auto){
-      if(isForeignStock(s)) state.usd += amount;
+      if(drip){
+        const spent=reinvestDividend(s,amount);
+        reinvestedKRW += isForeignStock(s) ? spent*fx.usd : spent;
+      } else if(isForeignStock(s)) state.usd += amount;
       else state.cash += amount;
     }
     totalKRW += isForeignStock(s) ? amount * fx.usd : amount;
   });
   if(totalKRW <= 0) return;
-  const paid=auto?totalKRW:creditAutoIncome(totalKRW,"주식 배당");
+  const paid=drip?reinvestedKRW:(auto?totalKRW:creditAutoIncome(totalKRW,"주식 배당"));
   // 받지 않음으로 설정한 배당은 수령 기록·미션 진행에 넣지 않습니다.
   if(autoIncomeMode()!=="off"){
     state.dividendTotal = (state.dividendTotal || 0) + totalKRW;
     bumpDaily("dividends");
   }
-  addLog(`💰 배당금 ${auto?"지급":"발생"}: ${won(totalKRW)}${autoIncomeNote(paid)}`);
+  addLog(`💰 배당금 ${auto?"지급":"발생"}: ${won(totalKRW)}${drip&&reinvestedKRW>0?` · ${won(reinvestedKRW)} 재투자`:autoIncomeNote(paid)}`);
   if(!auto){
     // 모아 받기·받지 않음에서도 "배당이 나왔다"는 사실은 반드시 알려 줍니다(조용히 사라지지 않게).
     notify("dividend","배당금 발생",`${won(totalKRW)} · ${autoIncomeMode()==="off"?"받지 않음(설정에서 바꾸기)":"현금 카드에서 받기"}`);
@@ -6094,7 +6219,7 @@ function realestatePage(){
     return `<article class="asset-card">
       <div class="asset-head"><div><b>${e.name}</b><small>${e.desc}</small></div><span class="pill" data-live="estate:${e.id}:qty">${h.qty}채</span></div>
       <div class="asset-grid"><span>현재가 <b data-live="estate:${e.id}:price">${won(price)}</b></span><span>월세(60초) <b data-live="estate:${e.id}:rent">${won(r)}</b></span><span>유지비(60초) <b data-live="estate:${e.id}:upkeep">${won(u)}</b></span><span>평단 <b data-live="estate:${e.id}:avg">${h.avgBuy?won(h.avgBuy):"-"}</b></span></div>
-      <div class="button-row"><button class="buy" onclick="buyEstate('${e.id}')">매수</button><button class="ghost" onclick="sellEstate('${e.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="openAssetDetail('estate','${e.id}')">상세</button></div>
+      <div class="button-row"><button class="buy" onclick="buyEstate('${e.id}')">매수</button><button class="ghost" onclick="sellEstate('${e.id}')" ${h.qty?"":"disabled"}>매도</button><button class="ghost" onclick="developEstate('${e.id}')" ${h.qty?"":"disabled"}>🏗️ ${estateDevLevel(e.id)}/5 개발</button><button class="ghost" onclick="openAssetDetail('estate','${e.id}')">상세</button></div>
     </article>`;
   }).join("");
   const metals=METALS.map(m=>{
@@ -6328,6 +6453,8 @@ function settingsPage(){
       ${settingRow("숫자 표시","금액을 원 단위 또는 억·만원 요약으로 표시",`<select onchange="setSetting('numberFormat',this.value)"><option value="full" ${s.numberFormat!=="short"?"selected":""}>원 단위 (1,234,567원)</option><option value="short" ${s.numberFormat==="short"?"selected":""}>요약 (123.5만원)</option></select>`)}
       ${settingRow("테마","라이트/다크 테마",`<select onchange="setSetting('theme',this.value)"><option value="light" ${s.theme!=="dark"?"selected":""}>라이트</option><option value="dark" ${s.theme==="dark"?"selected":""}>다크</option></select>`)}
       ${settingRow("자동 수익","기업·주식 배당, 채권 이자, 임대료를 바로 받을지 모아 받을지 정합니다",`<select onchange="setAutoIncomeMode(this.value)">${AUTO_INCOME_MODES.map(([id,label])=>`<option value="${id}" ${autoIncomeMode()===id?"selected":""}>${label}</option>`).join("")}</select>`)}
+      ${settingRow("배당 재투자 (DRIP)","받은 배당금으로 같은 종목을 수수료 없이 다시 삽니다 · 5억 게이트 · 자동 수령에서만 동작합니다",`<button class="ghost" onclick="setPerk('drip',${!perked("drip")})" ${gateUnlocked("g5")?"":"disabled"}>${perked("drip")?"켜짐":"꺼짐"}</button>`)}
+      ${settingRow("세무 컨설팅","일반 계좌 양도소득세를 22% → 18%로 낮춥니다 · 10억 게이트",`<button class="ghost" onclick="setPerk('taxConsulting',${!perked("taxConsulting")})" ${gateUnlocked("g10")?"":"disabled"}>${perked("taxConsulting")?"켜짐":"꺼짐"}</button>`)}
       ${settingToggle("largeText","큰 글씨 모드","핵심 수치와 버튼을 크게 표시합니다")}
       ${settingToggle("colorblind","색약 대응 팔레트","상승·하락을 주황·파랑과 화살표로 구분합니다")}
       ${settingToggle("beginnerMode","초보자 도움","노동 첫 10회의 성공 구간을 넓히고 표시선을 조금 느리게 합니다. 익숙해지면 끌 수 있습니다.")}
@@ -7374,6 +7501,7 @@ function clearGame(skipConfirm){
   state.altPrices={}; state.economy=Object.assign({},ECON_DEFAULT);
   state.weekly={key:"",counts:{},claimed:{}}; state.special={}; state.streak={days:1,last:"",best:1};
   state.dex={stocks:{},products:{},estates:{},metals:{},company:false}; state.peakNet=START_CASH; state.altRealized=0;
+  state.gatesSeen={}; state.estateDev={}; state.perks={drip:false,taxConsulting:false};
   state.journalFilter={q:"",side:"all"}; state.rewardedGrade=0; state.targetGoal=1000000000;
   state.ui={assetTab:"overview",mobileStock:"",dashMore:null};
   state.seasonBase = START_CASH; state.reportMonth=seasonKey();
@@ -7774,6 +7902,21 @@ function setAssetTab(id){
   });
 }
 
+// 자산 게이트 현황: 1억·5억·10억까지 얼마나 남았는지와 열리는 기능을 보여줍니다.
+function gatePanelHtml(){
+  const net=netAssetsKRW();
+  const rows=ASSET_GATES.map(g=>{
+    const on=net>=g.at, p=Math.max(0,Math.min(1,net/g.at));
+    return `<div style="padding:8px 10px;border:1px solid ${on?"#0a7f4f":"#e3e8ef"};border-radius:10px;background:${on?"#eefaf3":"#fff"};margin-top:6px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <b style="font-size:13px">${on?"🔓":"🔒"} ${g.name}</b><span class="pill">${on?"해금":wonShort(g.at)+" 기준"}</span>
+      </div>
+      <div style="height:6px;background:#eef1f5;border-radius:6px;margin:6px 0 4px;overflow:hidden"><span style="display:block;height:100%;width:${(p*100).toFixed(1)}%;background:${on?"#0a7f4f":"#2f6fed"}"></span></div>
+      <div class="muted-sm" style="font-size:11.5px">${on?"사용 가능":won(g.at-net)+" 남음"} · ${g.features.join(" / ")}</div>
+    </div>`;
+  }).join("");
+  return `<div class="section-head" style="margin-top:10px"><h3>자산 게이트</h3><span class="pill">순자산 ${wonShort(net)}</span></div>${rows}`;
+}
 function dashPanelHtml(){
   const total=netAssetsKRW(), debt=state.loan||0;
   const peak=Math.max(assetHistory.peak||0,state.peakNet||0,total);
@@ -7794,13 +7937,14 @@ function dashPanelHtml(){
         <span class="pill">시즌 <b data-live="reportRet">${pct(reportData().ret)}</b></span>
       </div>
     </div>
+    ${gatePanelHtml()}
     <div class="trend" data-live-trend-graph>${assetTrendSVG()||`<div class="trend-empty">자산 기록을 모으는 중입니다<br><small>15초마다 기록되며, 2개가 쌓이면 그래프가 표시됩니다.</small></div>`}</div>
     <div class="alloc-bar" role="img" aria-label="자산 배분">${allocBar||'<span style="width:100%;background:#e7ebef"></span>'}</div>
     <div class="alloc-legend">${allocLegend}</div>
     <div class="section-head" style="margin-top:10px"><h3>세금 계좌별 주식</h3><span class="pill">평가액 기준</span></div>
     ${taxAccountAllocationHtml()}
     <div class="dash-foot">
-      <span>다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b></span>
+      <span>다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> · 예상 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b> <span class="muted-sm">(하루 0.5%를 2분마다 나눠 지급)</span></span>
       <span>총부채 <b data-live="debt">${debt>0?won(debt):"없음"}</b></span>
     </div>
   </section>`;
@@ -8328,7 +8472,7 @@ function taxPanelHtml(){
     <div class="section-head tax-sec-head" style="margin-top:14px"><h3>세금 납부 원장</h3><span class="pill">어디서 얼마가 빠졌는지 전부 기록</span></div>
     ${taxLedgerHtml()}
     ${debt>0?`<div class="notice" style="margin-top:10px;background:#fff1f2;border-color:#fecdd3;color:#9f1239"><b>대출 부채 ${won(debt)}</b> · 연 ${(debtRate*100).toFixed(1)}% · 다음 15초 이자 약 ${won(debt*debtRate*.015)}<br>세금을 현금으로 낼 수 없으면 부족분이 자동으로 대출 잔액에 더해집니다. 순자산은 총자산에서 이 부채를 뺀 값입니다.</div>`:""}
-    <div class="notice" style="margin-top:10px"><b>고액 자산 관리 수수료</b> · 순자산 10억원 초과분에 60초마다 <b>${wealthFeeRateText(netAssetsKRW())}</b>가 현금에서 차감됩니다(100억원 초과분은 0.02%). 초반 진행에는 영향이 없고, 후반 복리만 완만하게 눌러 줍니다. 다음 60초 예상 <b>${won(wealthFeeDue())}</b> · 누적 <b>${won(state.wealthFeePaid||0)}</b></div>
+    <div class="notice" style="margin-top:10px"><b>고액 자산 관리 수수료</b> · 순자산 10억원 초과분에 <b>${wealthFeeRateText(netAssetsKRW())}</b>를 60초마다 나눠 차감합니다(100억원 초과분은 하루 1%). 초반 진행에는 영향이 없고, 후반 복리만 완만하게 눌러 줍니다. 다음 60초 예상 <b>${won(wealthFeeDue())}</b> · 누적 <b>${won(state.wealthFeePaid||0)}</b></div>
     ${t.mode==="pension"?`<div class="notice" style="margin-top:10px">인출 시 5.5% 세금이 적용됩니다. <button class="ghost small" onclick="withdrawPensionTax()">연금 세금 납부 (${won((t.pensionDeferred||0)*.055)})</button></div>`:""}
     <div class="section-head tax-sec-head" style="margin-top:14px"><h3>매도 전 세후 미리보기</h3><span class="pill">현재 계좌 · FIFO</span></div>
     ${taxPreviewHtml()}
@@ -8647,6 +8791,7 @@ function openSellAllSheet(){
     <div class="offline-rows" style="margin-top:8px">
       <div class="snap-row"><span>매도 금액</span><b>${won(gross)}</b></div>
       <div class="snap-row"><span>예상 세금·수수료</span><b class="down">-${won(tax)}</b></div>
+      ${gross>=10000000&&gateUnlocked("g1")?`<div class="snap-row"><span>🧾 블록딜 우대 (수수료 50% 환급)</span><b class="up">+${won(Math.round(gross*stockFeeRate()*0.5))}</b></div>`:""}
       <div class="snap-row"><span>세후 수령</span><b class="up">${won(net)}</b></div>
       <div class="snap-row"><span>체결 후 현금</span><b>${won(state.cash+net)}</b></div>
     </div>
@@ -8656,6 +8801,9 @@ function executeSellAll(){
   closeModal();
   if(!checkMarketOpen()) return {done:0,net:0,failed:0};
   const rows=sellAllRows();
+  const grossKRW=rows.reduce((a,r)=>a+Math.max(0,+r.preview.revenue||0),0);
+  // 1억 게이트 블록딜: 1천만원 이상 한 번에 팔면 매도 수수료를 절반 돌려줍니다.
+  const blockDeal=grossKRW>=10000000 && gateUnlocked("g1");
   let done=0, net=0, failed=0;
   rows.forEach(r=>{
     const s=stock(r.id); if(!s) return;
@@ -8665,10 +8813,18 @@ function executeSellAll(){
       addLog(`${s.name} ${r.qty.toLocaleString("ko-KR")}주 일괄 매도 (${isForeignStock(s)?usdStr(s.price):won(s.price)} · ${taxModeLabel(r.account)})`);
     } else failed++;
   });
+  if(blockDeal && done>0){
+    const rebate=Math.max(0,Math.round(grossKRW*stockFeeRate()*0.5));
+    if(rebate>0){
+      state.cash=(state.cash||0)+rebate;
+      net+=rebate;
+      addLog(`🧾 블록딜 우대: 매도 수수료 50% 환급 ${won(rebate)}`);
+    }
+  }
   saveGame(); update();
   if(typeof activePage==="function" && activePage()==="holdings") holdingsPage();
-  notify("system","일괄 매도 완료",`${done}종목 · 세후 약 ${won(net)}${failed?` · ${failed}종목 실패`:''}`);
-  return {done,net,failed};
+  notify("system","일괄 매도 완료",`${done}종목 · 세후 약 ${won(net)}${blockDeal?" · 블록딜 수수료 우대":""}${failed?` · ${failed}종목 실패`:''}`);
+  return {done,net,failed,blockDeal};
 }
 
 // ── 가격 알림 · 종목 비교 ───────────────────────────────────
@@ -8848,6 +9004,7 @@ function tickSeconds() {
 
   if(state.marketSeconds % 5 === 0){
     checkGoals();
+    checkAssetGates();
     checkAchievements();
     ensureDaily();
     tickChallenges();

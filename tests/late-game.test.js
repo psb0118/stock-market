@@ -61,15 +61,15 @@ function createGame(options = {}) {
     return {zero,atFree,half,over};
   })()`);
   check('10억원 이하 수수료 0원', due.zero === 0 && due.atFree === 0, JSON.stringify(due));
-  check('10억원 초과분 0.01%/60초', due.half === 50000, due.half);
-  check('100억원 초과분 0.02%/60초 구간 합산', due.over === 1100000, due.over);
+  check('10억원 초과분 하루 0.5%(60초분)', due.half === 1736, due.half);
+  check('100억원 초과분 하루 1% 구간 합산', due.over === 38194, due.over);
 
   const paid = g.run(`(()=>{
     state.cash=2000000000; state.usd=0; state.marketSeconds=600;
     const before=state.cash; const p=chargeWealthFee();
     return {p, before, after:state.cash, total:state.wealthFeePaid};
   })()`);
-  check('수수료를 현금에서 차감', paid.p === 100000 && paid.after === paid.before - paid.p && paid.total === paid.p, JSON.stringify(paid));
+  check('수수료를 현금에서 차감', paid.p === 3472 && paid.after === paid.before - paid.p && paid.total === paid.p, JSON.stringify(paid));
 
   const short = g.run(`(()=>{
     state.cash=1000; state.usd=1000000; state.wealthFeePaid=0; state.marketSeconds=660;
