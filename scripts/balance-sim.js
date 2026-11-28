@@ -17,6 +17,8 @@
  *
  * 실행: node scripts/balance-sim.js
  *       node scripts/balance-sim.js 15 40 120   (하루 플레이 분)
+ *       DAYS=240 node scripts/balance-sim.js 40
+ *       DIV_MULT=1.3 RATE_MULT=1.2 node scripts/balance-sim.js 40   (조정안 비교)
  */
 "use strict";
 const { createGame } = require("../tests/harness");
@@ -30,7 +32,13 @@ const GATES = [
 
 function simulate(minutes, days = 120, speed = 5) {
   const g = createGame();
-  g.run(`clearGame(true); setAutoIncomeMode("auto"); state.settings.confirmTrades=false; state.speed=${speed};`);
+  // 긴 기간을 돌리기 위한 조정 실험값입니다(기본 1 = 현재 밸런스).
+  const divMult = Math.max(0, Number(process.env.DIV_MULT) || 1);
+  const rateMult = Math.max(0, Number(process.env.RATE_MULT) || 1);
+  // 화면·저장은 밸런스에 영향이 없으므로 긴 시뮬레이션에서는 생략합니다.
+  g.run(`clearGame(true); setAutoIncomeMode("auto"); state.settings.confirmTrades=false; state.speed=${speed};
+    renderMarketBar=()=>{}; update=()=>{}; publishBreakingNews=()=>{}; saveGame=()=>{};
+    if(${divMult}!==1) Object.keys(DIVIDEND_STOCK_RATES).forEach(k=>{DIVIDEND_STOCK_RATES[k]*=${divMult};}); 1`);
   const epochs = g.run("({epoch:GAME_DAY_EPOCH_MS, cap:offlineMaxSeconds()})");
 
   const reached = {};
@@ -61,7 +69,7 @@ function simulate(minutes, days = 120, speed = 5) {
       const depRoom = Math.max(0, net * 0.45 - dep.amount);
       const depAdd = Math.min(investCash * 0.5, depRoom);
       if (depAdd > 0) {
-        if (!(dep.rate > 0)) dep.rate = gradeRateFor("deposit", currentGrade());
+        if (!(dep.rate > 0)) dep.rate = gradeRateFor("deposit", currentGrade()) * ${rateMult};
         dep.amount += depAdd; dep.startedAt = state.marketSeconds; state.cash -= depAdd;
       }
       const budget = Math.min(state.cash, investCash * 0.5);
@@ -116,6 +124,8 @@ function simulate(minutes, days = 120, speed = 5) {
   return {
     minutes,
     speed,
+    divMult,
+    rateMult,
     capHours: +(epochs.cap / 3600).toFixed(1),
     reached,
     endNet: last.net,
@@ -139,6 +149,7 @@ console.log(`# 밸런스 시뮬레이션 (하루 ${DAYS}일, 실제 게임 함�
 for (const minutes of profiles) {
   const r = simulate(minutes, DAYS);
   console.log(`## 하루 ${minutes}분 플레이(배속 ${r.speed}x) · 오프라인 상한 ${r.capHours}시간`);
+  if (r.divMult !== 1 || r.rateMult !== 1) console.log(`조정 가정: 배당 ×${r.divMult} · 예금 이율 ×${r.rateMult}`);
   console.log(`도달: ${GATES.map(([n]) => `${n}=${r.reached[n] ? "D" + r.reached[n] : "미도달"}`).join(" · ")}`);
   const depShare = r.endNet > 0 ? r.endDeposit / r.endNet : 0;
   console.log(`최종 순자산: ${won(r.endNet)} (예금 ${won(r.endDeposit)} · 주식 ${won(r.endStocks)} · 현금 ${won(r.endCash)})`);
