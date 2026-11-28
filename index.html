@@ -6271,7 +6271,7 @@ function diagPanelHtml(){
     ${events.length?`<p class="muted-sm" style="margin-top:8px">${events.map(([k,v])=>`${escHtml(k)} ${v}회`).join(" · ")}</p>`:`<p class="muted-sm" style="margin-top:8px">아직 기록된 행동이 없습니다.</p>`}
     ${d.errors.length?`<div style="margin-top:8px;font-size:11.5px">${d.errors.slice(0,5).map(e=>`<div class="muted-sm">· ${escHtml(new Date(e.at).toLocaleString("ko-KR"))} ${escHtml(e.where||"-")} ${escHtml(String(e.msg||"").slice(0,80))}</div>`).join("")}</div>`:""}
     <div class="button-row" style="margin-top:10px"><button class="ghost" onclick="diagCopy()">진단 정보 복사</button><button class="ghost" onclick="diagClear()">기록 지우기</button></div>
-    <p class="muted-sm" style="margin-top:6px">실시간 수집을 켜려면 index.html에 <code>&lt;meta name="ga4-id" content="G-XXXXXXX"&gt;</code>를 넣으세요. 넣는 즉시 시작합니다.</p>
+    <p class="muted-sm" style="margin-top:6px">실시간 사용 통계 수집은 꺼져 있습니다. 진단 기록은 이 기기에만 남습니다.</p>
     ${isAdminUser()?`<p class="muted-sm" style="margin-top:6px">관리자 계정: ${ADMIN_EMAILS.map(e=>escHtml(e)).join(" · ")}</p>`:""}`;
 }
 

@@ -834,5 +834,44 @@ function check(name, ok, detail) {
   check('초기화하면 옛 클라우드 연결 열쇠도 삭제', legacy === null);
 }
 
+// ── cloud 필드가 있는 예전 저장 파일 호환 ──────────────────────
+{
+  const g = createGame();
+  const direct = g.run(`(()=>{
+    clearGame(true);
+    applySaveData({version:SAVE_VERSION,state:{cash:1234567,cloud:{nickname:'옛유저',auto:true,lastSync:1,revision:9,rank:3,best:5,season:'2026-01',verified:true,token:'secret-token'}},stocks:[],products:[]});
+    const raw=JSON.stringify(buildSaveData());
+    return {cash:state.cash, hasCloud:'cloud' in state, rawHasCloud:raw.includes('"cloud"'), rawHasToken:raw.includes('secret-token'), nickname:typeof state.cloud==='undefined'};
+  })()`);
+  check('cloud 필드가 있는 옛 저장도 그대로 로드', direct.cash === 1234567 && direct.hasCloud === false, JSON.stringify(direct.cash));
+  check('저장할 때 cloud 정보·토큰을 다시 쓰지 않음', !direct.rawHasCloud && !direct.rawHasToken, direct.rawHasCloud);
+
+  const viaStorage = g.run(`(()=>{
+    clearGame(true);
+    localStorage.setItem(SAVE_KEY, JSON.stringify({version:SAVE_VERSION,state:{cash:777000,cloud:{nickname:'옛유저',auto:true,revision:4,token:'old-token'}},stocks:[],products:[]}));
+    loadGame();
+    const raw=JSON.stringify(buildSaveData());
+    return {cash:state.cash, hasCloud:'cloud' in state, rawHasToken:raw.includes('old-token'), label:backupLabel()};
+  })()`);
+  check('localStorage의 옛 저장도 cloud 없이 로드', viaStorage.cash === 777000 && viaStorage.hasCloud === false && !viaStorage.rawHasToken, JSON.stringify(viaStorage));
+}
+
+// ── 설정·리더보드 화면에 접은 클라우드 안내가 없음 ──────────────
+{
+  const g = createGame();
+  const screens = g.run(`(()=>{
+    // 실제 배포 설정과 같게 Firebase를 켜 둔 상태로 화면을 그립니다.
+    FIREBASE_CONFIG={apiKey:'k',projectId:'p',appId:'a'};
+    settingsPage();
+    const s=document.getElementById('settings').innerHTML||'';
+    leaderboardPage();
+    const l=document.getElementById('leaderboard').innerHTML||'';
+    return {s, l, cloudCount:(s+l).match(/클라우드/g)||[]};
+  })()`);
+  check('설정·리더보드에 클라우드 문구가 없음', screens.cloudCount.length === 0, screens.cloudCount.join(','));
+  check('설정·리더보드에 서버 설정 안내가 없음', !/Worker|meta\[name=|setCloudApi/.test(screens.s + screens.l));
+  check('설정에 개발자용 GA4 설정 안내가 노출되지 않음', !screens.s.includes('ga4-id'));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

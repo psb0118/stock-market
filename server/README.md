@@ -70,7 +70,7 @@ npx wrangler deploy                         # 예: https://mp-cloud.<계정>.wor
 1. `wrangler.toml`의 `ALLOWED_ORIGINS`를 실제 게임 주소로 확인/수정
    (기본값 `https://psb0118.github.io,http://127.0.0.1:3000,http://localhost:3000`).
    커스텀 도메인을 쓰면 그 도메인도 추가하고 다시 `wrangler deploy`.
-2. `index.html`의 `meta[name="cloud-api"]`에 Worker URL 입력 → 커밋/푸시.
+2. 삭제된 클라이언트 코드를 복원한 뒤(위 "게임 연결" 참고) `meta[name="cloud-api"]`에 Worker URL 입력 → 커밋/푸시.
 3. 배포된 게임에서 닉네임 연결 → 올리기 → 다른 브라우저/시크릿 창에서 내려받기로 복원 확인.
 
 ## 승인이 필요한 것
