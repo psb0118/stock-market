@@ -321,7 +321,8 @@ const RESET = total => `
   check('전액 가입 후 현금 0·예금 전액 반영', after.cash === 0 && after.amount === 300000000, after.cash + '/' + after.amount);
 
   g.run('interest(); 1');
-  const gained = g.run("product('etf').amount") - after.amount;
+  // 실효 원금 상한을 넘는 상품은 이자가 예금에 재예치되지 않고 현금으로 지급됩니다.
+  const gained = (g.run("product('etf').amount") - after.amount) + (g.run('state.cash') - after.cash);
   check('전액 가입 후에도 이자 지급', gained > 0, gained.toFixed(2));
 
   // 골드 등급에서 채권 전액 가입도 가입 시점 이율(4%)로 고정

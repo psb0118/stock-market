@@ -744,8 +744,10 @@ body.dark .pill.ok{background:#0d2b26;color:#7dd3c7;border-color:#1f5148}
 
 <script>
 const START_FX=1390, START_CASH=0; // 첫 시작은 0원. 환생 '창업 자금' 업그레이드만 예외입니다.
-// 예금 이자 계수: 연이율 × 이 값 × (15초마다). 0.0035면 연 4.2% 상품이 시간당 약 3.5%입니다.
-// 예전 0.015(시간당 약 16%)는 예금만 넣어도 주식보다 훨씬 많이 벌려 투자할 이유가 없었습니다.
+// 예금 이자 계수: 연이율 × 이 값 × (15초마다). 0.0035면 초반 성장을 지탱할 만큼 붙습니다.
+// 예금 쏠림은 이율이 아니라 "무한 복리"에서 왔습니다. 아래 실효 원금 상한(6,000만원)과
+// 상한 초과 이자의 현금 지급으로 예금 잔액이 자산을 지배하지 못하게 했습니다.
+// (장기 시뮬레이션에서 예금 비중 80% → 45%대로 내려갔고, 게이트 도달 속도는 유지됩니다.)
 const INTEREST_PERIOD=0.0035;
 const FEE_STOCK = 0.0015; // 주식 수수료 0.15%
 const FEE_FX = 0.01;      // 환전 수수료 1%(브론즈 기준)
@@ -761,9 +763,24 @@ const SAVE_VERSION=4;
 // (예전 120초당 0.1% = 하루 72%는 일일 시세(최대 ±50%)를 압도했고,
 //  하루 0.5%로 낮춘 뒤에는 플레이 시간이 짧아 실제로는 하루 0.02~0.06%밖에 받지 못했습니다.)
 const REAL_DAY_SECONDS = 86400;
-const DIVIDEND_DAILY_YIELD = 0.015;
-const DIVIDEND_YIELD = DIVIDEND_DAILY_YIELD * 120 / REAL_DAY_SECONDS; // 지급 1회분(≈0.0007%)
-const MAX_EFFECTIVE_DEPOSIT = 300000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
+const DIVIDEND_DAILY_YIELD = 0.015; // 기본 배당률(종목별 값이 없을 때)
+const DIVIDEND_YIELD = DIVIDEND_DAILY_YIELD * 120 / REAL_DAY_SECONDS; // 기본 지급 1회분(≈0.002%)
+// ── 배당주 시스템: 종목마다 하루 배당률이 다릅니다 ────────────────
+// 지주회사·경기방어주는 배당이 두껍고, 성장주·레버리지 ETF는 배당이 없거나 얇습니다.
+// 배당률은 주가와 무관하게 보유 평가액에 붙으므로, 배당 포트폴리오를 따로 짤 수 있습니다.
+const DIVIDEND_STOCK_RATES = {
+  future_ai:0.015, hanbit_semi:0.012, core_net:0.008, next_energy:0.002, aurora_bio:0.002,
+  nova_sys:0.010, titan_tech:0.009, quantum_lab:0, skynet_gl:0.003, helios_dyn:0.012,
+  infinite_hd:0.024, atlas_ind:0.020, prime_cap:0.018, lunar_mob:0, hyper_vis:0.006,
+  deep_forge:0.005, zero_orbit:0.013, market_etf:0.018, market_2x:0, market_inv:0
+};
+const MAX_EFFECTIVE_DEPOSIT = 60000000; // 이자 계산에 반영되는 실효 원금 상한(예금 폭주 방지)
+// 3,000만원까지는 전액, 초과분은 25%만 이자 기준에 반영하고 총액은 6,000만원에서 멈춥니다.
+// 예전에는 3억까지 반영해 상위 등급에서 예금 이자가 자산 성장을 지배했습니다.
+function effectiveDepositPrincipal(amount){
+  const a=Math.max(0,+amount||0);
+  return Math.min(MAX_EFFECTIVE_DEPOSIT, a>30000000?30000000+(a-30000000)*0.25:a);
+}
 // 후반 밸런스: 순자산 10억원 초과분에 60초마다 자산 관리 수수료를 부과합니다.
 // 초반(1억~10억)에는 영향이 없고, 장기 복리로 자산이 폭주하는 구간만 완만하게 눌러 줍니다.
 // 실제 24시간 하루 기준: 10억 초과분 연 0.5%/일, 100억 초과분 1%/일(구간별 합산).
@@ -3620,11 +3637,28 @@ function offlineReportHtml(r){
   ].filter(([,v])=>Math.abs(v)>=1);
   const pending=ensureAutoIncome().pending;
   const cashDelta=Number.isFinite(r.cashDelta)?r.cashDelta:(r.net||0);
+  const perHour=(r.sec||0)>0?(r.net||0)/(r.sec/3600):0;
+  // 오프라인 정산을 상품·종목·부동산 단위로 쪼개 보여 줍니다(총액만 보이던 답답함 해소).
+  const detailGroups=[
+    ["주식 배당",r.divDetail],
+    ["금리·이자",r.interestDetail],
+    ["임대 수익",r.rentDetail]
+  ].filter(([,list])=>Array.isArray(list)&&list.length);
+  const detailRows=detailGroups.map(([title,list])=>{
+    const total=list.reduce((a,x)=>a+(+x.amount||0),0);
+    return `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e3e8ef">
+      <div class="snap-row"><span><b>${title}</b></span><b>${won(total)}</b></div>
+      ${list.slice().sort((a,b)=>b.amount-a.amount).slice(0,6).map(x=>`<div class="snap-row"><span>${escHtml(x.name)}${x.rate?` <small class="muted-sm">연 ${(x.rate*100).toFixed(2)}%</small>`:""}</span><b>${won(x.amount)}</b></div>`).join("")}
+      ${list.length>6?`<p class="muted-sm" style="margin:2px 0 0">외 ${list.length-6}건</p>`:""}
+    </div>`;
+  }).join("");
   return `<div class="offline-report">
     <p class="muted-sm" style="margin:0">${escHtml(elapsed)} 동안 자리를 비웠습니다</p>
     <div class="offline-total ${cashDelta>=0?"up":"down"}">${cashDelta>=0?"+":""}${won(cashDelta)}</div>
     <p class="muted-sm" style="margin:0">현금 변화 · 자동 수익 합계 ${(r.net||0)>=0?"+":""}${won(r.net||0)}</p>
     <div class="offline-rows">${rows.length?rows.map(([k,v])=>`<div class="snap-row"><span>${k}</span><b class="${v>=0?"up":"down"}">${v>=0?"+":""}${won(v)}</b></div>`).join(""):`<p class="muted-sm" style="margin-top:8px">이번에는 자동 수익이 없었습니다.</p>`}</div>
+    <p class="muted-sm" style="margin:8px 0 0">자동 수익 시간당 <b>${perHour>=0?"+":""}${won(perHour)}</b> · 배당 정산 ${Math.floor((r.dividendSec||0)/3600)}시간${r.capped?` · 수수료·이자는 상한 ${Math.floor((r.sec||0)/3600)}시간까지만 정산`: ""}</p>
+    ${detailRows?`<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;font-weight:700">항목별 분해 (${detailGroups.map(([t])=>t).join(" · ")})</summary>${detailRows}</details>`:""}
     ${(r.pendingAdded||0)>=1?`<div class="snap-row" style="margin-top:6px"><span>모아 둔 금액</span><b class="up">+${won(r.pendingAdded)}</b></div>
     <p class="muted-sm" style="margin:6px 0 0"><b>모아 받기</b> 설정이라 배당·임대료가 현금이 아니라 대기액으로 들어갔습니다. 아래 버튼으로 바로 받을 수 있습니다.</p>`:""}
     ${autoIncomeMode()==="off"?(r.dividends||0)+(r.rent||0)+(r.companyPay||0)>0?`<p class="muted-sm" style="margin:6px 0 0;color:#b42318"><b>받지 않음</b> 설정이라 배당·임대료가 지급되지 않았습니다. 자동 수익을 받으려면 현금 카드에서 설정을 바꾸세요.</p>`:"":""}
@@ -3645,13 +3679,18 @@ function offlineSettle(sec, start, opts){
   const periods=sec/15;
   let interest=0, loanInterest=0;
   const depositBonus=rebirthBonus("deposit",.03);
+  const interestDetail=[];
   products.forEach(p=>{
     if(p.amount<=0 || p.rate<=0) return;
+    let gained=0;
     for(let i=0;i<periods;i++){
-      const eff=Math.min(MAX_EFFECTIVE_DEPOSIT,p.amount>30000000?30000000+(p.amount-30000000)*0.5:p.amount);
+      const eff=effectiveDepositPrincipal(p.amount);
       const add=eff*(p.rate*depositBonus*INTEREST_PERIOD);
-      p.amount+=add; interest+=add;
+      if(p.amount>=MAX_EFFECTIVE_DEPOSIT) state.cash+=add; else p.amount+=add;
+      interest+=add; gained+=add;
     }
+    // 복귀 리포트의 "항목별 분해"에서 상품별로 얼마가 붙었는지 보여 줍니다.
+    if(gained>0) interestDetail.push({name:p.name,rate:p.rate,amount:gained});
   });
   // 현금을 방치해도 자동으로 돈이 늘어나던 파킹 보너스는 제거했습니다(원인 불명 자동 수익).
   if((state.loan||0)>0){
@@ -3667,7 +3706,18 @@ function offlineSettle(sec, start, opts){
   const awayRaw=OFFLINE_AWAY_FULL_SECONDS; OFFLINE_AWAY_FULL_SECONDS=0;
   const dividendSec=Math.min(30*REAL_DAY_SECONDS, Math.max(sec, awayRaw, 0));
   const divPeriods=dividendSec/DIVIDEND_EVERY;
-  const dividends=expectedDividend()*divPeriods*rebirthBonus("dividend",.03);
+  const dividendBonus=rebirthBonus("dividend",.03);
+  let dividends=0;
+  const divDetail=[];
+  stocks.forEach(s=>{
+    if(!(s.own>0)) return;
+    const rate=stockDailyDividendRate(s);
+    if(!(rate>0)) return;
+    const amount=s.price*s.own*rate*DIVIDEND_EVERY/REAL_DAY_SECONDS*divPeriods*dividendBonus;
+    if(!(amount>0)) return;
+    dividends+=amount;
+    divDetail.push({name:s.name,rate,amount});
+  });
   if(dividends>0){
     creditAutoIncome(dividends,"주식 배당");
     if(autoIncomeMode()!=="off") state.dividendTotal=(state.dividendTotal||0)+dividends;
@@ -3676,7 +3726,13 @@ function offlineSettle(sec, start, opts){
   const rentPeriods=Math.floor(sec/60);
   let rent=0,upkeep=0;
   const rentBonus=rebirthBonus("estate",.04);
-  ESTATES.forEach(e=>{ const q=(state.estate[e.id]&&state.estate[e.id].qty)||0; if(!q) return; rent+=q*estatePrice(e.id)*e.rent*rentBonus*rentPeriods; upkeep+=q*estatePrice(e.id)*e.upkeep*rentPeriods; });
+  const rentDetail=[];
+  ESTATES.forEach(e=>{
+    const q=(state.estate[e.id]&&state.estate[e.id].qty)||0; if(!q) return;
+    const paid=q*estatePrice(e.id)*e.rent*rentBonus*rentPeriods;
+    rent+=paid; upkeep+=q*estatePrice(e.id)*e.upkeep*rentPeriods;
+    if(paid>0) rentDetail.push({name:e.name,amount:paid});
+  });
   const companyPay=state.company?Math.round(state.company.profit*((state.company.payout==null?.3:state.company.payout))*rebirthBonus("company",.04)*sec/30):0;
   // 오프라인 정산도 같은 자동 수익 설정을 따르고, 유지비는 그대로 차감합니다.
   creditAutoIncome(rent,"임대 수익");
@@ -3692,7 +3748,7 @@ function offlineSettle(sec, start, opts){
   const pendingAfter=ensureAutoIncome().pending;
   const cashDelta=state.cash-cashBefore;
   const pendingAdded=Math.max(0,pendingAfter-pendingBefore);
-  const report={at:Date.now(),sec,interest,dividends,loanInterest,rent:rent||0,upkeep:upkeep||0,upkeepPaid,upkeepUnpaid,companyPay:companyPay||0,autoProfit,net,cashDelta,pendingAdded,pendingAfter,market};
+  const report={at:Date.now(),sec,awaySec:awayRaw,capped:awayRaw>sec+1,dividendSec,interest,dividends,loanInterest,rent:rent||0,upkeep:upkeep||0,upkeepPaid,upkeepUnpaid,companyPay:companyPay||0,autoProfit,net,cashDelta,pendingAdded,pendingAfter,divDetail,interestDetail,rentDetail,market};
   state.lastOfflineReport=report;
   if(!Array.isArray(state.incomeHistory)) state.incomeHistory=[];
   state.incomeHistory.push({at:report.at,sec,net,dividends,interest,rent:report.rent,companyPay:report.companyPay,autoProfit,upkeep:report.upkeep,loanInterest,cashDelta,pendingAdded});
@@ -3898,10 +3954,19 @@ function investmentStyle(){
 
 // 다음 배당까지 남은 초와 예상 배당금(원화 환산)
 function secondsToDividend(){ return DIVIDEND_EVERY-(state.marketSeconds%DIVIDEND_EVERY); }
+// 종목별 하루 배당률과 2분 지급 1회분(원화·달러 그대로의 금액)입니다.
+function stockDailyDividendRate(s){
+  const r=s?DIVIDEND_STOCK_RATES[s.id]:null;
+  return Number.isFinite(+r)?Math.max(0,+r):DIVIDEND_DAILY_YIELD;
+}
+function stockDividendPerPayment(s){
+  if(!s||!(s.own>0)) return 0;
+  return s.price*s.own*stockDailyDividendRate(s)*DIVIDEND_EVERY/REAL_DAY_SECONDS;
+}
 function expectedDividend(){
   return stocks.reduce((sum,s)=>{
     if(s.own<=0) return sum;
-    const amount=s.price*s.own*DIVIDEND_YIELD;
+    const amount=stockDividendPerPayment(s);
     return sum+(isForeignStock(s)?amount*fx.usd:amount);
   },0);
 }
@@ -4394,7 +4459,7 @@ function payDividends(){
   const dividendBonus=rebirthBonus("dividend",.03);
   stocks.forEach(s => {
     if(s.own <= 0) return;
-    const amount = s.price * s.own * DIVIDEND_YIELD * dividendBonus;
+    const amount = stockDividendPerPayment(s) * dividendBonus;
     if(auto && drip){
       // 배당을 계좌별 보유 비중만큼 나누고, 각 계좌의 로트로 재투자합니다.
       // (예전에는 현재 선택한 계좌로 몰려 들어가 ISA·연금 보유분이 일반 계좌로 섞였습니다.)
@@ -6198,6 +6263,7 @@ function dashboardPage(){
     ${pendingIncomeBannerHtml()}
     ${incomeSummaryHtml()}
     ${dashPanelHtml()}
+    ${dividendCalendarHtml()}
     ${onboardPanelHtml()}
     ${challengePanelHtml()}
     <section class="section"><div class="section-head"><h3>자산 구성</h3><button class="ghost small" onclick="show('portfolio')">전체 보기</button></div>
@@ -7776,12 +7842,77 @@ function openStockDetail(id){
     </div>`);
 }
 
+// 24시간 접속 기준 하루 예상 이자(단리). 실제 플레이에서는 오프라인 상한만큼만 정산되므로
+// 이 값은 "상한 없이 하루 종일 돌렸을 때"의 최대치입니다.
+function productDailyInterest(p){
+  if(!p) return 0;
+  const rate=+p.rate>0?+p.rate:gradeRateFor(p.id,currentGrade());
+  const eff=effectiveDepositPrincipal(p.amount);
+  return eff*rate*rebirthBonus("deposit",.03)*INTEREST_PERIOD*(REAL_DAY_SECONDS/15);
+}
+// 예금은 안전하지만 성장이 느립니다. 비중이 너무 높으면 코치로 안내합니다.
+function depositConcentrationHtml(){
+  const gross=grossAssetsKRW(), prod=productValueKRW();
+  if(!(gross>0)||!(prod>0)) return "";
+  const share=prod/gross;
+  if(share<0.6) return "";
+  return `<div class="notice" style="background:#fffaeb;border-color:#fedf89;color:#93370d"><b>예금 쏠림 ${(share*100).toFixed(0)}%</b> · 자산의 대부분이 금융상품입니다. 예금은 안전하지만 성장 속도가 느립니다. <button class="ghost small" onclick="show('portfolio');setAssetTab('overview')">자산배분 코치 보기</button></div>`;
+}
+
+// ── 자산배분 코치 ────────────────────────────────
+// 등급(자산 규모)이 올라갈수록 위험자산 목표를 조금씩 늘리고, 예금·현금은 완충 역할로 줄입니다.
+function allocationTargets(){
+  const lv=Math.max(0,Math.min(7,gradeIndex(currentGrade())));
+  const raw={cash:10,stock:45+lv*2,finance:Math.max(12,32-lv*2),estate:9+lv,gold:3,company:4+lv};
+  const sum=Object.keys(raw).reduce((a,k)=>a+raw[k],0)||1;
+  const out={};
+  Object.keys(raw).forEach(k=>{ out[k]=raw[k]/sum*100; });
+  return out;
+}
+function allocationCoachHtml(){
+  const alloc=allocation();
+  const gross=alloc.gross, cur={};
+  alloc.parts.forEach(p=>{ cur[p.label]=p.pct; });
+  const t=allocationTargets();
+  const rows=[
+    {label:"현금",target:t.cash,go:"show('portfolio')"},
+    {label:"달러",target:0,go:"show('fx')"},
+    {label:"주식",target:t.stock,go:"show('domestic')"},
+    {label:"금융상품",target:t.finance,go:"show('banking')"},
+    {label:"부동산",target:t.estate,go:"show('realestate')"},
+    {label:"금·은",target:t.gold,go:"show('realestate')"},
+    {label:"기업",target:t.company,go:"show('company')"}
+  ].map(r=>Object.assign({},r,{cur:cur[r.label]||0,gap:(r.target)-(cur[r.label]||0)}));
+  const over=rows.filter(r=>r.gap<-2.5).sort((a,b)=>a.gap-b.gap).slice(0,2);
+  const under=rows.filter(r=>r.gap>2.5).sort((a,b)=>b.gap-a.gap).slice(0,2);
+  const top=stockReturnRows()[0]||null, stockV=stockValueKRW();
+  const conc=top&&stockV>0?top.value/stockV:0;
+  let advice="비중이 목표 범위 안에 있습니다. 이 상태를 유지하면 충격이 와도 버틸 수 있습니다.";
+  if(over.length && over[0].gap<=-8){
+    const r=over[0];
+    advice=`${r.label} 비중이 목표보다 ${Math.abs(r.gap).toFixed(0)}%p 높습니다. ${r.label==="금융상품"?"예금은 안전하지만 성장이 느립니다. 일부를 주식·부동산으로 옮겨 보세요.":"일부를 덜어 현금·금융상품 완충을 늘리세요."}`;
+  } else if(under.length && under[0].gap>=8){
+    const r=under[0];
+    advice=`${r.label} 비중이 목표보다 ${r.gap.toFixed(0)}%p 낮습니다. ${won(gross*r.gap/100)} 정도를 나눠 담으면 목표에 가까워집니다.`;
+  }
+  if(conc>=0.35) advice+=` 경고: ${top.name}이(가) 주식 평가액의 ${(conc*100).toFixed(0)}%를 차지합니다. 한 종목에 몰리면 실적 발표 하나로 자산이 크게 흔들립니다.`;
+  const action=r=>`<button class="ghost small" onclick="${r.go}">${r.gap>0?`${r.label} 늘리기`:`${r.label} 줄이기`} ${Math.abs(r.gap).toFixed(0)}%p</button>`;
+  return `<section class="section"><div class="section-head"><h3>자산배분 코치</h3><span class="pill">${currentGrade()} 목표</span></div>
+    <div class="panel">
+      <div class="alloc-targets">${rows.map(r=>`<div class="snap-row"><span>${r.label} <small class="muted-sm">목표 ${r.target.toFixed(0)}%</small></span><b>${r.cur.toFixed(0)}% <small class="muted-sm">${r.gap>=0?"+":""}${r.gap.toFixed(0)}%p</small></b></div>`).join("")}</div>
+      <p class="muted-sm" style="margin:10px 0 0">${advice}</p>
+      ${(over.length||under.length)?`<div class="button-row" style="margin-top:8px">${over.concat(under).map(action).join("")}</div>`:""}
+      <p class="muted-sm" style="margin:8px 0 0">목표 비중은 등급(자산 규모)에 맞춰 자동으로 조정됩니다. 거래는 직접 확인 후 실행하세요.</p>
+    </div></section>`;
+}
+
 function banking(){
   $("banking").innerHTML=`${pageHeader("FINANCE","금융상품","현금을 안정적으로 굴리는 예금·적금입니다. 15초마다 이자가 반영됩니다.")}
   ${financeTabs("banking")}
   <div class="notice" id="gradeBanner">${gradeBannerHTML()}</div>
+  ${depositConcentrationHtml()}
   <div class="notice"><b>은행 선택 방법</b> · 같은 상품도 은행마다 이율이 다릅니다. 카드의 은행 목록에서 <b>실제 예상 연이율</b>을 비교한 뒤 은행을 고르고 <b>가입</b>을 누르세요. 표시된 <b>기본 +16%</b>는 기본 이율에 곱해지는 보너스이며, 예금 수익률 자체가 16%라는 뜻은 아닙니다. 카드 부제의 <b>현재 등급 연 %</b>는 은행 보너스 전 기본 이율이고, 실제 가입 이율은 은행 목록의 숫자를 보세요. 가입하면 그 시점의 이율이 확정됩니다.</div>
-  <div class="notice">각 상품별 원금이 3,000만 원을 초과하면 초과분 이율이 50%로 감소하고, 이자 계산 기준 원금은 최대 3억 원입니다.</div>
+  <div class="notice">각 상품별 원금이 3,000만 원을 초과하면 초과분은 25%만 이자 계산에 반영되고, 실효 원금은 최대 6,000만 원입니다. 실효 원금을 넘는 예금의 이자는 예금에 재예치되지 않고 <b>현금으로 지급</b>됩니다. 예금은 수익률보다 <b>완충</b> 역할에 맞췄습니다.</div>
   <div class="products">${products.map(productCard).join("")}</div>
   ${bondPanelHtml()}`;
 }
@@ -7880,6 +8011,7 @@ function productCard(p){
       <div><small>가입액</small><b data-prod="${p.id}">${won(p.amount)}</b></div>
       <div><small>최소 금액</small><b>${won(p.min)}</b></div>
       <div><small>확정 이율</small><b data-locked="${p.id}">${p.rate>0?`연 ${(p.rate*100).toFixed(1)}%`:"미가입"}</b></div>
+      <div><small>24시간 접속 시 하루</small><b>${p.amount>0?won(productDailyInterest(p)):"가입 전"}</b></div>
       <div><small>위험도</small><b>${p.risk}</b></div>
     </div>
     <div class="trade bank-trade">
@@ -7922,9 +8054,49 @@ function setAssetTab(id){
   });
 }
 
-// 자산 게이트 현황: 1억·5억·10억까지 얼마나 남았는지와 열리는 기능을 보여줍니다.
-function gatePanelHtml(){
+// ── 게이트 예상 도달일(ETA) ────────────────────────────────
+// 자산 추이(최근 45분, 15초 간격)에서 하루 성장률을 구해 남은 금액을 나눕니다.
+// 기록이 적거나 성장이 멈춰 있으면 억지로 숫자를 만들지 않고 "예상 계산 중"으로 둡니다.
+function assetDailyGrowth(){
+  const pts=assetHistory.points||[];
+  if(pts.length<5) return null;
+  const first=pts[0], last=pts[pts.length-1];
+  const dt=(+last.t||0)-(+first.t||0);
+  if(!(dt>=300) || !(first.v>0) || !(last.v>0)) return null;
+  const g=Math.pow(last.v/first.v, 86400/dt)-1;
+  if(!Number.isFinite(g)) return null;
+  return Math.max(-.9,Math.min(.5,g));
+}
+function gateEtaDays(target){
+  const net=Math.max(1,netAssetsKRW());
+  if(net>=target) return 0;
+  const g=assetDailyGrowth();
+  if(g==null || g<=0.0005) return null;
+  const days=Math.log(target/net)/Math.log(1+g);
+  return Number.isFinite(days)?Math.max(0,days):null;
+}
+function gateEtaText(target){
+  const days=gateEtaDays(target);
+  if(days===0) return "해금";
+  if(days==null) return "예상 계산 중";
+  if(days<1) return "오늘 안";
+  if(days>3650) return "10년 이상";
+  return `약 ${Math.ceil(days).toLocaleString("ko-KR")}일`;
+}
+function nextLockedGate(){
   const net=netAssetsKRW();
+  return ASSET_GATES.find(g=>net<g.at)||null;
+}
+// 모바일에서는 게이트 패널을 기본으로 접어 두고, 펼침/접힘 선택은 저장합니다.
+function gatesOpen(){ return (state.ui&&state.ui.gatesOpen!=null)?!!state.ui.gatesOpen:!dashNarrow(); }
+function toggleGates(){
+  state.ui=Object.assign({},state.ui,{gatesOpen:!gatesOpen()});
+  dashboardPage();
+}
+// 자산 게이트 현황: 1억·5억·10억까지 얼마나 남았는지, 언제쯤 닿는지, 열리는 기능을 보여줍니다.
+function gatePanelHtml(){
+  const net=netAssetsKRW(), open=gatesOpen(), next=nextLockedGate(), growth=assetDailyGrowth();
+  const summary=next?`다음 ${wonShort(next.at)} · ${won(next.at-net)} 남음 · ${gateEtaText(next.at)}`:"모든 게이트 해금";
   const rows=ASSET_GATES.map(g=>{
     const on=net>=g.at, p=Math.max(0,Math.min(1,net/g.at));
     return `<div style="padding:8px 10px;border:1px solid ${on?"#0a7f4f":"#e3e8ef"};border-radius:10px;background:${on?"#eefaf3":"#fff"};margin-top:6px">
@@ -7932,10 +8104,14 @@ function gatePanelHtml(){
         <b style="font-size:13px">${on?"🔓":"🔒"} ${g.name}</b><span class="pill">${on?"해금":wonShort(g.at)+" 기준"}</span>
       </div>
       <div style="height:6px;background:#eef1f5;border-radius:6px;margin:6px 0 4px;overflow:hidden"><span style="display:block;height:100%;width:${(p*100).toFixed(1)}%;background:${on?"#0a7f4f":"#2f6fed"}"></span></div>
-      <div class="muted-sm" style="font-size:11.5px">${on?"사용 가능":won(g.at-net)+" 남음"} · ${g.features.join(" / ")}</div>
+      <div class="muted-sm" style="font-size:11.5px">${on?"사용 가능":`${won(g.at-net)} 남음 · ${gateEtaText(g.at)}`} · ${g.features.join(" / ")}</div>
     </div>`;
   }).join("");
-  return `<div class="section-head" style="margin-top:10px"><h3>자산 게이트</h3><span class="pill">순자산 ${wonShort(net)}</span></div>${rows}`;
+  return `<div class="section-head" style="margin-top:10px"><h3>자산 게이트</h3>
+    <span class="pill">${open?summary:`순자산 ${wonShort(net)}`}</span>
+    <button class="ghost small" onclick="toggleGates()" aria-expanded="${open}">${open?"접기":"펼치기"}</button></div>
+    ${growth!=null?`<p class="muted-sm" style="margin:2px 0 0">최근 자산 추세 하루 ${pct(growth)} · 도달일은 이 추세가 이어질 때 기준입니다.</p>`:""}
+    <div class="gate-body" ${open?"":"hidden"}>${rows}</div>`;
 }
 function dashPanelHtml(){
   const total=netAssetsKRW(), debt=state.loan||0;
@@ -7964,10 +8140,34 @@ function dashPanelHtml(){
     <div class="section-head" style="margin-top:10px"><h3>세금 계좌별 주식</h3><span class="pill">평가액 기준</span></div>
     ${taxAccountAllocationHtml()}
     <div class="dash-foot">
-      <span>하루 예상 배당 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b> · 다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> <span class="muted-sm">(하루 1.5%를 2분마다 나눠 지급)</span></span>
+      <span>하루 예상 배당 <b>${expDiv>0?won(expDiv):"보유 주식 없음"}</b> · 다음 배당까지 실제 <b>${realSeconds(secondsToDividend())}초</b> <span class="muted-sm">(종목별 배당률을 2분마다 나눠 지급)</span></span>
       <span>총부채 <b data-live="debt">${debt>0?won(debt):"없음"}</b></span>
     </div>
   </section>`;
+}
+
+// ── 배당 캘린더 ──────────────────────────────────
+// 2분마다 지급되는 배당을 종목별 배당률과 함께 보여 줍니다. 배당주를 고르는 기준이 됩니다.
+function dividendCalendarHtml(){
+  const held=stocks.filter(s=>s.own>0);
+  const rows=held.map(s=>({s,rate:stockDailyDividendRate(s),per:stockDividendPerPayment(s)})).filter(r=>r.rate>0)
+    .sort((a,b)=>b.per-a.per);
+  const totalPer=rows.reduce((a,r)=>a+r.per,0);
+  const noDiv=held.length-rows.length;
+  const candidates=stocks.filter(s=>!s.own&&stockDailyDividendRate(s)>0)
+    .sort((a,b)=>stockDailyDividendRate(b)-stockDailyDividendRate(a)).slice(0,4);
+  return `<section class="section"><div class="section-head"><h3>배당 캘린더</h3><span class="pill">다음 지급 ${realSeconds(secondsToDividend())}초 뒤</span></div>
+    <div class="panel">
+      <div class="kpis">
+        <div class="kpi"><small>이번 지급 예상</small><b>${won(totalPer)}</b></div>
+        <div class="kpi"><small>하루 예상(720회)</small><b>${won(totalPer*720)}</b></div>
+        <div class="kpi"><small>배당 주식</small><b>${rows.length} / ${held.length}종목</b></div>
+      </div>
+      ${rows.length?rows.slice(0,8).map(r=>`<div class="snap-row"><span>${escHtml(r.s.name)} <span class="pill">${(r.rate*100).toFixed(1)}%/일</span></span><b>${won(r.per)} <small class="muted-sm">/ 2분</small></b></div>`).join(""):`<p class="muted-sm" style="margin:8px 0 0">아직 배당을 주는 종목이 없습니다. 배당주를 보유하면 2분마다 현금이 들어옵니다.</p>`}
+      ${noDiv>0?`<p class="muted-sm" style="margin:6px 0 0">배당이 없는 종목 ${noDiv}개는 주가 차익만 노리는 성장주입니다.</p>`:""}
+      ${candidates.length?`<div class="muted-sm" style="margin-top:8px">배당이 두꺼운 종목: ${candidates.map(s=>`<button class="ghost small" onclick="show('domestic')">${escHtml(s.name)} ${(stockDailyDividendRate(s)*100).toFixed(1)}%</button>`).join(" ")}</div>`:""}
+      <p class="muted-sm" style="margin:8px 0 0">배당은 보유 평가액 × 하루 배당률을 720회로 나눠 2분마다 지급합니다. 지주·경기방어주는 두껍고 성장주·레버리지 ETF는 없거나 얇습니다.</p>
+    </div></section>`;
 }
 
 function laborPanelHtml(){
@@ -8029,7 +8229,7 @@ function stockHoldingsHtml(){
     const foreign=isForeignStock(s), avg=foreign?usdStr(s.avgBuy):won(s.avgBuy), cur=foreign?usdStr(s.price):won(s.price);
     const cost=s.avgBuy*s.own, now=s.price*s.own, roi=cost>0?(now-cost)/cost:0;
     return `<div class="holding-row">
-      <div class="holding-main"><b>${s.name}</b><small>${s.own}주 · 평단 ${avg}</small></div>
+      <div class="holding-main"><b>${s.name}</b><small>${s.own}주 · 평단 ${avg}${stockDailyDividendRate(s)>0?` · 배당 ${(stockDailyDividendRate(s)*100).toFixed(1)}%/일`:" · 배당 없음"}</small></div>
       <div><small>현재가</small><b data-live="stock:${s.id}:price">${cur}</b></div>
       <div><small>평가금액</small><b data-live="stock:${s.id}:valueNative">${foreign?usdStr(now):won(now)}</b></div>
       <div><small>수익률</small><b class="${roi>=0?"up":"down"}" data-live="stock:${s.id}:roi">${pct(roi)}</b></div>
@@ -8532,7 +8732,7 @@ function portfolio(){
   const tab=(state.ui&&state.ui.assetTab)||"overview";
   const total=netAssetsKRW(), debt=state.loan||0;
   const panels={
-    overview:`<section class="kpi-strip"><div class="metric"><small>총자산</small><b data-live="grossShort">${wonShort(grossAssetsKRW())}</b></div><div class="metric"><small>순자산</small><b data-live="netShort">${wonShort(netAssetsKRW())}</b></div><div class="metric"><small>현금</small><b data-live="cashShort">${wonShort(state.cash)}</b></div><div class="metric"><small>부채</small><b data-live="debtShort">${debt>0?wonShort(debt):"없음"}</b></div></section>`+dashPanelHtml()+`<div class="section" id="labor-section"><h3>노동 · 생계</h3><div class="panel">${laborPanelHtml()}</div></div><div class="section"><h3>목표</h3><div class="panel">${goalsPanelHtml()}</div></div>`,
+    overview:`<section class="kpi-strip"><div class="metric"><small>총자산</small><b data-live="grossShort">${wonShort(grossAssetsKRW())}</b></div><div class="metric"><small>순자산</small><b data-live="netShort">${wonShort(netAssetsKRW())}</b></div><div class="metric"><small>현금</small><b data-live="cashShort">${wonShort(state.cash)}</b></div><div class="metric"><small>부채</small><b data-live="debtShort">${debt>0?wonShort(debt):"없음"}</b></div></section>`+dashPanelHtml()+allocationCoachHtml()+`<div class="section" id="labor-section"><h3>노동 · 생계</h3><div class="panel">${laborPanelHtml()}</div></div><div class="section"><h3>목표</h3><div class="panel">${goalsPanelHtml()}</div></div>`,
     stocks:`<div class="section"><h3>주식 자산</h3><div class="panel stack">${stockHoldingsHtml()}</div></div>`,
     finance:`<div class="section"><h3>금융상품</h3><div class="panel stack">${productHoldingsHtml()}</div><div class="button-row" style="margin-top:8px"><button class="ghost" onclick="show('banking')">금융상품 관리</button><button class="ghost" onclick="show('loan')">대출</button><button class="ghost" onclick="show('tax')">세금</button></div></div>`,
     estate:`<div class="section"><h3>부동산</h3><div class="panel stack">${estateSummaryHtml()}</div></div>`,
@@ -9255,20 +9455,15 @@ function interest(){
   const depositBonus=rebirthBonus("deposit",.03);
   products.forEach(p=>{
     if(p.amount > 0) {
-      let principal = p.amount;
-      let effectiveAmount = principal;
-      
-      // 적금 몰빵 방지 및 구간 효율 저하 밸런싱 (3000만원 초과 분은 이자율 절반 감소)
-      if(principal > 30000000) {
-        let excess = principal - 30000000;
-        effectiveAmount = 30000000 + (excess * 0.5);
-      }
-      // 3억원을 넘는 예금은 이자 계산 기준 원금을 3억원으로 제한합니다.
-      effectiveAmount = Math.min(MAX_EFFECTIVE_DEPOSIT, effectiveAmount);
-      
-      // 15초 단위 반영 스케일: 연이율 × 0.015 (예금 4.2% → 15초당 0.063%, 시간당 약 +16%)
+      // 3,000만원 초과분은 25%만, 총 실효 원금은 6,000만원까지 반영합니다.
+      // (예금 잔액이 아무리 커도 이자가 무한 복리로 자산을 지배하지 않게 합니다.)
+      let effectiveAmount = effectiveDepositPrincipal(p.amount);
+
       let calculatedInterest = effectiveAmount * (p.rate * depositBonus * INTEREST_PERIOD);
-      p.amount += calculatedInterest;
+      // 실효 원금 상한을 넘는 예금은 더 이상 예금 안에서 복리로 불어나지 않고,
+      // 이자를 현금으로 지급합니다(예금이 자산의 대부분을 차지하던 쏠림 방지).
+      if(p.amount >= MAX_EFFECTIVE_DEPOSIT) state.cash += calculatedInterest;
+      else p.amount += calculatedInterest;
     }
   });
 

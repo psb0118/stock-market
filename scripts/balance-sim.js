@@ -4,15 +4,16 @@
  *
  * 확인 항목
  *  1) 순자산 1억·5억·10억 게이트에 며칠 만에 도달하는가
- *  2) 하루 배당(0.5%)이 실제 플레이에서 얼마나 들어오는가
- *  3) 배당·예금·노동이 최종 자산에서 차지하는 비중
+ *  2) 종목별 하루 배당(기본 1.5%)이 실제 플레이에서 얼마나 들어오는가
+ *  3) 배당·예금·노동이 최종 자산에서 차지하는 비중(예금 쏠림 여부)
  *
  * 가정(스크립트 안에서 명시)
  *  - 하루 = 실제 24시간. 플레이 시간 동안만 marketSeconds가 흐르고,
  *    자리를 비운 시간은 offlineMaxSeconds() 상한까지 오프라인 정산됩니다.
  *  - 노동: 초반 순자산 3천만원 미만일 때만, 플레이 시간의 절반을 노동에 쓰고
  *    30초당 6만원(성공 보상 기준)을 법니다.
- *  - 매일 순자산의 45%를 예금, 45%를 국내 주식 8종 동일 비중으로 배분합니다.
+ *  - 들어오는 현금의 절반을 예금, 절반을 국내 주식 8종 동일 비중으로 배분합니다
+ *    (예금을 먼저 목표까지 채우면 주식 살 돈이 남지 않아 쏠림이 과장됩니다).
  *
  * 실행: node scripts/balance-sim.js
  *       node scripts/balance-sim.js 15 40 120   (하루 플레이 분)
@@ -52,17 +53,18 @@ function simulate(minutes, days = 120, speed = 5) {
         labor = Math.min(${Math.round(minutes * 0.5)}, 60) * 120000;
         state.cash += labor;
       }
-      // ── 배분: 예금 45% / 국내주식 45% / 현금 10% ──
+      // ── 배분: 새 현금을 예금 50% / 국내주식 50%로 나눕니다 ──
+      // (예금을 먼저 45%까지 채우면 주식 살 돈이 남지 않아 예금 쏠림이 과장됩니다.)
       const net = totalAssetsKRW();
+      const investCash = state.cash;
       const dep = products.find(p => p.id === "deposit");
-      if (dep.amount < net * 0.45) {
-        const add = Math.min(state.cash, net * 0.45 - dep.amount);
-        if (add > 0) {
-          if (!(dep.rate > 0)) dep.rate = gradeRateFor("deposit", currentGrade());
-          dep.amount += add; dep.startedAt = state.marketSeconds; state.cash -= add;
-        }
+      const depRoom = Math.max(0, net * 0.45 - dep.amount);
+      const depAdd = Math.min(investCash * 0.5, depRoom);
+      if (depAdd > 0) {
+        if (!(dep.rate > 0)) dep.rate = gradeRateFor("deposit", currentGrade());
+        dep.amount += depAdd; dep.startedAt = state.marketSeconds; state.cash -= depAdd;
       }
-      const budget = Math.min(state.cash, net * 0.45);
+      const budget = Math.min(state.cash, investCash * 0.5);
       if (budget > 10000) {
         const picks = stocks.filter(s => !isIndexFund(s)).slice(0, 8);
         const each = budget / picks.length;
@@ -138,7 +140,9 @@ for (const minutes of profiles) {
   const r = simulate(minutes, DAYS);
   console.log(`## 하루 ${minutes}분 플레이(배속 ${r.speed}x) · 오프라인 상한 ${r.capHours}시간`);
   console.log(`도달: ${GATES.map(([n]) => `${n}=${r.reached[n] ? "D" + r.reached[n] : "미도달"}`).join(" · ")}`);
+  const depShare = r.endNet > 0 ? r.endDeposit / r.endNet : 0;
   console.log(`최종 순자산: ${won(r.endNet)} (예금 ${won(r.endDeposit)} · 주식 ${won(r.endStocks)} · 현금 ${won(r.endCash)})`);
+  console.log(`예금 비중: ${(depShare * 100).toFixed(1)}% (45% 이하면 균형, 60% 이상이면 쏠림)`);
   console.log(`누적 노동 ${won(r.laborTotal)} · 누적 배당 ${won(r.dividendTotal)} (플레이 중 ${won(r.playDividendTotal)} / 오프라인 ${won(r.offlineDividendTotal)})`);
   const divPct = r.dividendTotal / Math.max(1, r.avgStock);
   console.log(`평균 보유자산 대비 ${DAYS}일 배당률: ${(divPct * 100).toFixed(2)}%  (하루 ${(divPct / DAYS * 100).toFixed(3)}%)`);
