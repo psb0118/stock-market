@@ -5385,6 +5385,8 @@ async function fbFinishForcedReset(pending){
   firebaseAutoUpload();
 }
 function fbAdminPanelHtml(){
+  // 호출부에서 한 번 거르지만, 화면 조각 자체도 관리자 계정이 아니면 비웁니다.
+  if(!isAdminUser()) return "";
   const list=fbAdminUsers;
   const rows=Array.isArray(list)?list.map(u=>{
     const uid=String(u.uid||u.id||"");
@@ -7185,6 +7187,8 @@ function applySaveData(data) {
   applyTheme(); // 불러온 설정(큰 글씨·색약·테마)을 즉시 반영합니다.
 }
 
+// 내부 초기화 루틴입니다. 플레이 화면에는 이 함수를 부르는 버튼이 없고,
+// 실행 경로는 관리자 계정으로만 열리는 강제 초기화(fbApplyForcedReset)뿐입니다.
 function clearGame(skipConfirm){
   if(!skipConfirm && !confirm("정말로 모든 게임 데이터를 삭제하고 처음부터 시작하시겠습니까?")) return;
   // 초기화는 '처음부터'여야 하므로 저장 파일과 자동 백업을 함께 지웁니다.

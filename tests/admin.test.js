@@ -127,14 +127,17 @@ function fakeDb(calls) {
     ];
     const h=fbAdminPanelHtml();
     const settings=firebasePanelHtml();
+    fbAdminUsers=null;
+    const empty=fbAdminPanelHtml();
     fbUser={uid:'user',email:'user@x.com'};
     const normal=fbAdminPanelHtml();
     fbAdminUsers=null; fbUser=null; FIREBASE_CONFIG=keep;
-    return {h,settings,normal};
+    return {h,settings,empty,normal};
   })()`);
   check('관리자에게 전체 사용자 목록 패널 표시', panel.h.includes('관리자 · 전체 사용자') && panel.h.includes('a@x.com'), panel.h.slice(0, 80));
   check('설정 화면에도 관리자 패널 포함', panel.settings.includes('관리자 · 전체 사용자'));
-  check('목록이 없으면 빈 상태 안내', panel.normal.includes('새로고침'));
+  check('관리자에게 목록이 없으면 빈 상태 안내', panel.empty.includes('새로고침'));
+  check('비관리자에게는 관리자 패널을 그리지 않음', panel.normal === '', panel.normal.slice(0, 40));
 }
 
 // ── 강제 초기화 확인 모달 ─────────────────────────────────
