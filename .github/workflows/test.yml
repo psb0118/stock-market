@@ -35,18 +35,23 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - name: 로컬 D1 스키마 생성
-        run: npx wrangler d1 execute mp-leaderboard --local --file=./schema.sql
-      - name: Worker 실행
+      - name: 로컬 D1 스키마 생성 (항상 깨끗한 상태에서)
+        run: |
+          # 이전 실행의 로컬 SQLite가 남아 있으면 리더보드 순위 검사가 실패합니다.
+          rm -rf .wrangler
+          npx wrangler d1 execute mp-leaderboard --local --file=./schema.sql
+      - name: Worker 실행 + API 스모크 테스트
         run: |
           npx wrangler dev --local --port 8787 > /tmp/wrangler.log 2>&1 &
+          WPID=$!
+          trap 'kill $WPID 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8787/api/health > /dev/null; then exit 0; fi
+            if curl -fsS http://127.0.0.1:8787/api/health > /dev/null; then break; fi
             sleep 2
           done
-          echo "Worker가 준비되지 않았습니다"; cat /tmp/wrangler.log; exit 1
-      - name: API 스모크 테스트
-        run: node smoke.mjs
+          # 같은 스텝에서 실행해야 백그라운드 Worker가 스텝 종료와 함께 정리되지 않습니다.
+          curl -fsS http://127.0.0.1:8787/api/health > /dev/null || { echo "Worker가 준비되지 않았습니다"; cat /tmp/wrangler.log; exit 1; }
+          node smoke.mjs
       - name: Worker 로그
         if: failure()
         run: cat /tmp/wrangler.log || true
