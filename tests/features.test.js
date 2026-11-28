@@ -548,7 +548,9 @@ function check(name, ok, detail) {
   check('온보딩 숨기기', hidden === '');
   const un = g.run(`(()=>{ unlockCheckAt=0; state.cash=120000000; state.peakNet=120000000; state.onboard={done:false,dismissed:false,seen:{},firstTrade:false}; checkUnlocks(); return {seen:state.onboard.seen, alerts:(state.alerts||[]).filter(a=>a.title==='새 기능 해금').length}; })()`);
   check('해금 시 한 번만 알림', un.seen.rebirth === true && un.alerts === 1, JSON.stringify(un));
-  const legacy = g.run(`(()=>{ const d=migrateSaveData({state:{cash:100}}); applySaveData(d); return {onboard:!!state.onboard, dismissed:state.onboard.dismissed}; })()`);
+  // 환생 기록이 없는 예전 저장은 환생 후에는 불러올 수 없으므로(포인트 중복 방지),
+  // 환생 전 상태에서 온보딩 기본값 생성을 확인합니다.
+  const legacy = g.run(`(()=>{ state.rebirth.count=0; const d=migrateSaveData({state:{cash:100}}); applySaveData(d); return {onboard:!!state.onboard, dismissed:state.onboard.dismissed}; })()`);
   check('예전 세이브에도 온보딩 기본값 생성', legacy.onboard === true && legacy.dismissed === false);
 }
 

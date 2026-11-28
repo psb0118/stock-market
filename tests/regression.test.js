@@ -774,7 +774,7 @@ const RESET = total => `
     1;
   `);
   const brokeHtml = g.run("document.getElementById('portfolio').innerHTML");
-  check('노동 섹션·9종 직업 렌더', brokeHtml.includes('labor-section') && brokeHtml.includes('편의점 야간') && brokeHtml.includes('긴급 외주') && brokeHtml.includes('전략 컨설팅') && g.run('LABOR_JOBS.length') === 9);
+  check('노동 섹션·12종 직업 렌더', brokeHtml.includes('labor-section') && brokeHtml.includes('편의점 야간') && brokeHtml.includes('주방 보조') && brokeHtml.includes('재고 조사') && brokeHtml.includes('세무 보조') && brokeHtml.includes('긴급 외주') && brokeHtml.includes('전략 컨설팅') && g.run('LABOR_JOBS.length') === 12);
   g.run("state.ui.assetTab='journal'; openLabor(); 1");
   check('노동 진입 시 자산 개요 탭', g.run('state.ui.assetTab') === 'overview', g.run('state.ui.assetTab'));
   check('노동 미니게임 안내 문구', brokeHtml.includes('타이밍 작업 3회') && brokeHtml.includes('완벽 100%'));

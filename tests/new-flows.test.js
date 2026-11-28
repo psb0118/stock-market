@@ -515,5 +515,57 @@ function createGame() {
   check('보유 종목 CSV도 수식 시작 값을 고정', !holdingsCsv.csv.includes(',=1+1') && holdingsCsv.csv.includes(APO + '=1+1') && holdingsCsv.csv.includes(APO + '@SUM(A1)'), holdingsRow);
 }
 
+// ── 환생 전 저장 파일 되돌리기 방어 ─────────────────────────────
+{
+  const g = createGame();
+
+  const rollback = g.run(`(()=>{
+    clearGame(true);
+    state.cash=120000000; state.peakNet=120000000;
+    const before=JSON.parse(JSON.stringify(buildSaveData()));
+    rebirthNow(true);
+    const after={count:ensureRebirth().count,points:ensureRebirth().points,cash:state.cash};
+    let code="", msg="";
+    try{ applySaveData(before); }catch(e){ code=e.code; msg=saveStaleRebirth(e)?SAVE_STALE_REBIRTH_MSG:""; }
+    return {after, code, msg, kept:{count:ensureRebirth().count,points:ensureRebirth().points,cash:state.cash}};
+  })()`);
+  check('환생 전 저장 파일은 불러오기를 거부', rollback.code === 'stale_rebirth' && rollback.msg.includes('환생 전'), JSON.stringify(rollback));
+  check('거부된 파일은 현재 진행을 건드리지 않음', rollback.kept.count === rollback.after.count && rollback.kept.points === rollback.after.points && rollback.kept.cash === rollback.after.cash, JSON.stringify(rollback.kept));
+
+  const sameCount = g.run(`(()=>{
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    data.state.cash=5000; data.state.rebirth.count=1; data.state.rebirth.points=0;
+    state.rebirth.count=0; state.rebirth.points=0;
+    applySaveData(data);
+    return {count:ensureRebirth().count, cash:state.cash};
+  })()`);
+  check('환생 횟수가 같거나 많아진 저장은 정상 복원', sameCount.count === 1 && sameCount.cash === 5000, JSON.stringify(sameCount));
+
+  const staleLocal = g.run(`(()=>{
+    clearGame(true); state.cash=120000000; state.peakNet=120000000;
+    const before=JSON.parse(JSON.stringify(buildSaveData()));
+    rebirthNow(true);
+    localStorage.setItem(SAVE_KEY,JSON.stringify(before));
+    const prev={count:ensureRebirth().count,cash:state.cash};
+    loadGame();
+    return {prev, now:{count:ensureRebirth().count,cash:state.cash}};
+  })()`);
+  check('자동 저장 칸의 예전 진행도 환생 기록을 되돌리지 못함', staleLocal.now.count === staleLocal.prev.count && staleLocal.now.cash === staleLocal.prev.cash, JSON.stringify(staleLocal));
+
+  const legacySave = g.run(`(()=>{
+    let code="";
+    try{ applySaveData({version:SAVE_VERSION,state:{cash:1234}}); }catch(e){ code=e.code; }
+    return {code, count:ensureRebirth().count, cash:state.cash};
+  })()`);
+  check('환생 정보가 없는 예전 저장도 환생 기록을 되돌리지 못함', legacySave.code === 'stale_rebirth' && legacySave.count === staleLocal.prev.count && legacySave.cash === staleLocal.prev.cash, JSON.stringify(legacySave));
+
+  const genesis = createGame();
+  const firstSave = genesis.run(`(()=>{
+    applySaveData({version:SAVE_VERSION,state:{cash:777}});
+    return {count:ensureRebirth().count, cash:state.cash};
+  })()`);
+  check('환생 0회에서는 환생 정보 없는 저장도 적용', firstSave.count === 0 && firstSave.cash === 777, JSON.stringify(firstSave));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);
