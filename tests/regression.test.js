@@ -8,6 +8,7 @@
  *           카드의 잠금/보유 표시와 배너만 갱신되는지(전체 재렌더 금지).
  */
 'use strict';
+const harness = require('./harness');
 
 const fs = require('fs');
 const path = require('path');
@@ -80,24 +81,12 @@ function createDom() {
 }
 
 function createGame() {
+  // 은행 카드의 innerHTML 재렌더를 흉내 내는 특수 DOM만 직접 만들고,
+  // 나머지 컨텍스트·localStorage·초기화는 공통 하네스를 씁니다.
   const dom = createDom();
-  const store = {};
   const alerts = [];
-  const context = {
-    console, Math, Date, JSON, Number, isFinite, Intl,
-    setTimeout: () => 0, setInterval: () => 0, clearInterval: () => 0,
-    alert: m => alerts.push(m), confirm: () => true,
-    document: dom.document,
-    localStorage: {
-      getItem: k => (k in store ? store[k] : null),
-      setItem: (k, v) => { store[k] = String(v); },
-      removeItem: k => { delete store[k]; }
-    },
-    window: {}
-  };
-  vm.createContext(context);
-  vm.runInContext(source, context, { filename: 'index.html#script' });
-  return { dom, alerts, run: code => vm.runInContext(code, context) };
+  const h = harness.createGame({ document: dom.document, alert: m => alerts.push(m) });
+  return { dom, alerts, run: h.run, ctx: h.ctx };
 }
 
 const results = [];

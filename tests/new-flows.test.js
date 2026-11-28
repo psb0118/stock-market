@@ -958,5 +958,93 @@ function check(name, ok, detail) {
   check('기준금리 상승이 신규 대출 금리에 반영', eco.loan === 1000000 && eco.rate > eco.pol && Math.abs(eco.rate - (eco.pol + 0.02)) < 1e-9, JSON.stringify(eco));
 }
 
+// ── 배당·모아 받기 투명성 ───────────────────────────────
+{
+  const g = createGame();
+  const r = g.run(`(()=>{
+    clearGame(true); setAutoIncomeMode("manual");
+    const s=stock('future_ai'); s.own=1000; s.avgBuy=50000; s.price=100000;
+    state.cash=100000; state.lastSeen=Date.now()-3600*1000;
+    const before=state.cash; const rep=applyOfflineProgress();
+    return {before, cash:state.cash, div:rep.dividends, pending:rep.pendingAdded, cashDelta:rep.cashDelta, modal:document.getElementById('modalRoot').innerHTML};
+  })()`);
+  check('모아 받기에서도 배당·임대가 대기액으로 쌓임', r.div > 0 && r.pending > 0 && r.cashDelta < r.div, JSON.stringify({ div: Math.round(r.div), pending: Math.round(r.pending), delta: Math.round(r.cashDelta) }));
+  check('복귀 리포트가 현금 변화와 모아 둔 금액을 구분', r.modal.includes('현금 변화') && r.modal.includes('모아 둔 금액') && r.modal.includes('받기'));
+  check('리포트에서 모아 둔 수익 즉시 수령', g.run(`(()=>{ const before=state.cash; const got=collectAutoIncome(); return got>0 && Math.abs((state.cash-before)-got)<0.01; })()`));
+  check('자동 수익 기록·오늘 합계 저장', g.run(`state.incomeHistory.length===1 && incomeSummaryHtml().includes('오늘 자동 수익')`));
+}
+
+// ── 주문 확인 시트 ─────────────────────────────────────
+{
+  const g = createGame();
+  g.run(`clearGame(true); state.settings.confirmTrades=true; state.cash=10000000; state.marketOpen=true; stock('future_ai').price=10000; document.getElementById(qtyInputId('future_ai','domestic')).value='2'; 1`);
+  const sheet = g.run(`(()=>{ buyQty('future_ai','domestic'); return {own:stock('future_ai').own, modal:document.getElementById('modalRoot').innerHTML}; })()`);
+  check('확인 시트에 수수료·체결 후 현금', sheet.own === 0 && sheet.modal.includes('수수료') && sheet.modal.includes('체결 후 현금'), sheet.modal.slice(0, 60));
+  check('확인 시트에서 주문 실행', g.run(`(()=>{ executeStockOrder('buy','future_ai',2,'domestic'); return stock('future_ai').own; })()`) === 2);
+}
+
+// ── 자동매매 백테스트 ───────────────────────────────────
+{
+  const g = createGame();
+  const bt = g.run(`(()=>{
+    clearGame(true); state.cash=10000000; state.marketOpen=true;
+    const s=stock('future_ai'); s.own=100; s.avgBuy=s.price*0.5;
+    state.auto={enabled:true,autoSell:true,takeProfit:1,stopLoss:50,every:60,stockPct:0,minCash:0};
+    const snap=JSON.stringify({cash:state.cash, own:s.own, ms:state.marketSeconds});
+    const r=runAutoBacktest(30);
+    const after=JSON.stringify({cash:state.cash, own:stock('future_ai').own, ms:state.marketSeconds});
+    return {r, restored:snap===after};
+  })()`);
+  check('백테스트는 원래 상태를 건드리지 않음', bt.restored === true);
+  check('백테스트 결과에 매매·실현손익', Number.isFinite(bt.r.trades) && Number.isFinite(bt.r.realized) && bt.r.minutes === 30, JSON.stringify(bt.r));
+}
+
+// ── 백업 목록·미리보기 ──────────────────────────────────
+{
+  const g = createGame();
+  const bl = g.run(`(()=>{
+    clearGame(true); state.cash=1000000; saveGame(); state.cash=2000000; saveGame();
+    openBackupList(); const modal=document.getElementById('modalRoot').innerHTML;
+    previewBackup(0); const preview=document.getElementById('modalRoot').innerHTML;
+    return {count:saveBackupList().length, modal, preview};
+  })()`);
+  check('백업 목록에 시각·순자산', bl.count >= 1 && bl.modal.includes('저장 백업') && bl.modal.includes('순자산'));
+  check('백업 미리보기 후 복원 버튼', bl.preview.includes('이 시점으로 복원') && bl.preview.includes('현금'));
+}
+
+// ── 접근성 3차 ─────────────────────────────────────────
+{
+  const g = createGame();
+  const a = g.run(`(()=>{
+    openModal('테스트 모달','<button>확인</button>');
+    const root=document.getElementById('modalRoot');
+    notify('system','체결','삼성전자 10주');
+    return {aria:root.getAttribute('aria-modal'), role:root.innerHTML.includes('role="dialog"'), live:document.getElementById('liveRegion').textContent};
+  })()`);
+  check('모달에 dialog·aria-modal', a.role === true && a.aria === 'true');
+  check('알림이 스크린리더 라이브 리전에 전달', a.live.includes('체결'));
+  check('건너뛰기 링크·sr-only 유틸', html.includes('본문으로 건너뛰기') && html.includes('.sr-only{'));
+}
+
+// ── 종목 상세 가격 추이 ────────────────────────────────
+{
+  const g = createGame();
+  const chart = g.run("(()=>{ const s=stock('future_ai'); s.start=100; s.hist=[100,110,90,120]; return priceChartHtml(s); })()");
+  check('상세 가격 차트·시점 라벨', chart.includes('가격 흐름') && chart.includes('price-tip') && chart.includes('분 전'), chart.slice(0, 60));
+  const pp = g.run(`(()=>{ const s=stock('future_ai'); s.start=100; s.hist=[100,110,120,130,140,150]; const a=pricePointAt(s,0), b=pricePointAt(s,1); return {a:a.price, b:b.price, label:b.label}; })()`);
+  check('차트 시점별 가격 계산', pp.a === 100 && pp.b === 150 && pp.label === '0초 전', JSON.stringify(pp));
+  check('종목 상세 모달에 가격 추이 포함', g.run(`(()=>{ openStockDetail('future_ai'); return document.getElementById('modalRoot').innerHTML.includes('가격 추이'); })()`));
+  const fresh = g.run(`(()=>{ const s=stock('future_ai'); s.hist=[s.price]; s.prevClose=s.price*0.98; s.dayOpen=s.price; const c=priceChartHtml(s); const p=pricePointAt(s,1); return {c, label:p.label, points:priceSeries(s).length}; })()`);
+  check('히스토리가 짧으면 오늘 흐름으로 대체', fresh.points >= 2 && fresh.c.includes('전일 종가') && fresh.label === '현재', JSON.stringify({ points: fresh.points, label: fresh.label }));
+}
+
+// ── 스파크라인 렌더 캐시 ────────────────────────────────
+{
+  const g = createGame();
+  const keys = g.run(`(()=>{ const s=stock('future_ai'); const k1=sparkRenderKey(s); s.hist.push(s.price+1); const k2=sparkRenderKey(s); return {same:k1===k2, changed:k1!==k2}; })()`);
+  check('스파크라인 캐시 키가 가격 변화에 반응', keys.same === false && keys.changed === true, JSON.stringify(keys));
+  check('변화 없으면 스파크라인 DOM 재작성 생략', html.includes('if(sp._sparkKey===key) return;'));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

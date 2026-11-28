@@ -61,6 +61,16 @@ p{margin:0;color:#667085;line-height:1.45}
 .spark svg{display:block;width:100%;height:28px}
 .spark-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:6;background:#111827;color:#fff;border:1px solid #334155;border-radius:6px;padding:4px 7px;font-size:11px;line-height:1.35;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px #0003}
 .spark-tip.on{display:block}
+/* 스크린리더 전용 텍스트와 건너뛰기 링크 */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip-link{position:absolute;left:-9999px;top:0;z-index:9999;background:#111827;color:#fff;padding:8px 12px;border-radius:0 0 8px 0;font-weight:700}
+.skip-link:focus{left:0}
+.price-chart{position:relative;margin-top:8px}
+.price-chart svg{display:block;width:100%;height:120px}
+.price-tip{display:none;position:absolute;top:4px;left:50%;transform:translateX(-50%);z-index:6;background:#111827;color:#fff;border:1px solid #334155;border-radius:6px;padding:4px 7px;font-size:11px;line-height:1.35;white-space:nowrap;pointer-events:none}
+.price-tip.on{display:block}
+.price-tip b{color:#f7c948}
+.price-axis{display:flex;justify-content:space-between;font-size:11px;color:#667085;margin-top:2px}
 /* 키보드 사용자를 위한 포커스 표시 */
 :focus-visible{outline:2px solid #1a73e8;outline-offset:2px;border-radius:4px}
 /* 오프라인 복귀 리포트 카드 */
@@ -656,7 +666,9 @@ body.dark .pill.ok{background:#0d2b26;color:#7dd3c7;border-color:#1f5148}
     <button id="laborFab" onclick="openLabor()" aria-label="노동해서 생활비 벌기">💼 노동</button>
   </aside>
   <main>
+    <a class="skip-link" href="#dashboard">본문으로 건너뛰기</a>
     <div id="breaking" class="breaking" role="status" aria-live="polite"></div>
+    <div id="liveRegion" class="sr-only" role="status" aria-live="polite"></div>
 
     <section class="stats" aria-label="자산 요약">
       <div class="box"><small>현금 (원화)</small><b id="cash"></b><span class="muted-sm" id="cashSource" role="button" tabindex="0" style="cursor:pointer" onclick="openAutoIncome()" title="자동 수익 설정"></span><button class="ghost small" id="cashCollect" onclick="collectAutoIncome()" style="display:none;margin-top:4px">모아 받기</button></div>
@@ -1160,6 +1172,7 @@ const state={
   challenge: {active:null, history:[], best:0, last:null}, // 현재 진행을 초기화하지 않는 시나리오 챌린지
   riskScenario: "base", // 리스크 탭에서 선택한 스트레스 시나리오
   lastOfflineReport: null, // 마지막 오프라인 복귀 요약(대시보드에서 다시 보기)
+  incomeHistory: [],       // 오프라인 복귀마다 쌓이는 자동 수익 기록(최대 60건)
   lastFileBackupAt: 0,     // 마지막 저장 파일 백업 시각(실제 시간)
   backupPromptAt: 0,       // 백업 안내를 다시 띄울 시각
   shortRealized: 0, // 공매도 누적 실현손익
@@ -1542,6 +1555,8 @@ function notify(kind,title,text){
   const n=state.notify||{};
   if(n.master===true) return;      // 모든 알림 끄기
   if(n[kind]===false) return;      // 종류별 끄기
+  // 화면을 보지 않는 사용자에게도 알림을 전달합니다.
+  const liveEl=$("liveRegion"); if(liveEl) liveEl.textContent=[title,text].filter(Boolean).join(" ");
   // 같은 이벤트가 짧은 간격으로 반복되면 토스트·알림을 한 번만 남깁니다.
   const dedupeKey=kind+"|"+title+(kind==="stock"?"|"+(text||"").slice(0,24):"");
   const now=Date.now();
@@ -1789,11 +1804,25 @@ function updateBell(){
     b.style.display=(centerOn && unread)?"inline-flex":"none";
   });
 }
+let modalReturnFocus=null;
+function modalKeydown(ev){
+  const root=$("modalRoot"); if(!root || !root.classList || !root.classList.contains("on")) return;
+  if(ev.key==="Escape"){ ev.preventDefault(); closeModal(); return; }
+  if(ev.key!=="Tab") return;
+  const nodes=root.querySelectorAll?root.querySelectorAll("button,input,select,textarea,a[href]"):[];
+  const focusables=[...nodes].filter(el=>el && !el.disabled);
+  if(!focusables.length) return;
+  const first=focusables[0], last=focusables[focusables.length-1];
+  if(ev.shiftKey && document.activeElement===first){ ev.preventDefault(); if(last.focus) last.focus(); }
+  else if(!ev.shiftKey && document.activeElement===last){ ev.preventDefault(); if(first.focus) first.focus(); }
+}
 function openModal(title,html){
   const root=$("modalRoot"); if(!root) return;
-  root.innerHTML=`<div class="modal-box" role="document"><div class="modal-head"><h2>${title}</h2><button class="modal-close" onclick="closeModal()">닫기</button></div>${html}</div>`;
+  modalReturnFocus=(typeof document!=="undefined" && document.activeElement)||null;
+  root.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true" aria-label="${escAttr(title)}"><div class="modal-head"><h2>${title}</h2><button class="modal-close" onclick="closeModal()">닫기</button></div>${html}</div>`;
   root.classList.add("on");
-  if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","false");
+  if(typeof root.setAttribute==="function"){ root.setAttribute("aria-hidden","false"); root.setAttribute("aria-modal","true"); }
+  try{ const btn=root.querySelector&&root.querySelector(".modal-close"); if(btn && btn.focus) btn.focus(); }catch(e){}
 }
 let pendingImport=null;
 const LEGACY_CLOUD_CREDS_KEY="mp_cloud_creds";
@@ -1804,6 +1833,8 @@ function closeModal(){
   root.classList.remove("on");
   if(typeof root.setAttribute==="function") root.setAttribute("aria-hidden","true");
   root.innerHTML="";
+  try{ if(modalReturnFocus && modalReturnFocus.focus) modalReturnFocus.focus(); }catch(e){}
+  modalReturnFocus=null;
 }
 function setNotify(k,v){
   if(!state.notify || typeof state.notify!=="object") state.notify=Object.assign({},NOTIFY_DEFAULT);
@@ -3464,18 +3495,25 @@ function offlineReportHtml(r){
   const elapsed=hours?`${hours}시간 ${mins%60}분`:`${mins}분`;
   const rows=[
     ["주식 배당",r.dividends||0],
-    ["금리·이자",r.interest||0],
+    ["금리·이자(상품에 재예치)",r.interest||0],
     ["임대 수익",r.rent||0],
     ["기업 배당",r.companyPay||0],
     ["자동매매 실현손익",r.autoProfit||0],
     ["대출 이자",-(r.loanInterest||0)],
     ["유지비",-(r.upkeep||0)]
   ].filter(([,v])=>Math.abs(v)>=1);
+  const pending=ensureAutoIncome().pending;
+  const cashDelta=Number.isFinite(r.cashDelta)?r.cashDelta:(r.net||0);
   return `<div class="offline-report">
     <p class="muted-sm" style="margin:0">${escHtml(elapsed)} 동안 자리를 비웠습니다</p>
-    <div class="offline-total ${(r.net||0)>=0?"up":"down"}">${(r.net||0)>=0?"+":""}${won(r.net||0)}</div>
-    <p class="muted-sm" style="margin:0">배당·이자·자동매매에서 생긴 자동 수익 합계</p>
+    <div class="offline-total ${cashDelta>=0?"up":"down"}">${cashDelta>=0?"+":""}${won(cashDelta)}</div>
+    <p class="muted-sm" style="margin:0">현금 변화 · 자동 수익 합계 ${(r.net||0)>=0?"+":""}${won(r.net||0)}</p>
     <div class="offline-rows">${rows.length?rows.map(([k,v])=>`<div class="snap-row"><span>${k}</span><b class="${v>=0?"up":"down"}">${v>=0?"+":""}${won(v)}</b></div>`).join(""):`<p class="muted-sm" style="margin-top:8px">이번에는 자동 수익이 없었습니다.</p>`}</div>
+    ${(r.pendingAdded||0)>=1?`<div class="snap-row" style="margin-top:6px"><span>모아 둔 금액</span><b class="up">+${won(r.pendingAdded)}</b></div>
+    <p class="muted-sm" style="margin:6px 0 0"><b>모아 받기</b> 설정이라 배당·임대료가 현금이 아니라 대기액으로 들어갔습니다. 아래 버튼으로 바로 받을 수 있습니다.</p>`:""}
+    ${autoIncomeMode()==="off"?(r.dividends||0)+(r.rent||0)+(r.companyPay||0)>0?`<p class="muted-sm" style="margin:6px 0 0;color:#b42318"><b>받지 않음</b> 설정이라 배당·임대료가 지급되지 않았습니다. 자동 수익을 받으려면 현금 카드에서 설정을 바꾸세요.</p>`:"":""}
+    ${(r.upkeepUnpaid||0)>=1?`<p class="muted-sm" style="color:#b42318;margin:6px 0 0">현금 부족으로 유지비 ${won(r.upkeepUnpaid)}을 내지 못했습니다.</p>`:""}
+    ${pending>=1?`<button class="ghost" style="width:100%;margin-top:10px" onclick="collectAutoIncome();closeModal();show('dashboard')">모아 둔 자동 수익 ${won(pending)} 받기</button>`:""}
   </div>`;
 }
 function openLastOfflineReport(){
@@ -3485,6 +3523,7 @@ function openLastOfflineReport(){
 }
 function offlineSettle(sec, start, opts){
   const {idxBefore, fxBefore, heldBefore}=start;
+  const cashBefore=state.cash, pendingBefore=ensureAutoIncome().pending;
   const idxAfter=marketIndex(), fxAfter=fx.usd;
   const held=Object.keys(heldBefore).map(id=>{ const s=stock(id); const p0=heldBefore[id]||s.price; return {name:s.name, ret:p0>0?s.price/p0-1:0}; }).sort((a,b)=>Math.abs(b.ret)-Math.abs(a.ret)).slice(0,3);
   const periods=sec/15;
@@ -3522,13 +3561,22 @@ function offlineSettle(sec, start, opts){
   // 오프라인 정산도 같은 자동 수익 설정을 따르고, 유지비는 그대로 차감합니다.
   creditAutoIncome(rent,"임대 수익");
   creditAutoIncome(companyPay,"기업 배당");
-  if(upkeep>0) state.cash-=upkeep;
+  // 유지비는 현금 한도 안에서만 차감합니다(현금이 음수가 되지 않게).
+  const upkeepPaid=Math.min(Math.max(0,state.cash),upkeep);
+  if(upkeepPaid>0) state.cash-=upkeepPaid;
+  const upkeepUnpaid=Math.max(0,upkeep-upkeepPaid);
   const market={idxBefore,idxAfter,fxBefore,fxAfter,held};
   const realizedAfter=stocks.reduce((a,s)=>a+(+s.realizedProfit||0),0);
   const autoProfit=realizedAfter-(start.realizedBefore||0);
   const net=interest+dividends+(rent||0)+(companyPay||0)+autoProfit-(loanInterest||0)-(upkeep||0);
-  const report={at:Date.now(),sec,interest,dividends,loanInterest,rent:rent||0,upkeep:upkeep||0,companyPay:companyPay||0,autoProfit,net,market};
+  const pendingAfter=ensureAutoIncome().pending;
+  const cashDelta=state.cash-cashBefore;
+  const pendingAdded=Math.max(0,pendingAfter-pendingBefore);
+  const report={at:Date.now(),sec,interest,dividends,loanInterest,rent:rent||0,upkeep:upkeep||0,upkeepPaid,upkeepUnpaid,companyPay:companyPay||0,autoProfit,net,cashDelta,pendingAdded,pendingAfter,market};
   state.lastOfflineReport=report;
+  if(!Array.isArray(state.incomeHistory)) state.incomeHistory=[];
+  state.incomeHistory.push({at:report.at,sec,net,dividends,interest,rent:report.rent,companyPay:report.companyPay,autoProfit,upkeep:report.upkeep,loanInterest,cashDelta,pendingAdded});
+  if(state.incomeHistory.length>60) state.incomeHistory.splice(0,state.incomeHistory.length-60);
   try{ trackEvent("offline_settlement",{min:Math.floor(sec/60)}); }catch(e){}
   const summary=report;
   addLog(`오프라인 복귀: ${Math.floor(sec/60)}분 · 자동 수익 ${won(net)} (이자 ${won(interest)} · 배당 ${won(dividends)})`);
@@ -3753,7 +3801,7 @@ function checkGoals(){
 
 // ── 가격 차트(최근 60틱 스파크라인) ───────────────────────
 function sparklineSVG(s){
-  const data = (s.hist && s.hist.length > 1) ? s.hist : [s.start, s.price];
+  const data = ((s.hist && s.hist.length > 1) ? s.hist : [s.start, s.price]).slice(-60);
   const min = Math.min(...data), max = Math.max(...data), span = (max - min) || 1;
   const w = 100, h = 28, step = w / Math.max(1, data.length - 1);
   const points = data.map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(" ");
@@ -3762,13 +3810,68 @@ function sparklineSVG(s){
 }
 // 그래프 위 마우스 위치를 실제 가격으로 바꿔 줍니다. hist는 최근 60틱의 실제 가격입니다.
 function sparkPointAt(s, ratio){
-  const data=(s.hist && s.hist.length>1)?s.hist:[s.start,s.price];
+  const data=((s.hist && s.hist.length>1)?s.hist:[s.start,s.price]).slice(-60);
   const r=Math.max(0,Math.min(1,Number.isFinite(+ratio)?+ratio:0));
   const idx=Math.min(data.length-1,Math.round(r*(data.length-1)));
   const price=+data[idx]||0;
   const base=+s.start>0?+s.start:1;
   return {price,index:idx,count:data.length,pct:(price-base)/base};
 }
+// 종목 상세용 가격 차트(최근 20분, 5초 간격) — 마우스를 올리면 그 시점 가격을 보여 줍니다.
+// 히스토리가 아직 짧으면 전일 종가·시가·현재가로 오늘 흐름을 보여 줍니다(없는 과거를 만들지 않음).
+function priceSeriesInfo(s){
+  const raw=(s.hist||[]).map(v=>+v).filter(v=>v>0);
+  if(raw.length>=2) return {data:raw.slice(-240),synthetic:false};
+  const seeded=[...new Set([+s.prevClose||0,+s.dayOpen||0,+s.start||0,+s.price||0].filter(v=>v>0))];
+  return {data:seeded.length?seeded:[+s.price||1],synthetic:true};
+}
+function priceSeries(s){ return priceSeriesInfo(s).data; }
+function pricePointAt(s,ratio){
+  const info=priceSeriesInfo(s), data=info.data;
+  const r=Math.max(0,Math.min(1,Number.isFinite(+ratio)?+ratio:0));
+  const index=Math.round(r*Math.max(0,data.length-1));
+  const price=+data[index]||0;
+  const base=+s.start>0?+s.start:1;
+  const ago=(data.length-1-index)*5;
+  const label=info.synthetic?(index===data.length-1?"현재":index===0?"전일 종가":"시가"):(ago>=60?`${Math.floor(ago/60)}분 전`:`${ago}초 전`);
+  return {price,index,count:data.length,ago,label,synthetic:info.synthetic,pct:(price-base)/base};
+}
+function priceChartHtml(s){
+  const info=priceSeriesInfo(s), data=info.data;
+  const min=Math.min(...data), max=Math.max(...data), span=(max-min)||1;
+  const w=320,h=120,step=w/Math.max(1,data.length-1);
+  const pts=data.map((v,i)=>`${(i*step).toFixed(1)},${(h-((v-min)/span)*(h-10)-5).toFixed(1)}`).join(" ");
+  const up=data[data.length-1]>=data[0];
+  const color=up?"#d92d20":"#1d4ed8";
+  const spanMin=Math.max(1,Math.round((data.length-1)*5/60));
+  const axisLeft=info.synthetic?"전일 종가":`${spanMin}분 전`;
+  return `<div class="price-chart" data-price-chart="${s.id}" onpointermove="priceChartHover(event,'${s.id}')" onpointerdown="priceChartHover(event,'${s.id}')" onpointerleave="priceChartLeave('${s.id}')">
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${escAttr(s.name)} ${info.synthetic?"오늘":`최근 ${spanMin}분`} 가격 흐름">
+      <line x1="0" y1="${(h*0.25).toFixed(1)}" x2="${w}" y2="${(h*0.25).toFixed(1)}" stroke="#e4e7ec" stroke-width="1"/>
+      <line x1="0" y1="${(h*0.5).toFixed(1)}" x2="${w}" y2="${(h*0.5).toFixed(1)}" stroke="#e4e7ec" stroke-width="1"/>
+      <line x1="0" y1="${(h*0.75).toFixed(1)}" x2="${w}" y2="${(h*0.75).toFixed(1)}" stroke="#e4e7ec" stroke-width="1"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>
+    </svg>
+    <span class="price-tip" data-price-tip="${s.id}"></span>
+    <div class="price-axis"><span>${axisLeft}</span><span>지금</span></div>
+  </div>`;
+}
+function priceChartHover(ev,id){
+  const s=stock(id); if(!s || !ev || !ev.currentTarget) return;
+  const host=ev.currentTarget;
+  const rect=host.getBoundingClientRect?host.getBoundingClientRect():{left:0,width:1};
+  const ratio=((+ev.clientX||0)-rect.left)/Math.max(1,rect.width);
+  const p=pricePointAt(s,ratio);
+  const tip=host.querySelector&&host.querySelector(`[data-price-tip="${id}"]`);
+  if(!tip) return;
+  const isForeign=isForeignStock(s);
+  tip.innerHTML=`${p.label} · <b>${isForeign?usdStr(p.price):won(p.price)}</b> · 시작가 대비 ${pct(p.pct)}`;
+  tip.classList.add("on");
+}
+function priceChartLeave(id){
+  document.querySelectorAll(`[data-price-tip="${id}"]`).forEach(t=>t.classList.remove("on"));
+}
+function sparkRenderKey(s){ return `${s.id}|${s.price}|${s.hist?s.hist.length:0}`; }
 function sparklineHTML(s){
   return `${sparklineSVG(s)}<span class="spark-tip" data-spark-tip="${s.id}"></span>`;
 }
@@ -5825,6 +5928,39 @@ async function firebaseDiagnose(){
 function dashNarrow(){ try{ return typeof window!=="undefined" && +window.innerWidth>0 && +window.innerWidth<=760; }catch(e){ return false; } }
 function dashMoreOpen(){ return (state.ui&&state.ui.dashMore!=null)?!!state.ui.dashMore:!dashNarrow(); }
 function toggleDashMore(){ state.ui=Object.assign({},state.ui,{dashMore:!dashMoreOpen()}); dashboardPage(); }
+// 오프라인 복귀마다 쌓인 자동 수익 기록을 오늘/7일 단위로 합산합니다.
+function incomeRecords(){
+  return Array.isArray(state.incomeHistory)?state.incomeHistory.filter(e=>e&&Number.isFinite(+e.at)&&+e.at>0):[];
+}
+function incomeTotals(){
+  const now=Date.now(), todayKey=new Date(now).toDateString();
+  const list=incomeRecords();
+  const today=list.filter(e=>new Date(+e.at).toDateString()===todayKey);
+  const week=list.filter(e=>now-(+e.at||0)<=7*24*3600*1000);
+  const sum=(arr,k)=>arr.reduce((a,e)=>a+(+e[k]||0),0);
+  const pack=arr=>({net:sum(arr,"net"),cash:sum(arr,"cashDelta"),pending:sum(arr,"pendingAdded"),auto:sum(arr,"autoProfit"),dividends:sum(arr,"dividends")});
+  return {count:list.length,today:pack(today),week:pack(week)};
+}
+function incomeSummaryHtml(){
+  const t=incomeTotals();
+  if(!t.count) return "";
+  return `<section class="section"><div class="section-head"><h3>자동 수익</h3><button class="ghost small" onclick="openIncomeHistory()">전체 기록</button></div>
+  <div class="panel"><div class="kpis">
+    <div class="kpi"><small>오늘 자동 수익</small><b class="${t.today.net>=0?"up":"down"}">${t.today.net>=0?"+":""}${won(t.today.net)}</b></div>
+    <div class="kpi"><small>오늘 현금 반영</small><b class="${t.today.cash>=0?"up":"down"}">${t.today.cash>=0?"+":""}${won(t.today.cash)}</b></div>
+    <div class="kpi"><small>최근 7일</small><b class="${t.week.net>=0?"up":"down"}">${t.week.net>=0?"+":""}${won(t.week.net)}</b></div>
+  </div>
+  <p class="muted-sm">배당 ${won(t.today.dividends)} · 자동매매 ${won(t.today.auto)} · 모아 둔 금액 ${won(t.today.pending)} · 복귀 ${t.count}회 기록</p></div></section>`;
+}
+function openIncomeHistory(){
+  const list=incomeRecords().slice().reverse().slice(0,20);
+  const rows=list.map(e=>{
+    const mins=Math.floor((+e.sec||0)/60);
+    return `<div class="journal" style="margin-bottom:8px"><div><b>${new Date(+e.at).toLocaleString("ko-KR")}</b><span>${mins}분</span></div><small class="muted-sm">자동 수익 ${won(e.net||0)} · 현금 ${won(e.cashDelta||0)}${(e.pendingAdded||0)>=1?` · 모아 둠 ${won(e.pendingAdded)}`:''}</small></div>`;
+  }).join("");
+  openModal("자동 수익 기록",`<p class="muted-sm" style="margin-bottom:8px">오프라인 복귀 때 정산된 자동 수익입니다. 최근 60건까지 저장됩니다.</p>${rows||`<p class="muted-sm">아직 기록이 없습니다. 자리를 비웠다가 돌아오면 자동으로 쌓입니다.</p>`}`);
+}
+
 function dashboardPage(){
   const gross=grossAssetsKRW(), net=netAssetsKRW(), debt=state.loan||0;
   const stockV=stockValueKRW(), prodV=productValueKRW(), estateV=estateValue(), metalV=metalValue(), companyV=companyValue(), usdV=(state.usd||0)*fx.usd, bondV=bondValueKRW(), shortV=shortValueKRW();
@@ -5839,6 +5975,7 @@ function dashboardPage(){
       <div class="metric"><small>부채</small><b data-live="debtShort">${debt>0?wonShort(debt):"없음"}</b><span class="muted-sm">${debt>0?`연 ${((state.loanRate||0)*100).toFixed(1)}%`:"부채 없음"}</span></div>
       <div class="metric"><small>이번 달</small><b class="${(reportData().ret>=0)?"up":"down"}" data-live="reportRet">${pct(reportData().ret)}</b><span class="muted-sm">시장 ${pct(reportData().indexRet)}</span></div>
     </section>
+    ${incomeSummaryHtml()}
     ${dashPanelHtml()}
     ${onboardPanelHtml()}
     ${challengePanelHtml()}
@@ -6550,6 +6687,7 @@ function init(){
   recordAssetHistory();
   // 기기 클라우드 저장을 접으면서 남은 옛 연결 열쇠도 기기에서 지웁니다.
   try{ localStorage.removeItem(LEGACY_CLOUD_CREDS_KEY); }catch(e){}
+  try{ if(typeof document!=="undefined" && document.addEventListener) document.addEventListener("keydown",modalKeydown); }catch(e){}
   ensureDaily(); ensureWeekly(); checkAchievements(); checkSpecial(); applyTheme(); updateSpeedUI(); updateBell(); firebaseBoot();
   try{ maybeFileBackupPrompt(); }catch(e){}
   // 이전에 켜 둔 자동 매수가 남아 있으면 시작할 때 바로 알려 줍니다(몰래 매수되는 일 방지).
@@ -6726,6 +6864,55 @@ function restoreLatestBackup(){
     applySaveData(JSON.parse(last.data));
     saveGame(); banking(); fxPage(); portfolio(); update();
     notify("system","백업 복원",`${new Date(+last.at).toLocaleString("ko-KR")} 백업을 불러왔습니다.`+(lastSaveFixReport.length?` · 값 ${lastSaveFixReport.length}개 보정`:""));
+  } catch(e) {
+    alert(saveStaleRebirth(e)?SAVE_STALE_REBIRTH_MSG:"백업을 복원하지 못했습니다.");
+  }
+}
+
+// 저장 백업 3개를 목록으로 보여 주고, 미리보기 후 선택해서 복원합니다.
+function backupPreviewData(b){
+  try{
+    const data=JSON.parse(b.data);
+    const st=data.state||{};
+    const stock=(data.stocks||[]).reduce((a,s)=>a+(+s.price||0)*(+s.own||0),0);
+    const prod=(data.products||[]).reduce((a,p)=>a+(+p.amount||0),0);
+    const usd=(+st.usd||0)*(+(data.fx&&data.fx.usd)||1);
+    return {data,cash:+st.cash||0,usd,stock,prod,net:(+st.cash||0)+usd+stock+prod-(+st.loan||0),revision:data.state&&data.state.revision};
+  }catch(e){ return null; }
+}
+function openBackupList(){
+  const list=saveBackupList();
+  const rows=list.map((b,i)=>{
+    const p=backupPreviewData(b);
+    return `<div class="journal" style="margin-bottom:8px"><div><b>${new Date(+b.at).toLocaleString("ko-KR")}</b><span>${escHtml(String(b.reason||"auto"))}</span></div><small class="muted-sm">${p?`순자산 약 ${won(p.net)} · 현금 ${won(p.cash)}`:"내용을 읽을 수 없음"}</small><div class="button-row" style="margin-top:6px"><button class="ghost small" onclick="previewBackup(${i})">미리보기</button></div></div>`;
+  }).join("");
+  openModal("저장 백업",`<p class="muted-sm" style="margin-bottom:8px">자동 저장 직전 상태를 최대 3개 보관합니다. 복원하면 지금 진행은 사라집니다.</p>${rows||`<p class="muted-sm">아직 백업이 없습니다.</p>`}`);
+}
+function previewBackup(i){
+  const b=saveBackupList()[i];
+  if(!b) return alert("백업을 찾을 수 없습니다.");
+  const p=backupPreviewData(b);
+  if(!p) return alert("백업 내용을 읽을 수 없습니다.");
+  openModal("백업 미리보기",`
+    <p class="muted-sm">${new Date(+b.at).toLocaleString("ko-KR")} · ${escHtml(String(b.reason||"auto"))} 저장</p>
+    <div class="offline-rows" style="margin-top:8px">
+      <div class="snap-row"><span>현금</span><b>${won(p.cash)}</b></div>
+      <div class="snap-row"><span>달러(원화)</span><b>${won(p.usd)}</b></div>
+      <div class="snap-row"><span>주식 평가액</span><b>${won(p.stock)}</b></div>
+      <div class="snap-row"><span>금융상품</span><b>${won(p.prod)}</b></div>
+      <div class="snap-row"><span>순자산(참고)</span><b>${won(p.net)}</b></div>
+    </div>
+    <div class="button-row" style="margin-top:12px"><button class="sell" onclick="restoreBackupIndex(${i})">이 시점으로 복원</button><button class="ghost" onclick="openBackupList()">목록으로</button></div>`);
+}
+function restoreBackupIndex(i){
+  const b=saveBackupList()[i];
+  if(!b) return alert("백업을 찾을 수 없습니다.");
+  if(!confirm(`${new Date(+b.at).toLocaleString("ko-KR")} 시점으로 되돌릴까요?\n지금 진행은 사라집니다.`)) return;
+  try{
+    applySaveData(JSON.parse(b.data));
+    saveGame(); banking(); fxPage(); portfolio(); update();
+    notify("system","백업 복원",`${new Date(+b.at).toLocaleString("ko-KR")} 백업을 불러왔습니다.`+(lastSaveFixReport.length?` · 값 ${lastSaveFixReport.length}개 보정`:""));
+    closeModal();
   } catch(e) {
     alert(saveStaleRebirth(e)?SAVE_STALE_REBIRTH_MSG:"백업을 복원하지 못했습니다.");
   }
@@ -7302,7 +7489,8 @@ function openStockDetail(id){
   const priceText=v=>isForeign?usdStr(v):won(v);
   const dayC=dayChangePct(s);
   const hist=(s.hist&&s.hist.length?s.hist:[s.start,s.price]).filter(v=>+v>0);
-  const histHigh=hist.length?Math.max(...hist):s.price, histLow=hist.length?Math.min(...hist):s.price;
+  const series=priceSeries(s);
+  const histHigh=series.length?Math.max(...series):s.price, histLow=series.length?Math.min(...series):s.price;
   const own=Math.max(0,+s.own||0);
   const value=stockPriceKRW(s)*own, cost=(+s.avgBuy||0)*own*(isForeign?fx.usd:1), pnl=value-cost;
   const roi=cost>0?pnl/cost:0;
@@ -7323,6 +7511,14 @@ function openStockDetail(id){
       <div class="kpi"><small>차트 최저</small><b>${priceText(histLow)}</b></div>
       <div class="kpi"><small>거래량</small><b>${volumeText(s.volume)}</b></div>
       <div class="kpi"><small>외국인·기관</small><b class="${(s.foreignFlow||0)+(s.instFlow||0)>=0?"up":"down"}">${flowText(s.foreignFlow)} / ${flowText(s.instFlow)}</b></div>
+    </div>
+    <div class="section-head" style="margin-top:12px"><h3>가격 추이</h3><span class="pill">${priceSeriesInfo(s).synthetic?"오늘":`최근 ${Math.max(1,Math.round(hist.length*5/60))}분`}</span></div>
+    ${priceChartHtml(s)}
+    <div class="kpis" style="margin-top:8px">
+      <div class="kpi"><small>구간 최고</small><b>${priceText(Math.max(...priceSeries(s)))}</b></div>
+      <div class="kpi"><small>구간 최저</small><b>${priceText(Math.min(...priceSeries(s)))}</b></div>
+      <div class="kpi"><small>구간 시작</small><b>${priceText(priceSeries(s)[0])}</b></div>
+      <div class="kpi"><small>현재</small><b class="${dayC>=0?"up":"down"}">${priceText(s.price)}</b></div>
     </div>
     <div class="section-head" style="margin-top:12px"><h3>실적</h3><span class="pill">최근 발표 기준</span></div>
     <div class="kpis">
@@ -7715,11 +7911,76 @@ function autoPanelHtml(){
       <label>&nbsp;<button class="ghost" onclick="saveAutoSettings()">규칙만 저장</button></label>
       ${a.enabled?`<label>&nbsp;<button class="sell" onclick="saveAutoSettings(false)">자동 투자 끄기</button></label>`:`<label>&nbsp;<button class="buy" onclick="saveAutoSettings(true)">자동 투자 켜기</button></label>`}
       <label>&nbsp;<button class="ghost" onclick="autoInvest(true)">지금 한 번 실행</button></label>
+      <label>&nbsp;<button class="ghost" onclick="openAutoBacktest(60)">1시간 백테스트</button></label>
       ${(autoBuySources().length>1)?`<label>&nbsp;<button class="sell" onclick="quickDisableAuto()">모든 자동 매수 끄기</button></label>`:""}
     </div>
     <div class="notice" style="margin-top:8px">지금 자동으로 사는 항목: <b>${autoBuySources().length?autoBuySources().join(" · "):"없음"}</b> · 규칙만 바꾸려면 <b>규칙만 저장</b>을 누르세요.
     </div>
     <p class="muted-sm">${a.enabled?`켜짐 · ${a.every||60}초마다 현금을 주식 ${a.stockPct}% / 금 ${a.goldPct||0}% / 부동산 ${a.estatePct||0}% / 예금으로 재투자합니다.${a.autoSell?` 익절 ${a.takeProfit}% 또는 손절 ${a.stopLoss}%에 닿으면 자동 매도합니다.`:""}${a.rebalance?` 주식 비중이 목표 ${a.rebStockPct??60}%에서 ${a.rebBand??5}%p 이상 벗어나면 자동으로 리밸런싱합니다.${a.taxAware?` 세금 고려 모드에서는 평가차익이 작은 종목부터 매도하고, 세금 예산 ${a.taxBudget>0?won(a.taxBudget):"무제한"}을 넘는 매도는 건너뜁니다.`:""}`:""}`:"꺼짐 · 켜면 설정한 주기마다 남는 현금을 규칙대로 재투자합니다."}</p>`;
+}
+
+// ── 자동매매 백테스트 ──────────────────────────────
+// 현재 시장을 복제해 같은 규칙으로 과거 N분을 다시 돌려 보고, 끝나면 원래 상태로 되돌립니다.
+function cloneGameSnapshot(){
+  return {
+    state:JSON.parse(JSON.stringify(state)),
+    stocks:JSON.parse(JSON.stringify(stocks)),
+    products:JSON.parse(JSON.stringify(products)),
+    fx:JSON.parse(JSON.stringify(fx))
+  };
+}
+function restoreGameSnapshot(sn){
+  Object.keys(state).forEach(k=>{ delete state[k]; });
+  Object.assign(state,sn.state);
+  stocks=sn.stocks;
+  products.splice(0,products.length,...sn.products);
+  Object.keys(fx).forEach(k=>{ delete fx[k]; });
+  Object.assign(fx,sn.fx);
+}
+function runAutoBacktest(minutes){
+  const m=Math.max(5,Math.min(180,Math.round(+minutes||60)));
+  const snap=cloneGameSnapshot();
+  const cash0=state.cash;
+  const realized0=stocks.reduce((a,s)=>a+(+s.realizedProfit||0),0);
+  const equity0=netAssetsKRW();
+  let trades=0;
+  const origRecord=recordTrade, origNotify=notify, prevReplay=OFFLINE_REPLAY;
+  recordTrade=function(){ trades++; return origRecord.apply(this,arguments); };
+  notify=function(){};
+  OFFLINE_REPLAY=true;
+  let out;
+  try{
+    const every=Math.max(10,Math.round(+(state.auto&&state.auto.every)||60));
+    for(let i=0;i<m*12;i++){
+      state.marketSeconds+=5;
+      state.marketOpen=(state.marketSeconds%240)<180;
+      if(state.marketSeconds%15===0) tickAlt();
+      tickMarket(); updateFX();
+      if(state.marketSeconds%10<5) marketEventsAndNews();
+      if(state.marketSeconds%15<5) interest();
+      if(state.auto&&state.auto.enabled&&state.marketSeconds%every<5){ autoSellRules(); autoInvest(true); }
+    }
+    out={minutes:m,trades,cashDelta:state.cash-cash0,realized:stocks.reduce((a,s)=>a+(+s.realizedProfit||0),0)-realized0,equityDelta:netAssetsKRW()-equity0};
+  } finally {
+    recordTrade=origRecord; notify=origNotify; OFFLINE_REPLAY=prevReplay;
+    restoreGameSnapshot(snap);
+  }
+  return out;
+}
+function openAutoBacktest(minutes){
+  const a=state.auto||{};
+  const r=runAutoBacktest(minutes);
+  update();
+  openModal("자동매매 백테스트",`
+    <p class="muted-sm">지난 ${r.minutes}분을 같은 규칙으로 다시 돌린 <b>가상 결과</b>입니다. 미래 수익을 보장하지 않습니다.</p>
+    <div class="kpis" style="margin-top:10px">
+      <div class="kpi"><small>매매 횟수</small><b>${r.trades}건</b></div>
+      <div class="kpi"><small>실현손익</small><b class="${r.realized>=0?"up":"down"}">${r.realized>=0?"+":""}${won(r.realized)}</b></div>
+      <div class="kpi"><small>현금 변화</small><b class="${r.cashDelta>=0?"up":"down"}">${r.cashDelta>=0?"+":""}${won(r.cashDelta)}</b></div>
+      <div class="kpi"><small>순자산 변화</small><b class="${r.equityDelta>=0?"up":"down"}">${r.equityDelta>=0?"+":""}${won(r.equityDelta)}</b></div>
+    </div>
+    <p class="muted-sm" style="margin-top:8px">${a.enabled?`켜진 규칙 · ${a.every||60}초마다 · 익절 ${a.takeProfit||0}% · 손절 ${a.stopLoss||0}%${a.autoSell?"":" · 자동 매도 꺼짐"}`:"자동 투자가 꺼져 있어 매매가 일어나지 않았습니다. 먼저 자동 투자를 켜세요."}</p>
+    <div class="button-row" style="margin-top:12px"><button class="ghost" onclick="openAutoBacktest(30)">30분</button><button class="ghost" onclick="openAutoBacktest(180)">3시간</button><button class="ghost" onclick="closeModal()">닫기</button></div>`);
 }
 
 function orderTypeText(o){
@@ -8009,6 +8270,7 @@ function savePanelHtml(){
       <button class="ghost" onclick="exportCsv('assets')">자산 추이 CSV</button>
     </div>
     <div class="button-row" style="margin-top:8px">
+      <button class="ghost" onclick="openBackupList()">백업 목록·복원</button>
       <button class="ghost" onclick="restoreLatestBackup()">직전 세이브로 복원</button>
       <span class="muted-sm">최근 백업: ${escHtml(backupLabel())}</span>
     </div>
@@ -8175,7 +8437,44 @@ function setTradeQty(id,mode,ctx){
   return q;
 }
 // 카드에 입력한 수량만큼 매수합니다.
-function buyQty(id,ctx){
+// 주문 확인 시트: 수수료·세금·체결 후 잔고까지 보여 준 뒤에만 주문합니다.
+function openStockOrderSheet(kind,id,qty,ctx){
+  const s=stock(id); if(!s) return;
+  const acct=state.tax.mode, foreign=isForeignStock(s), fee=stockFeeRate(), taxRate=tradeTaxRate();
+  let rows=[];
+  if(kind==="buy"){
+    const gross=s.price*qty, feeAmt=gross*fee, total=gross+feeAmt;
+    const cashAfter=foreign?state.cash-total*fx.usd:state.cash-total;
+    rows=[
+      ["주문 단가",foreign?usdStr(s.price):won(s.price)],
+      ["수량",`${qty.toLocaleString("ko-KR")}주`],
+      ["주문 금액",foreign?usdStr(gross):won(gross)],
+      [`수수료 ${(fee*100).toFixed(2)}%`,foreign?usdStr(feeAmt):won(feeAmt)],
+      ["총 결제",foreign?usdStr(total):won(total)],
+      ["체결 후 현금",won(cashAfter)]
+    ];
+  } else {
+    const p=taxPreviewFor(s,qty,acct);
+    rows=[
+      ["주문 단가",foreign?usdStr(s.price):won(s.price)],
+      ["수량",`${qty.toLocaleString("ko-KR")}주`],
+      ["매도 금액(수수료·거래세 반영)",foreign?usdStr(p.revenue):won(p.revenue)],
+      ["예상 세금",won(p.tax)],
+      ["세후 수령",won(p.netKRW)],
+      ["체결 후 보유",`${Math.max(0,accountQty(s,acct)-qty).toLocaleString("ko-KR")}주`],
+      ["체결 후 현금",won(state.cash+p.netKRW)]
+    ];
+  }
+  openModal(`${escHtml(s.name)} ${kind==="buy"?"매수":"매도"} 확인`,`
+    <p class="muted-sm">${taxModeLabel(acct)} · ${escHtml(s.ticker)} · 시장가 주문</p>
+    <div class="offline-rows" style="margin-top:8px">${rows.map(([k,v])=>`<div class="snap-row"><span>${escHtml(k)}</span><b>${escHtml(String(v))}</b></div>`).join("")}</div>
+    <div class="button-row" style="margin-top:12px"><button class="${kind==="buy"?"buy":"sell"}" onclick="executeStockOrder('${kind}','${s.id}',${qty},'${ctx}')">주문 실행</button><button class="ghost" onclick="closeModal()">취소</button></div>`);
+}
+function executeStockOrder(kind,id,qty,ctx){
+  closeModal();
+  if(kind==="buy") buyQty(id,ctx,true); else sellQty(id,ctx,true);
+}
+function buyQty(id,ctx,skipPreview){
   if(!checkMarketOpen()) return;
   const s=stock(id); if(!s) return;
   const qty=tradeQtyValue(id,ctx), acct=state.tax.mode;
@@ -8185,21 +8484,20 @@ function buyQty(id,ctx){
   if(qty>max) return alert(`지금은 최대 ${max.toLocaleString("ko-KR")}주까지 매수할 수 있습니다.`);
   const cost=s.price*(1+stockFeeRate())*qty, principalKRW=s.price*qty*(isForeignStock(s)?fx.usd:1);
   if(!canTaxContribute(acct,principalKRW)) return alert(`${taxModeLabel(acct)} 연간 납입한도가 부족합니다.`);
-  if(!confirmTrade("매수",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${isForeignStock(s)?usdStr(cost):won(cost)} · ${taxModeLabel(acct)}`)) return;
+  if(!skipPreview && (state.settings||{}).confirmTrades!==false){ openStockOrderSheet("buy",id,qty,ctx); return; }
   if(!marketBuyShares(s,qty,acct)) return alert("주문을 처리하지 못했습니다. 잔고 또는 납입한도를 확인해 주세요.");
   addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매수 (${isForeignStock(s)?usdStr(s.price):won(s.price)}, 수수료 포함 · ${taxModeLabel(acct)})`);
   saveGame(); update();
 }
 // 카드에 입력한 수량만큼 현재 계좌에서 매도합니다.
-function sellQty(id,ctx){
+function sellQty(id,ctx,skipPreview){
   if(!checkMarketOpen()) return;
   const s=stock(id); if(!s) return;
   const qty=tradeQtyValue(id,ctx), acct=state.tax.mode, available=accountQty(s,acct);
   if(qty<=0) return alert("매도 수량을 1주 이상 입력해 주세요.");
   if(available<qty) return alert(`${taxModeLabel(acct)} 보유 ${available.toLocaleString("ko-KR")}주까지만 매도할 수 있습니다.`);
   const p=taxPreviewFor(s,qty,acct), foreign=isForeignStock(s);
-  const taxNote=acct==="pension"?` · 인출세 이연 ${won(Math.max(0,p.profitKRW*.055))}`:` · 예상 세금 ${won(p.tax)} · 세후 ${won(p.netKRW)}`;
-  if(!confirmTrade("매도",`${s.name} ${qty.toLocaleString("ko-KR")}주 · ${foreign?usdStr(p.revenue):won(p.revenue)} (수수료·세금 반영)${taxNote}`)) return;
+  if(!skipPreview && (state.settings||{}).confirmTrades!==false){ openStockOrderSheet("sell",id,qty,ctx); return; }
   if(!marketSellShares(s,qty,acct)) return alert("주문을 처리하지 못했습니다. 계좌 보유 수량을 확인해 주세요.");
   addLog(`${s.name} ${qty.toLocaleString("ko-KR")}주 매도 (${foreign?usdStr(s.price):won(s.price)} · ${taxModeLabel(acct)})`);
   saveGame(); update();
@@ -8445,7 +8743,7 @@ function tickMarket(){
       }
       s.dayOpen=s.price;
       s.lastMove=(s.price-prev)/prev;
-      s.hist.push(s.price); if(s.hist.length>60) s.hist.shift();
+      s.hist.push(s.price); if(s.hist.length>240) s.hist.shift();
       if(isIndexFund(s)) return; // ETF는 아래 지수 추종 계산을 이어서 합니다.
       return;
     }
@@ -8485,7 +8783,7 @@ function tickMarket(){
     }
     s.lastMove=(s.price-old)/old;
     s.hist.push(s.price);
-    if(s.hist.length > 60) s.hist.shift();
+    if(s.hist.length > 240) s.hist.shift();
   });
   if(dayRolled) ensureDailyBreadth(dayIndex);
   checkShortMargins();
@@ -8977,6 +9275,10 @@ function update(){
     document.querySelectorAll(`[data-spark="${s.id}"]`).forEach(sp=>{
       // 마우스로 가격을 보고 있는 동안에는 툴팁이 지워지지 않게 갱신을 잠시 건너뜁니다.
       if(typeof sp.matches==="function" && sp.matches(":hover")) return;
+      // 가격·히스토리가 그대로면 DOM을 다시 쓰지 않습니다(모바일 렌더 비용 절감).
+      const key=sparkRenderKey(s);
+      if(sp._sparkKey===key) return;
+      sp._sparkKey=key;
       sp.innerHTML=sparklineHTML(s);
     });
   });
