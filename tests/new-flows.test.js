@@ -630,5 +630,78 @@ function createGame() {
   check('환생 후에는 초보자 도움을 다시 켜지 않음', beginner.before === true && beginner.after === false, JSON.stringify(beginner));
 }
 
+// ── 저장 파일 문자열이 남은 화면에도 원시 HTML로 들어가지 않는지 전수 확인 ──
+{
+  const g = createGame();
+  const EVIL = "<img src=x onerror=1>";
+
+  const bar = g.run(`(()=>{
+    clearGame(true);
+    state.ipo={offer:{id:'ipo_med',name:'<img src=x onerror=1>',ticker:'<b>t</b>',theme:'<i>y</i>',group:'domestic',vol:.038,price:42000,qty:60000,closesAt:99999,subscribed:0,mine:0,reminded:false},nextAt:0,history:[]};
+    ipoPage();
+    return {bar:marketDayBarHTML(), page:document.getElementById('ipo').innerHTML||''};
+  })()`);
+  check('시장 일차 바가 공모주 이름을 이스케이프', bar.bar.includes('&lt;img') && !bar.bar.includes('<img'), bar.bar.slice(0, 120));
+  check('공모주 화면이 티커·테마를 이스케이프', !bar.page.includes('<img') && !bar.page.includes('<b>t</b>') && !bar.page.includes('<i>y</i>'), bar.page.slice(0, 160));
+
+  const weekly = g.run(`(()=>{
+    const orig=ensureWeekly;
+    ensureWeekly=()=>state.weekly; // 저장 파일에서 온 키를 그대로 그려 보기 위해 키 정규화를 잠시 끕니다.
+    state.weekly={key:'<img src=x onerror=1>',counts:{},claimed:{}};
+    let html='';
+    try{ html=weeklyPanelHtml(); } finally { ensureWeekly=orig; }
+    return html;
+  })()`);
+  check('주간 패널이 주간 키를 이스케이프', weekly.includes('&lt;img') && !weekly.includes('<img'), weekly.slice(0, 160));
+
+  // 저장 파일에서 온 문자열을 모두 악성 값으로 바꾼 뒤 화면 전체를 그려 봅니다.
+  g.run(`(()=>{
+    clearGame(true);
+    const evil='${EVIL}';
+    state.cash=50000000; state.usd=0; state.loan=0;
+    state.news=[evil];
+    state.logs=[evil];
+    state.alerts=[{at:0,kind:'system',title:evil,text:evil,read:false}];
+    state.journal=[{at:0,side:'buy',name:evil,qty:1,valueKRW:1,fee:0,profit:0}];
+    state.journalFilter={q:evil,side:'all'};
+    state.company={name:evil,level:1,valuation:100000000,book:100000000,revenue:2000000,profit:600000,payout:.3,upkeep:0,risk:0,listed:null,acquired:{}};
+    state.weekly={key:evil,counts:{},claimed:{}};
+    state.ipo={offer:{id:'ipo_med',name:evil,ticker:evil,theme:evil,group:'domestic',vol:.038,price:42000,qty:60000,closesAt:99999,subscribed:0,mine:0,reminded:false},nextAt:0,history:[]};
+    state.disclosures=[{at:0,stockId:'future_ai',name:evil,title:evil,text:evil,move:1}];
+    state.cloud=Object.assign({},state.cloud,{nickname:evil});
+    state.watch=[];
+    const stock0=stocks[0]; stock0.own=1; stock0.avgBuy=stock0.start;
+    products[0].amount=100000;
+    return 1;
+  })()`);
+
+  const renders = [
+    ["dashboardPage"], ["portfolio"], ["stockPage", "domestic"], ["stockPage", "foreign"],
+    ["stockPage", "mega"], ["stockPage", "special"], ["holdingsPage"], ["news"], ["economyPage"],
+    ["ipoPage"], ["loanPage"], ["taxPage"], ["ordersPage"], ["banking"], ["fxPage"],
+    ["realestatePage"], ["companyPage"], ["leaderboardPage"], ["rebirthPage"], ["settingsPage"],
+    ["guidePage"], ["shortPage"], ["openNotifModal"], ["openReport"]
+  ];
+  renders.forEach(args => {
+    const call = args.length === 1
+      ? `${args[0]}()`
+      : `${args[0]}(${args.slice(1).map(a => JSON.stringify(a)).join(",")}, '테스트', '테스트')`;
+    try { g.run(call); } catch (e) { /* 화면 상태에 따라 그리지 못하는 페이지는 건너뜁니다 */ }
+  });
+
+  const ids = ["dashboard", "portfolio", "domestic", "foreign", "mega", "special", "holdings", "news",
+    "economy", "ipo", "loan", "tax", "orders", "banking", "fx", "realestate", "company",
+    "leaderboard", "rebirth", "settings", "guide", "short"];
+  let combined = "";
+  ids.forEach(id => { try { combined += (g.el(id).innerHTML || ""); } catch (e) {} });
+  try { combined += g.el("modalRoot").innerHTML || ""; } catch (e) {}
+  const rawAt = combined.toLowerCase().indexOf("<img");
+  check('저장 파일 문자열이 어떤 화면에도 원시 HTML로 들어가지 않음', rawAt < 0,
+    rawAt < 0 ? "clean" : combined.slice(Math.max(0, rawAt - 100), rawAt + 100));
+  const escapedHits = (combined.match(/&lt;img src=x onerror=1&gt;/g) || []).length;
+  check('악성 값이 글자로는 실제 화면에 표시됨', escapedHits >= 3, escapedHits);
+  check('전수 확인이 실제로 화면을 그렸음', combined.length > 5000, combined.length);
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

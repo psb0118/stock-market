@@ -920,7 +920,7 @@ function marketDayText(){
   const clock=`다음 날까지 실제 ${clockText(realSeconds(marketDaySecondsLeft()))} (${speedNow()}x)`;
   return `📅 ${marketDayNumber()}일차 · 🌐 공유 시장 · ${clock}${state.paused?" · 일시정지":""}${tail}`;
 }
-function marketDayBarHTML(){ return `<div class="notice market-day" data-market-day>${marketDayText()}</div>`; }
+function marketDayBarHTML(){ return `<div class="notice market-day" data-market-day>${escHtml(marketDayText())}</div>`; }
 function updateMarketDayBar(){
   const text=marketDayText();
   document.querySelectorAll("[data-market-day]").forEach(el=>{ el.textContent=text; });
@@ -7629,7 +7629,7 @@ function stylePanelHtml(){
 
 function weeklyPanelHtml(){
   ensureWeekly();
-  return `<div class="kpis"><div class="kpi"><small>연속 접속</small><b>${state.streak.days}일</b></div><div class="kpi"><small>최고 연속</small><b>${state.streak.best}일</b></div><div class="kpi"><small>주간 키</small><b>${state.weekly.key||"-"}</b></div></div>
+  return `<div class="kpis"><div class="kpi"><small>연속 접속</small><b>${state.streak.days}일</b></div><div class="kpi"><small>최고 연속</small><b>${state.streak.best}일</b></div><div class="kpi"><small>주간 키</small><b>${escHtml(state.weekly.key||"-")}</b></div></div>
     ${WEEKLY_POOL.map(m=>{const p=Math.min(m.target,state.weekly.counts[m.id]||0),done=p>=m.target,claimed=!!state.weekly.claimed[m.id];return `<div class="mission"><div class="mission-top"><b>${m.label}</b><span class="pill">보상 ${won(m.reward)}</span></div><div class="bar"><span style="width:${(p/m.target*100).toFixed(0)}%"></span></div><div class="mission-top"><small>${p} / ${m.target}</small><button class="${done&&!claimed?"buy":"ghost"}" ${done&&!claimed?"":"disabled"} onclick="claimWeekly('${m.id}')">${claimed?"수령 완료":done?"보상 받기":"진행 중"}</button></div></div>`;}).join("")}
     <h3 class="sub-title">특별 미션</h3>
     ${SPECIAL_MISSIONS.map(m=>`<div class="holding-row compact"><b>${m.label}</b><span>${state.special[m.id]?"✅ 완료":`보상 ${won(m.reward)}`}</span></div>`).join("")}`;
@@ -7762,7 +7762,7 @@ function ipoPage(){
   const action=o&&o.lastAction;
   const actionBanner=action?`<div class="notice" style="background:${action.type==="subscribe"?"#ecfdf5":"#fff7ed"};border-color:${action.type==="subscribe"?"#86efac":"#fdba74"};color:${action.type==="subscribe"?"#166534":"#9a3412"}">${action.type==="subscribe"?`✅ <b>청약 접수 완료</b> · ${won(action.amount)} (${action.shares.toLocaleString("ko-KR")}주 기준) · 아래 취소 버튼을 누르면 전액 환불됩니다.`:`↩️ <b>청약 취소 완료</b> · ${won(action.amount)} 전액 환불 · 다시 청약할 수 있습니다.`}</div>`:"";
   const offerHtml=o?`<div class="panel">
-      <div class="company-head"><div><span class="pill">청약 진행 중</span> <span class="pill">${o.ticker}</span><h2>${escHtml(o.name)}</h2><div class="muted-sm">${o.theme} · 공모 ${o.qty.toLocaleString("ko-KR")}주</div></div><div class="company-value"><small>공모가</small><b>${won(o.price)}</b></div></div>
+      <div class="company-head"><div><span class="pill">청약 진행 중</span> <span class="pill">${escHtml(o.ticker)}</span><h2>${escHtml(o.name)}</h2><div class="muted-sm">${escHtml(o.theme)} · 공모 ${o.qty.toLocaleString("ko-KR")}주</div></div><div class="company-value"><small>공모가</small><b>${won(o.price)}</b></div></div>
       ${actionBanner}
       <div class="kpis" style="margin-top:10px"><div class="kpi"><small>마감까지 (실제)</small><b id="ipoRemain">${clockText(realSeconds(remain))}</b></div><div class="kpi"><small>청약 경쟁률</small><b>${(ratio*100).toFixed(0)}%</b></div><div class="kpi"><small>내 청약</small><b>${won(o.mine||0)}</b></div><div class="kpi"><small>접수 상태</small><b>${o.mine?"✅ 접수 완료":"미청약"}</b></div><div class="kpi"><small>예상 배정</small><b>${Math.max(0,Math.floor(((o.mine||0)/o.price)*Math.min(1,o.qty/Math.max(1,demandShares*1.5)))).toLocaleString("ko-KR")}주</b></div></div>
       <div class="inline-form" style="margin-top:10px">
