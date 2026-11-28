@@ -916,7 +916,7 @@ function clockText(sec){
 // 주식 화면 상단에 지금 며칠째인지와 다음 날까지 남은 실제 시간을 보여 줍니다.
 function marketDayText(){
   const offer=state.ipo&&state.ipo.offer;
-  const tail=offer?` · 📢 ${offer.name} 청약 중`:"";
+  const tail=offer?` · 📢 ${offer.name} 청약 중`:""; // audit-ok: 텍스트 전용, HTML 삽입은 marketDayBarHTML에서 escHtml
   const clock=`다음 날까지 실제 ${clockText(realSeconds(marketDaySecondsLeft()))} (${speedNow()}x)`;
   return `📅 ${marketDayNumber()}일차 · 🌐 공유 시장 · ${clock}${state.paused?" · 일시정지":""}${tail}`;
 }
@@ -4722,16 +4722,66 @@ function handleImport(ev){
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      applySaveData(JSON.parse(String(reader.result)));
-      saveGame(); banking(); fxPage(); portfolio(); update();
-      addLog("저장 파일을 불러왔습니다.");
-      alert("저장 파일을 불러왔습니다.");
+      previewImportSave(JSON.parse(String(reader.result)), file.name);
     } catch(e) {
-      alert(saveStaleRebirth(e)?SAVE_STALE_REBIRTH_MSG:"저장 파일을 읽을 수 없습니다. 형식을 확인해 주세요.");
+      alert("저장 파일을 읽을 수 없습니다. 형식을 확인해 주세요.");
     }
   };
   reader.readAsText(file);
   ev.target.value = "";
+}
+
+// 저장 파일을 바로 덮어쓰지 않고, 무엇이 들어오는지 먼저 보여 줍니다.
+let pendingImport=null;
+function saveFileSummary(data){
+  const st=(data && typeof data==="object" && data.state && typeof data.state==="object")?data.state:null;
+  if(!st) return null;
+  const r=(st.rebirth && typeof st.rebirth==="object")?st.rebirth:{};
+  const rebirths=Math.max(0,Math.floor(+r.count||0));
+  return {
+    version:Math.max(1,Math.floor(+data.version||1)),
+    savedAt:Math.max(0,+st.savedAt||0),
+    marketSeconds:Math.max(0,Math.floor(+st.marketSeconds||0)),
+    rebirths, points:Math.max(0,Math.floor(+r.points||0)),
+    cash:Math.max(0,+st.cash||0),
+    stocksOwned:(Array.isArray(data.stocks)?data.stocks:[]).filter(s=>s&&+s.own>0).length,
+    stale:rebirths<ensureRebirth().count
+  };
+}
+function previewImportSave(data, fileName){
+  const s=saveFileSummary(data);
+  if(!s) return alert("저장 파일 형식을 확인해 주세요.");
+  pendingImport=data;
+  openModal("저장 파일 불러오기", `
+    <p class="muted-sm">지금 진행을 덮어씁니다. 아래 내용을 확인해 주세요.</p>
+    <div class="kpis" style="margin-top:10px">
+      <div class="kpi"><small>저장 시각</small><b>${s.savedAt?escHtml(new Date(s.savedAt).toLocaleString("ko-KR")):"기록 없음"}</b></div>
+      <div class="kpi"><small>환생</small><b>${s.rebirths}회 · ${s.points}P</b></div>
+      <div class="kpi"><small>현금</small><b>${won(s.cash)}</b></div>
+      <div class="kpi"><small>보유 종목</small><b>${s.stocksOwned}개</b></div>
+    </div>
+    <p class="muted-sm" style="margin-top:8px">파일: ${escHtml(fileName||"선택한 파일")} · 형식 v${s.version} · 플레이 ${Math.floor(s.marketSeconds/60)}분</p>
+    ${s.stale?`<div class="labor-alert"><b>불러올 수 없습니다.</b> 이 파일의 환생 기록(${s.rebirths}회)이 지금 진행(${ensureRebirth().count}회)보다 적습니다.</div>`:""}
+    <div class="button-row" style="margin-top:12px">
+      <button class="buy" ${s.stale?"disabled":""} onclick="applyPendingImport()">불러오기</button>
+      <button class="ghost" onclick="cancelPendingImport()">취소</button>
+    </div>`);
+}
+function cancelPendingImport(){ pendingImport=null; closeModal(); }
+function applyPendingImport(){
+  const data=pendingImport;
+  if(!data) return;
+  pendingImport=null;
+  try{
+    snapshotSave("import");
+    applySaveData(data);
+    saveGame(); banking(); fxPage(); portfolio(); update();
+    closeModal();
+    addLog("저장 파일을 불러왔습니다.");
+    notify("system","저장 파일","선택한 저장 파일을 불러왔습니다.");
+  } catch(e) {
+    alert(saveStaleRebirth(e)?SAVE_STALE_REBIRTH_MSG:"저장 파일을 적용하지 못했습니다.");
+  }
 }
 
 // ── 클라우드 저장·월간 리더보드 ─────────────────────────────────
@@ -6302,6 +6352,7 @@ function rebirthNow(skipConfirm){
   goPage("rebirth", true); update(); // 환생 직후에는 잠금과 무관하게 열어 둡니다.
 }
 function resetRunForRebirth(){
+  snapshotSave("rebirth");
   const start=rebirthStartCash();
   state.cash=start; state.usd=0; state.tick=0; state.news=[]; state.logs=[];
   state.marketSeconds=0; state.marketOpen=true; state.currentEvent=null; state.eventTimer=0;
@@ -6731,11 +6782,56 @@ function handleExternalSave(){
 function saveRevision(){ return Math.max(0, Math.floor(+state.revision||0)); }
 function saveGame() {
   if(multiTab) return;
+  snapshotSave("auto");
   state.lastSeen=Date.now();
   state.savedAt=Date.now();
   state.revision=saveRevision()+1; // 저장할 때마다 리바이전을 올려 기기 간 충돌을 판단합니다.
   localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveData()));
   try{ scheduleCloudSync(); }catch(e){} // 로그인 상태면 클라우드에도 자동 업로드
+}
+
+// ── 세이브 백업 ─────────────────────────────────────────────
+// 자동 저장이 덮어쓰기 전 상태를 몇 개 보관해, 파일이 깨지거나 잘못 불러왔을 때
+// 같은 런 안에서 되돌릴 수 있게 합니다. (localStorage 용량 보호를 위해 크기 제한)
+const SAVE_BACKUP_KEY="money_playground_backups";
+const SAVE_BACKUP_MAX=3;
+const SAVE_BACKUP_EVERY=5*60*1000;
+const SAVE_BACKUP_BYTES=200000;
+function saveBackupList(){
+  try{
+    const list=JSON.parse(localStorage.getItem(SAVE_BACKUP_KEY)||"[]");
+    return (Array.isArray(list)?list:[]).filter(b=>b&&typeof b.data==="string"&&b.data.length<=SAVE_BACKUP_BYTES&&Number.isFinite(+b.at));
+  }catch(e){ return []; }
+}
+function snapshotSave(reason, at){
+  const raw=localStorage.getItem(SAVE_KEY);
+  if(!raw || raw.length>SAVE_BACKUP_BYTES) return false;
+  const list=saveBackupList();
+  const last=list[0];
+  if(last && last.data===raw) return false;
+  const now=Number.isFinite(+at)?+at:Date.now();
+  if(reason==="auto" && last && now-(+last.at||0)<SAVE_BACKUP_EVERY) return false;
+  list.unshift({at:now,reason:String(reason||"auto").slice(0,12),revision:saveRevision(),data:raw});
+  try{ localStorage.setItem(SAVE_BACKUP_KEY, JSON.stringify(list.slice(0,SAVE_BACKUP_MAX))); return true; }
+  catch(e){ return false; }
+}
+function backupLabel(){
+  const list=saveBackupList();
+  if(!list.length) return "백업 없음";
+  return `${new Date(+list[0].at).toLocaleString("ko-KR")} · ${list.length}개`;
+}
+function restoreLatestBackup(){
+  const list=saveBackupList();
+  if(!list.length) return alert("복원할 백업이 없습니다.");
+  const last=list[0];
+  if(!confirm(`${new Date(+last.at).toLocaleString("ko-KR")} 시점의 저장으로 되돌릴까요?\n지금 진행은 사라집니다.`)) return;
+  try{
+    applySaveData(JSON.parse(last.data));
+    saveGame(); banking(); fxPage(); portfolio(); update();
+    notify("system","백업 복원",`${new Date(+last.at).toLocaleString("ko-KR")} 백업을 불러왔습니다.`);
+  } catch(e) {
+    alert(saveStaleRebirth(e)?SAVE_STALE_REBIRTH_MSG:"백업을 복원하지 못했습니다.");
+  }
 }
 
 function loadGame() {
@@ -7000,8 +7096,9 @@ function applySaveData(data) {
   applyTheme(); // 불러온 설정(큰 글씨·색약·테마)을 즉시 반영합니다.
 }
 
-function clearGame(skipConfirm) {
+function clearGame(skipConfirm){
   if(!skipConfirm && !confirm("정말로 모든 게임 데이터를 삭제하고 처음부터 시작하시겠습니까?")) return;
+  snapshotSave("reset");
   localStorage.removeItem(SAVE_KEY);
   state.cash = START_CASH;
   state.usd = 0;
@@ -7959,7 +8056,11 @@ function savePanelHtml(){
       <button class="ghost" onclick="exportCsv('holdings')">보유 종목 CSV</button>
       <button class="ghost" onclick="exportCsv('assets')">자산 추이 CSV</button>
     </div>
-    <p class="muted-sm" style="margin-top:10px">저장 파일을 내보내거나 불러와서 진행 상황을 보관할 수 있습니다. CSV는 Excel에서 바로 열 수 있습니다.</p>`;
+    <div class="button-row" style="margin-top:8px">
+      <button class="ghost" onclick="restoreLatestBackup()">직전 세이브로 복원</button>
+      <span class="muted-sm">최근 백업: ${escHtml(backupLabel())}</span>
+    </div>
+    <p class="muted-sm" style="margin-top:10px">저장 파일을 내보내거나 불러와서 진행 상황을 보관할 수 있습니다. 불러오기는 내용을 먼저 보여 주고 확인한 뒤에만 적용합니다. CSV는 Excel에서 바로 열 수 있습니다.</p>`;
 }
 
 function portfolio(){
@@ -8662,12 +8763,12 @@ function livePageKey(page){
       JSON.stringify(state.daily&&state.daily.counts||{}), slow].join("|");
   }
   if(page==="portfolio") return [ownSig, prodSig, estateSig, metalSig,
-    state.company?`${state.company.level}:${Object.keys(state.company.acquired||{}).length}:${state.company.listed?state.company.listed.ownPct:"-"}:${state.company.name}`:"none",
+    state.company?`${state.company.level}:${Object.keys(state.company.acquired||{}).length}:${state.company.listed?state.company.listed.ownPct:"-"}:${state.company.name}`:"none", // audit-ok: 화면 서명 문자열(HTML 아님)
     Object.keys(state.goals||{}).length, Object.keys(state.achievements||{}).length, (state.journal||[]).length,
     JSON.stringify(state.daily&&state.daily.counts||{}), JSON.stringify(state.weekly&&state.weekly.counts||{}),
     (state.news||[]).length, JSON.stringify(state.ui&&state.ui.dashMore), slow].join("|");
   if(page==="realestate") return estateSig+"|"+metalSig+"|"+slow;
-  if(page==="company") return (state.company?`${state.company.level}|${Object.keys(state.company.acquired||{}).length}|${state.company.listed?state.company.listed.ownPct:"-"}|${state.company.name}|${state.company.payout}`:"none")+"|"+slow;
+  if(page==="company") return (state.company?`${state.company.level}|${Object.keys(state.company.acquired||{}).length}|${state.company.listed?state.company.listed.ownPct:"-"}|${state.company.name}|${state.company.payout}`:"none")+"|"+slow; // audit-ok: 화면 서명 문자열(HTML 아님)
   return `${marketDayIndex(state.marketSeconds)}|${(state.news||[]).length}|${slow}`;
 }
 function liveNumber(key){

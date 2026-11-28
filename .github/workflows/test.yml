@@ -1,0 +1,52 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  game:
+    name: 게임 회귀 테스트 · 이스케이프 감사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 저장 파일 이스케이프 감사
+        run: npm run audit
+      - name: 전체 회귀 테스트
+        run: npm test
+
+  server:
+    name: 클라우드 API 스모크 (로컬 Wrangler)
+    runs-on: ubuntu-latest
+    # wrangler 설치·로컬 D1이 필요한 무거운 작업이라 PR에서는 돌리지 않고
+    # main 푸시와 수동 실행에서만 확인합니다.
+    if: github.event_name != 'pull_request'
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: 로컬 D1 스키마 생성
+        run: npx wrangler d1 execute mp-leaderboard --local --file=./schema.sql
+      - name: Worker 실행
+        run: |
+          npx wrangler dev --local --port 8787 > /tmp/wrangler.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/api/health > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Worker가 준비되지 않았습니다"; cat /tmp/wrangler.log; exit 1
+      - name: API 스모크 테스트
+        run: node smoke.mjs
+      - name: Worker 로그
+        if: failure()
+        run: cat /tmp/wrangler.log || true

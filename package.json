@@ -1,0 +1,11 @@
+{
+  "name": "money-playground",
+  "version": "1.0.0",
+  "private": true,
+  "description": "주식 게임 - 정적 index.html + 로컬 회귀 테스트",
+  "scripts": {
+    "test": "node scripts/run-tests.js",
+    "audit": "node scripts/audit-escapes.js",
+    "check": "npm run audit && npm test"
+  }
+}

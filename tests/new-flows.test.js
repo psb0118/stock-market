@@ -703,5 +703,77 @@ function createGame() {
   check('전수 확인이 실제로 화면을 그렸음', combined.length > 5000, combined.length);
 }
 
+// ── 저장 파일 미리보기 · 자동 백업 ─────────────────────────────
+{
+  const g = createGame();
+
+  const preview = g.run(`(()=>{
+    clearGame(true);
+    localStorage.removeItem(SAVE_BACKUP_KEY);
+    state.cash=12345678; state.marketSeconds=600;
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    state.cash=0;
+    previewImportSave(data,'내저장.json');
+    return {modal:document.getElementById('modalRoot').innerHTML||'', pending:!!pendingImport, summary:saveFileSummary(data)};
+  })()`);
+  check('가져오기 전에 저장 내용을 먼저 보여 줌', preview.pending === true && preview.modal.includes('저장 파일 불러오기') && preview.modal.includes('내저장.json') && preview.summary.cash === 12345678 && preview.summary.marketSeconds === 600, JSON.stringify(preview.summary));
+  check('확인 전에는 진행을 덮어쓰지 않음', g.run('state.cash') === 0, g.run('state.cash'));
+
+  const applied = g.run(`(()=>{ applyPendingImport(); return {cash:state.cash,pending:pendingImport}; })()`);
+  check('확인을 누르면 저장 파일을 적용', applied.cash === 12345678 && applied.pending === null, JSON.stringify(applied));
+
+  const cancelled = g.run(`(()=>{
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    data.state.cash=999;
+    previewImportSave(data,'cancel.json');
+    cancelPendingImport();
+    return {cash:state.cash, pending:pendingImport};
+  })()`);
+  check('취소하면 아무것도 바뀌지 않음', cancelled.cash === 12345678 && cancelled.pending === null, JSON.stringify(cancelled));
+
+  const fileName = g.run(`(()=>{
+    const data=JSON.parse(JSON.stringify(buildSaveData()));
+    previewImportSave(data,'<img src=x onerror=1>.json');
+    return document.getElementById('modalRoot').innerHTML||'';
+  })()`);
+  check('파일 이름도 이스케이프해서 표시', fileName.includes('&lt;img') && !fileName.includes('<img'), fileName.slice(0, 140));
+
+  const stale = g.run(`(()=>{
+    clearGame(true);
+    state.cash=120000000; state.peakNet=120000000;
+    const old=JSON.parse(JSON.stringify(buildSaveData()));
+    rebirthNow(true);
+    previewImportSave(old,'old.json');
+    return {modal:document.getElementById('modalRoot').innerHTML||'', stale:saveFileSummary(old).stale};
+  })()`);
+  check('환생 전 파일은 미리보기 단계에서부터 막힘', stale.stale === true && stale.modal.includes('불러올 수 없습니다') && /disabled/.test(stale.modal), stale.modal.slice(0, 160));
+
+  const invalid = g.run(`(()=>{ pendingImport=null; previewImportSave({foo:1},'x.json'); return pendingImport; })()`);
+  check('형식이 아닌 파일은 미리보기를 열지 않음', invalid === null);
+
+  const backups = g.run(`(()=>{
+    clearGame(true); localStorage.removeItem(SAVE_BACKUP_KEY);
+    for(let i=0;i<5;i++){ state.cash=1000+i; saveGame(); snapshotSave('import', Date.now()+i*1000); }
+    const list=saveBackupList();
+    return {count:list.length, cash:list.map(b=>JSON.parse(b.data).state.cash)};
+  })()`);
+  check('자동 백업은 최대 3개만 보관', backups.count === 3 && backups.cash[0] === 1004 && backups.cash[2] === 1002, JSON.stringify(backups));
+
+  const restored = g.run(`(()=>{ restoreLatestBackup(); return state.cash; })()`);
+  check('직전 세이브로 복원', restored === 1004, restored);
+
+  const big = g.run(`(()=>{
+    const keep=localStorage.getItem(SAVE_KEY);
+    localStorage.setItem(SAVE_KEY,'x'.repeat(SAVE_BACKUP_BYTES+1));
+    const r=snapshotSave('import');
+    if(keep==null) localStorage.removeItem(SAVE_KEY); else localStorage.setItem(SAVE_KEY,keep);
+    return r;
+  })()`);
+  check('너무 큰 저장은 백업하지 않음', big === false, String(big));
+
+  const panel = g.run('savePanelHtml()');
+  check('설정 화면에 백업 복원 버튼·시각 표시', panel.includes('직전 세이브로 복원') && panel.includes('최근 백업'), panel.slice(0, 80));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);
