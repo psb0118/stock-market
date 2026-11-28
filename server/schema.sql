@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS scores (
 
 CREATE INDEX IF NOT EXISTS idx_scores_season ON scores(season, score DESC, updated_at ASC);
 
+-- 공유 일일 시세: Cron이 오늘·어제 변동률을 남깁니다(게임과 같은 전역 시드 계산).
+CREATE TABLE IF NOT EXISTS market_days (
+  day           INTEGER PRIMARY KEY,           -- 게임 며칠차(2026-01-01 KST = 0)
+  date          TEXT NOT NULL,                 -- YYYY-MM-DD (한국 날짜)
+  market_return REAL NOT NULL,                 -- 그날 시장 변동률(경기 국면 보정 전)
+  updated_at    INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS rate (
   key          TEXT NOT NULL,
   window_start INTEGER NOT NULL,

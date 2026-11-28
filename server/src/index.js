@@ -1,5 +1,7 @@
 // 머니 플레이그라운드 — 클라우드 세이브 + 월간 리더보드 (Cloudflare Workers + D1)
 // 인증: 서버가 발급한 64자 hex 기기 토큰을 Bearer로 사용합니다. 비밀번호/이메일 없음.
+import { dayIndexAt, marketCandle, marketHistory, rollMarketDays } from "./market.js";
+
 const MAX_BODY = 320 * 1024;
 const MAX_SAVE_TEXT = 300 * 1024;
 const MAX_SCORE = 1e15;
@@ -25,6 +27,17 @@ export default {
       );
     }
   },
+
+  // Cron(매일 00:05 KST): 오늘·어제 공유 시세를 D1에 남기고 오래된 행을 정리합니다.
+  async scheduled(event, env) {
+    try {
+      const result = await rollMarketDays(env, Date.now());
+      console.log("market_cron", JSON.stringify(result));
+    } catch (err) {
+      console.log("market_cron_failed", (err && err.stack) || err);
+      throw err;
+    }
+  },
 };
 
 async function route(req, url, env) {
@@ -36,6 +49,8 @@ async function route(req, url, env) {
   if (p === "/api/save" && req.method === "GET") return getSave(req, env);
   if (p === "/api/score" && req.method === "POST") return postScore(req, env);
   if (p === "/api/leaderboard" && req.method === "GET") return leaderboard(req, url, env);
+  if (p === "/api/market" && req.method === "GET") return getMarket(url, env);
+  if (p === "/api/market/history" && req.method === "GET") return getMarketHistory(url, env);
   return json({ error: "not_found", message: "없는 경로입니다." }, 404);
 }
 
@@ -169,6 +184,30 @@ async function leaderboard(req, url, env) {
     // 비로그인/만료 토큰은 순위만 보여 줍니다.
   }
   return json({ season, entries, me, total: totalRow ? totalRow.n : 0 });
+}
+
+// ── 공유 일일 시세 ───────────────────────────────────
+// 게임과 같은 전역 시드로 계산한 하루 변동률을 돌려줍니다. 읽기 전용·공개이며,
+// 모든 플레이어가 같은 날짜에 같은 값을 받습니다.
+async function getMarket(url, env) {
+  const raw = url.searchParams.get("day");
+  let day = dayIndexAt();
+  if (raw != null && raw !== "") {
+    if (!/^\d{1,7}$/.test(raw)) throw httpError(400, "bad_day", "day는 0 이상의 정수여야 합니다.");
+    day = Number(raw);
+    if (day > dayIndexAt() + 1) throw httpError(400, "bad_day", "아직 오지 않은 날짜입니다.");
+  }
+  const phase = url.searchParams.get("phase") || "중립";
+  const candle = marketCandle(day, Date.now(), phase);
+  return json({ ...candle, source: "game-seed-v1" }, 200, { "cache-control": "public, max-age=60" });
+}
+
+async function getMarketHistory(url, env) {
+  const raw = url.searchParams.get("days");
+  const days = raw == null || raw === "" ? 30 : Number(raw);
+  if (!Number.isFinite(days) || days < 1 || days > 365) throw httpError(400, "bad_days", "days는 1~365 사이여야 합니다.");
+  const result = await marketHistory(env, Date.now(), days);
+  return json(result, 200, { "cache-control": "public, max-age=300" });
 }
 
 // ── 검증/유틸 ────────────────────────────────────

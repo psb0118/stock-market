@@ -52,6 +52,29 @@ ok("CORS 허용 헤더에 authorization", String(pre.headers.get("access-control
 const evil = await call("/api/health", { origin: "https://evil.example" });
 ok("CORS 비허용 오리진 차단", evil.headers.get("access-control-allow-origin") === null, evil.headers.get("access-control-allow-origin"));
 
+// ── 공유 일일 시세 ──
+const market = await call("/api/market");
+ok("공유 시세 200", market.status === 200 && Number.isInteger(market.json.day) && Number.isFinite(market.json.marketReturn), market.status);
+ok("공유 시세 범위 ±8%", Math.abs(market.json.marketReturn) <= 0.08, market.json.marketReturn);
+ok("공유 시세 캐시 헤더", /max-age=\d+/.test(market.headers.get("cache-control") || ""), market.headers.get("cache-control"));
+ok("공유 시세 CORS", market.headers.get("access-control-allow-origin") === ORIGIN, market.headers.get("access-control-allow-origin"));
+
+const past = await call("/api/market?day=0");
+ok("과거 날짜 시세 200", past.status === 200 && past.json.day === 0 && past.json.date === "2026-01-01", past.json);
+const future = await call(`/api/market?day=${market.json.day + 5}`);
+ok("미래 날짜 400", future.status === 400 && future.json.error === "bad_day", future.json);
+const badDay = await call("/api/market?day=abc");
+ok("잘못된 day 400", badDay.status === 400 && badDay.json.error === "bad_day", badDay.status);
+const boom = await call("/api/market?phase=" + encodeURIComponent("호황"));
+ok("경기 국면 보정", boom.json.phase === "호황" && Math.abs(boom.json.marketReturn - Math.min(0.08, boom.json.baseMarketReturn + 0.002)) < 1e-12, boom.json);
+
+const hist = await call("/api/market/history?days=7");
+ok("시세 히스토리 200", hist.status === 200 && Array.isArray(hist.json.days) && hist.json.days.length === 7, hist.status);
+ok("히스토리 오름차순", hist.json.days.every((d, i, a) => i === 0 || a[i - 1].day < d.day), hist.json.days.map((d) => d.day));
+ok("히스토리 오늘 포함", hist.json.days[6].day === market.json.day && hist.json.days[6].marketReturn === market.json.baseMarketReturn, hist.json.days[6]);
+const badHist = await call("/api/market/history?days=999");
+ok("히스토리 범위 400", badHist.status === 400 && badHist.json.error === "bad_days", badHist.status);
+
 const badName = await call("/api/register", { method: "POST", body: { nickname: "a" } });
 ok("닉네임 검증 400", badName.status === 400 && badName.json.error === "bad_nickname", badName.json);
 

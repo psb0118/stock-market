@@ -7,9 +7,12 @@
 
 | 파일 | 역할 |
 |---|---|
-| `src/index.js` | Worker API (CORS, 토큰 인증, 저장/복원, 점수, 순위, 레이트 리밋) |
-| `schema.sql` | D1 테이블 4개(`players`, `saves`, `scores`, `rate`) |
+| `src/index.js` | Worker API (CORS, 토큰 인증, 저장/복원, 점수, 순위, 레이트 리밋, 공유 시세) |
+| `src/market.js` | 공유 일일 시세 계산(게임과 같은 전역 시드)·Cron 기록·히스토리(순수 모듈) |
+| `schema.sql` | D1 테이블 5개(`players`, `saves`, `scores`, `rate`, `market_days`) |
 | `migrate-scores-verified.sql` | 기존 `scores` 테이블에 서버 검증 컬럼을 추가 |
+| `migrate-market-days.sql` | 기존 D1에 `market_days` 테이블만 추가 |
+| `test/market.test.js` | 시세 계산·Cron·히스토리 단위 테스트(Worker 불필요) |
 | `wrangler.toml` | 로컬 개발 설정. `database_id`는 배포 시 교체 |
 | `smoke.mjs` | 로컬 서버용 API 통합 테스트 30여 건 |
 | `package.json` | `npm run dev` / `db:local` / `smoke` / `deploy` |
@@ -25,6 +28,8 @@
 | PUT | `/api/save` | Bearer | 저장 업로드 (`revision` 충돌 시 409, `force:true`로 덮어쓰기) |
 | POST | `/api/score` | Bearer | 시즌 최고 순자산 등록(저장 파일과 대조 후 최댓값 유지) |
 | GET | `/api/leaderboard?season=YYYY-MM&limit=10` | 선택 | 상위 순위 + (토큰 있으면) 내 순위 |
+| GET | `/api/market?day=N&phase=호황` | - | 그날의 공유 시세(`marketReturn`, `baseMarketReturn`, 날짜, 남은 초) |
+| GET | `/api/market/history?days=30` | - | 최근 일별 시세(D1 저장값 우선, 없으면 계산) |
 
 - 인증은 **서버가 발급한 64자 hex 기기 토큰**입니다. 비밀번호·이메일·쿠키가 없습니다.
 - 서버에는 토큰의 SHA-256만 저장합니다. 토큰은 가입 응답에서 한 번만 내려갑니다.
@@ -32,6 +37,19 @@
 - **닉네임은 중복될 수 있습니다.** 계정·비밀번호가 없어 이름을 선점하면 연결을 해제한 뒤 같은 이름으로 시작할 수 없기 때문입니다. 신원은 기기 토큰입니다.
 - 레이트 리밋: IP당 가입 10회/시간, 리더보드 120회/분, 플레이어당 저장 30회/분·점수 10회/분.
 - **점수는 서버에 저장된 세이브와 대조합니다.** 현금·달러·주식·금융상품은 저장 값으로 서버가 직접 계산하고, 시세가 저장에 없는 부동산·금속·기업·채권·공매도는 `buildSaveData()`의 `valuation` 스냅샷을 더합니다. 계산한 순자산보다 2%+5만원 넘게 높은 점수는 `400 score_mismatch`로 거부됩니다. 저장이 없으면 `400 save_required`입니다.
+
+## 공유 일일 시세 (`/api/market`) + Cron
+
+- `index.html`의 `dailyMarketReturn`과 **같은 전역 시드(20261126)·같은 식**을 서버에서 계산합니다.
+  같은 날짜면 누구나 같은 `marketReturn`을 받습니다(패리티는 `test/market.test.js`가 고정).
+- 날짜 경계는 한국 자정(`GAME_DAY_EPOCH_MS = 2026-01-01 00:00 KST`), `day`는 0부터 시작합니다.
+- `phase`(호황/중립/불황)를 주면 게임의 경기 국면 보정(±0.2%p)까지 적용합니다. 기본은 중립입니다.
+- 응답은 `public, max-age=60`으로 캐시됩니다. 읽기 전용 공개 데이터이며 인증이 없습니다.
+- **Cron**(`wrangler.toml`의 `[triggers] crons = ["5 15 * * *"]`, 매일 00:05 KST)이 오늘·어제
+  시세를 `market_days`에 남기고 400일보다 오래된 행을 지웁니다. 어제를 함께 쓰는 이유는
+  Cron이 하루 실패해도 구멍이 생기지 않게 하기 위함입니다.
+- Cron/저장은 배포 후에만 동작합니다. 로컬에서는 `wrangler dev --test-scheduled` +
+  `curl "http://127.0.0.1:8787/__scheduled?cron=5+15+*+*+*"`로 확인합니다.
 
 ## 로컬 실행
 
@@ -41,7 +59,8 @@ npm install                 # wrangler 설치
 npm run db:local            # 로컬 D1에 schema.sql 적용
 npm run dev                 # http://127.0.0.1:8787 (workerd)
 # 다른 터미널에서
-npm run smoke               # API 통합 테스트
+npm run smoke               # API 통합 테스트(공유 시세 포함)
+npm test                    # 시세 계산·Cron·히스토리 단위 테스트
 ```
 
 로컬 D1 데이터는 `server/.wrangler/state`에 남습니다. 초기화하려면 그 폴더를 지우고 `db:local`을 다시 실행하세요.
@@ -94,6 +113,9 @@ npx wrangler deploy                         # 예: https://mp-cloud.<계정>.wor
 - `rate` 테이블은 계속 쌓입니다. 가끔 `DELETE FROM rate WHERE window_start < unixepoch() - 86400;`로 정리하세요.
 
 ## 테스트 범위
+
+`npm test`(단위): 게임과의 시세 패리티, 날짜 매핑, ±8% 범위, 결정성, 경기 국면 보정,
+Cron의 오늘·어제 기록과 정리 기준, 히스토리의 저장값 우선·미저장 시 계산·D1 오류 폴백·개수 제한.
 
 `smoke.mjs`가 확인하는 것: health, CORS 허용/차단, 닉네임 검증·중복 허용, 인증 401, 저장 없음 404,
 업로드 revision 증가, 충돌 409, force 덮어쓰기, 잘못된 저장 400, 과대 저장 413,

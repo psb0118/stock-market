@@ -10,6 +10,12 @@ binding = "DB"
 database_name = "mp-leaderboard"
 database_id = "00000000-0000-0000-0000-000000000000"
 
+# 매일 00:05 KST(15:05 UTC)에 오늘·어제 공유 시세를 D1에 기록합니다.
+# 로컬 확인: npx wrangler dev --test-scheduled 후
+#   curl "http://127.0.0.1:8787/__scheduled?cron=5+15+*+*+*"
+[triggers]
+crons = ["5 15 * * *"]
+
 [vars]
 # GitHub Pages + 로컬 정적 서버만 허용합니다. 배포 후 실제 주소로 바꾸세요.
 ALLOWED_ORIGINS = "https://psb0118.github.io,http://127.0.0.1:3000,http://localhost:3000"

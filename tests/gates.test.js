@@ -107,6 +107,43 @@ const g = createGame();
   check('DRIP: 배당금으로 같은 종목 재매수', drip.drip === true && drip.own > drip.before, JSON.stringify(drip));
   check('DRIP: 1주 미만 잔액만 현금으로', drip.cash - drip.cashBefore >= 0 && drip.cash - drip.cashBefore < drip.price, `${drip.cash - drip.cashBefore}/${drip.price}`);
 
+  // DRIP은 배당이 나온 계좌의 로트로 들어가야 합니다(현재 선택 계좌가 아니라).
+  const split = g.run(`(()=>{
+    clearGame(true); state.cash=450000000; state.usd=0;
+    stocks.forEach(x=>{x.own=0});
+    const s=stock('future_ai'); s.price=1000;
+    s.own=600000; addTaxLot(s,600000,1000,'isa');
+    s.own=1000000; addTaxLot(s,400000,1000,'general');
+    state.tax.mode='general';
+    setAutoIncomeMode('auto'); setPerk('drip',true);
+    const ach=checkAchievements, goals=checkGoals;
+    checkAchievements=()=>{}; checkGoals=()=>{};
+    const before={isa:accountQty(s,'isa'),general:accountQty(s,'general'),pension:accountQty(s,'pension')};
+    payDividends();
+    checkAchievements=ach; checkGoals=goals;
+    return {before, after:{isa:accountQty(s,'isa'),general:accountQty(s,'general'),pension:accountQty(s,'pension')}};
+  })()`);
+  check('DRIP: ISA 보유분은 ISA 로트로 재투자', split.after.isa - split.before.isa === 4, JSON.stringify(split));
+  check('DRIP: 일반 보유분은 일반 로트로 재투자', split.after.general - split.before.general === 2, JSON.stringify(split));
+  check('DRIP: 보유하지 않은 연금 계좌는 그대로', split.after.pension === split.before.pension, JSON.stringify(split));
+
+  // 현재 계좌(ISA)가 달라도 보유 계좌(일반)로 들어가야 합니다.
+  const cross = g.run(`(()=>{
+    clearGame(true); state.cash=450000000; state.usd=0;
+    stocks.forEach(x=>{x.own=0});
+    const s=stock('future_ai'); s.price=1000; s.own=1000000;
+    addTaxLot(s,1000000,1000,'general');
+    state.tax.mode='isa';
+    setAutoIncomeMode('auto'); setPerk('drip',true);
+    const ach=checkAchievements, goals=checkGoals;
+    checkAchievements=()=>{}; checkGoals=()=>{};
+    const before={isa:accountQty(s,'isa'),general:accountQty(s,'general')};
+    payDividends();
+    checkAchievements=ach; checkGoals=goals;
+    return {before, after:{isa:accountQty(s,'isa'),general:accountQty(s,'general')}};
+  })()`);
+  check('DRIP: 선택 계좌가 달라도 보유 계좌로', cross.after.general > cross.before.general && cross.after.isa === cross.before.isa, JSON.stringify(cross));
+
   const lockedDrip = g.run(`(()=>{
     clearGame(true); state.cash=1000; state.usd=0;
     stocks.forEach(s=>{s.own=0;});
