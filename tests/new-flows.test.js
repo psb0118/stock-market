@@ -932,6 +932,9 @@ function check(name, ok, detail) {
 {
   const g = createGame();
   check('종목 카드에 하단 고정 거래 영역', /trade trade-qty[^"]*trade-dock/.test(html) && html.includes('.trade.trade-dock{position:sticky'));
+  const cardMarkup = g.run("card(stock('future_ai'),'domestic')");
+  check('고정 바 뒤에 가려질 버튼이 없음(빠른 거래가 먼저)', cardMarkup.indexOf('quick-trade') > -1 && cardMarkup.indexOf('quick-trade') < cardMarkup.indexOf('trade-dock'));
+  check('320px 카드 헤더 줄바꿈 규칙', html.includes('.card .top{flex-wrap:wrap;row-gap:6px}'));
   const svg = g.run("sparklineSVG(stock('future_ai'))");
   check('차트에 스크린리더 라벨', svg.includes('role="img"') && svg.includes('aria-label="'), svg.slice(0, 90));
   check('키보드 포커스 표시 스타일', html.includes(':focus-visible{outline:'));

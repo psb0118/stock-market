@@ -180,6 +180,11 @@ input{min-width:0;border:1px solid #cbd5e1;border-radius:7px;padding:0 9px;min-h
   .toast-wrap{left:12px;right:12px;bottom:150px;max-width:none}
   .breaking{left:12px;right:12px;top:8px;transform:none;width:auto;max-width:none}
 }
+@media(max-width:400px){
+  .card .top{flex-wrap:wrap;row-gap:6px}
+  .card .top>div:last-child{margin-left:auto}
+  .card .top .pill{min-width:0;overflow-wrap:anywhere}
+}
 @media(max-width:540px){.kpis{grid-template-columns:1fr 1fr}.ach{grid-template-columns:1fr}.ach div{line-height:1.5}}
 .alloc-bar{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#edf2f7}
 .alloc-bar span{display:block;height:100%}
@@ -7224,14 +7229,14 @@ function holdingCard(s){
       <div><small>평가손익</small><b class="${pnl>=0?"up":"down"}" data-hold-pnl="${s.id}">${pnl>=0?"+":""}${won(pnl)}</b></div>
     </div>
     <p class="muted-sm" style="margin:6px 0">현재 계좌 ${taxModeLabel(acct)} · 평단 ${acctAvg>0?(isForeign?usdStr(acctAvg):won(acctAvg)):"-"} · 매도 가능 <b>${qtyText(aq)}</b>${s.own>aq?` (다른 계좌 ${qtyText(s.own-aq)})`:""}</p>
-    <div class="trade trade-qty trade-sell-only trade-dock">
-      <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 매도 수량">
-      <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
-    </div>
     <div class="quick-trade">
       <button class="ghost" onclick="setTradeQty('${s.id}','one','${ctx}')">1주</button>
       <button class="ghost" onclick="setTradeQty('${s.id}','own','${ctx}')">보유 전량</button>
       <button class="sell" onclick="fullSell('${s.id}')">전량 매도</button>
+    </div>
+    <div class="trade trade-qty trade-sell-only trade-dock" style="margin-top:6px">
+      <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 매도 수량">
+      <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
     </div>
   </article>`;
 }
@@ -7276,15 +7281,15 @@ function card(s, group){
       <div><small>풀매수 가능</small><b data-maxbuy="${s.id}">${qtyText(maxBuy)}</b></div>
       <div><small>풀매도 가능</small><b data-maxsell="${s.id}">${qtyText(s.own)}</b></div>
     </div>
-    <div class="trade trade-qty trade-dock">
-      <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 거래 수량">
-      <button class="buy" onclick="buyQty('${s.id}','${ctx}')">매수</button>
-      <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
-    </div>
     <div class="quick-trade">
       <button class="ghost" onclick="setTradeQty('${s.id}','one','${ctx}')">1주</button>
       <button class="buy" onclick="fullBuy('${s.id}')">최대 매수</button>
       <button class="sell" onclick="fullSell('${s.id}')">전량 매도</button>
+    </div>
+    <div class="trade trade-qty trade-dock" style="margin-top:6px">
+      <input id="${qid}" class="qty-input" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="${escAttr(s.name)} 거래 수량">
+      <button class="buy" onclick="buyQty('${s.id}','${ctx}')">매수</button>
+      <button class="sell" onclick="sellQty('${s.id}','${ctx}')">매도</button>
     </div>
   </article>`;
 }
