@@ -776,5 +776,36 @@ function check(name, ok, detail) {
   check('노동을 끝내면 키보드 핸들러 해제', detach.session === null && detach.ref === null && detach.handled === false, JSON.stringify(detach));
 }
 
+// ── 초기화하면 백업도 사라져 '처음부터'가 유지되는지 ─────────────
+{
+  const g = createGame();
+
+  const wiped = g.run(`(()=>{
+    clearGame(true);
+    state.cash=777; saveGame(); snapshotSave('import');
+    state.cash=888; saveGame(); snapshotSave('import');
+    const before=saveBackupList().length;
+    clearGame(true);
+    const fresh=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+    return {before, after:saveBackupList().length, cash:(fresh&&fresh.state&&fresh.state.cash)||0, label:backupLabel()};
+  })()`);
+  check('초기화하면 자동 백업도 함께 삭제', wiped.before >= 1 && wiped.after === 0 && wiped.cash === 0 && wiped.label === '백업 없음', JSON.stringify(wiped));
+
+  const cannotRestore = g.run(`(()=>{
+    const alerts=[]; const orig=alert; alert=(m)=>alerts.push(String(m));
+    state.cash=5;
+    try{ restoreLatestBackup(); } finally { alert=orig; }
+    return {alerts, cash:state.cash, modal:document.getElementById('modalRoot').innerHTML||''};
+  })()`);
+  check('초기화 뒤에는 예전 진행을 복원할 수 없음', cannotRestore.cash === 5 && cannotRestore.alerts.some(a => a.includes('복원할 백업이 없습니다')), JSON.stringify(cannotRestore));
+
+  const fresh = g.run(`(()=>{
+    state.cash=1000; saveGame(); saveGame();
+    const list=saveBackupList();
+    return {backups:list.length, cashes:list.map(b=>JSON.parse(b.data).state.cash)};
+  })()`);
+  check('초기화 뒤 쌓이는 백업에 예전 진행이 없음', fresh.cashes.every(c => c !== 777 && c !== 888), JSON.stringify(fresh));
+}
+
 console.log(`\n== ${pass}/${pass + fail} passed ==`);
 if (fail) process.exit(1);

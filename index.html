@@ -6852,6 +6852,9 @@ function snapshotSave(reason, at){
   try{ localStorage.setItem(SAVE_BACKUP_KEY, JSON.stringify(list.slice(0,SAVE_BACKUP_MAX))); return true; }
   catch(e){ return false; }
 }
+function clearSaveBackups(){
+  try{ localStorage.removeItem(SAVE_BACKUP_KEY); }catch(e){}
+}
 function backupLabel(){
   const list=saveBackupList();
   if(!list.length) return "백업 없음";
@@ -7184,8 +7187,10 @@ function applySaveData(data) {
 
 function clearGame(skipConfirm){
   if(!skipConfirm && !confirm("정말로 모든 게임 데이터를 삭제하고 처음부터 시작하시겠습니까?")) return;
-  snapshotSave("reset");
+  // 초기화는 '처음부터'여야 하므로 저장 파일과 자동 백업을 함께 지웁니다.
+  // 백업을 남기면 초기화 후에도 예전 진행을 되살릴 수 있어 초기화가 아니게 됩니다.
   localStorage.removeItem(SAVE_KEY);
+  clearSaveBackups();
   state.cash = START_CASH;
   state.usd = 0;
   state.tick = 0;
